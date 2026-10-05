@@ -142,7 +142,7 @@ CI 在 Windows Server 2022 / 2025 上运行完整 amd64 检查，macOS arm64 / a
 
 [架构](docs/architecture.md) · [现代绘制验收](docs/rendering-modernization.md) · [路线图](docs/roadmap.md) · [贡献说明](CONTRIBUTING.md)
 
-以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。两种后端使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制遇到在途资源时延后重绘。DirectWrite 与 CoreText 均按字形缓存 R8 覆盖率。Windows 已实现设备丢失后的资源重建；Metal 设备移除恢复和大列表虚拟化仍需实现。
+以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。两种后端使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制遇到在途资源时延后重绘。DirectWrite 与 CoreText 均按字形缓存 R8 覆盖率。两种后端提供有界的 GPU 资源恢复；Windows 实际 RemoveDevice 和 Metal 真实提交后的诊断恢复已通过 CI。实际 eGPU 故障场景和大列表虚拟化仍需补充。
 
 macOS 可运行 `CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal`，检查真实 GPU 提交、三组缓冲复用、2048 个圆角矩形和 32 个共享文本命令的合批及上传量，并输出 CPU 帧编码 P50/P95。计数来自原生渲染器；没有 GPUI 同机对比，也不把 CI 虚拟环境中的数字当作真实设备性能保证。布局 benchmark 只测 Go 核心。
 

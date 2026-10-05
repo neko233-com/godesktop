@@ -57,6 +57,10 @@ Windows 的 `internal/renderstress -device-recovery` 在第九次提交后调用
 
 `-completion-race` 使用同一真实提交路径，在 CPU 收集前主动等待 GPU fence 完成，然后调用生产 completion watcher，要求它仍返回已经完成但尚未收集的提交事件。这样可稳定覆盖 GPU 恰好在 poll 与监听注册之间完成的时序，避免消息循环空闲时漏收最后一帧；普通压力场景继续验证零显式缓冲等待。这个单独诊断场景的同步等待不属于正常绘制路径，报告明确标记 diagnostic_completion_race。
 
+Mac CI 的 `-metal-recovery` 在真实 GPU 完成后注入资源恢复请求，要求同一 NSWindow、Go 状态/Dispatch 保留、恢复后至少 90 帧、字形图集重新建立及实际 drawable 像素。`internal/metaltest` 还请求四次恢复，验证三次上限、错误返回、队列排空和失败后重新 Run 的计数/快照隔离。报告标记诊断注入；不伪造 command-buffer status、完成数或硬件断开。eGPU 移除、权限撤销与系统 GPU 故障需另行在具备这些条件的真实设备上验证。
+
+两种 Mac 还用 `internal/metaltest -drawable-scale 1.5` / `2` 指定实际窗口 drawable 的诊断像素密度，保持正常视图坐标并核对 GPU 图像尺寸、字体与裁剪，再执行同一恢复上限和重新启动场景。这覆盖分数/整数 scale 的 GPU 坐标与字形缓存；默认场景继续使用系统自动密度。诊断不改变系统缩放或显示器硬件，真实 Retina/跨显示器迁移仍应补充。
+
 自定义标题栏窗口的初始尺寸限制到 Windows 显示器工作区。原生回归测试请求 10000×10000 DIP 窗口，检查实际窗口不越过工作区；最大化后检查客户区与工作区完全一致，并验证正常、最大化、还原三个状态下的底部状态栏像素和连续截图，避免小屏幕或不可见边框裁掉窗口内容。
 
 `gocode` 子仓库有自己的五平台 CI 和 Windows 脚本：真实窗口测试文件选择、中文/emoji 输入、保存、扩展命令、标题栏命中、窗口缩放/关闭和 PE amd64；原生 smoke 同时要求真实绘制和已安装 VSIX 命令执行。截图和构建产物保存在其 Actions artifacts。父仓库 `go test ./...` 不会自动进入独立子模块，应分别验证两个仓库。

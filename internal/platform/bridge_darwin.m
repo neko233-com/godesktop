@@ -180,6 +180,15 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     view.atlas=[[GDGlyphAtlas alloc] initWithDevice:device]; view.layouts=[NSMutableDictionary dictionary];
     view.scene=[NSData data]; view.text=[NSData data];
     view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
+    const char *density=getenv("GODESKTOP_TEST_DRAWABLE_SCALE");
+    if(density) {
+        double scale=strtod(density,NULL);
+        if(!isfinite(scale) || scale<1 || scale>4) { *failure=@"Invalid diagnostic drawable scale"; return nil; }
+        // Only diagnostics override density. This still renders/copies the
+        // actual window drawable; no separate render target replaces it.
+        view.autoResizeDrawable=NO;
+        view.drawableSize=CGSizeMake(ceil(frame.size.width*scale),ceil(frame.size.height*scale));
+    }
     view.paused=YES; view.enableSetNeedsDisplay=NO; view.delegate=view;
     return view;
 }

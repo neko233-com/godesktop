@@ -1,6 +1,6 @@
 # GPU 绘制目标与验收
 
-用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环及显示同步调度。Metal 设备移除恢复、进一步 GPU 正确性/性能验收及 gocode 发布依赖仍需完成。
+用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环、显示同步调度及有界资源恢复。进一步 GPU 正确性/性能验收及 gocode 发布依赖仍需完成。
 
 ## 参考与技术选择
 
@@ -25,8 +25,8 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | Windows 默认 Direct3D 12 | 已接入 HWND flip swapchain、DXGI 显示同步、三帧 fence | 本机硬件已通过完整三轮 race/原生测试与 92 帧压力；实际 swapchain GPU 读回覆盖输入、缩放、最大化、恢复和重复启动 |
 | Windows R8 字形图集 | 已接入默认 DirectWrite 文本路径 | 变化的文本 92 帧只光栅化 14 字形、29426 次命中、1 MiB 图集；中文/组合音标/emoji/阿拉伯文/裁剪的实际 GPU 像素；大字号淘汰压力和字节峰值 |
 | Metal 共享字形图集 | 已接入默认路径；[8086828 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37374018496) | 92 帧、14 次光栅化、29426 次命中、1 MiB 图集；4 次淘汰、16 MiB 峰值；实际 drawable 几何/Unicode 与独立 CoreText 对照 |
-| Windows 设备丢失恢复 | 已实现；本机硬件/WARP 的实际 RemoveDevice 已通过，CI 待验收 | 同一窗口自动重建、至少 90 个后续完成帧、丢弃帧单独计数、正确 GPU 像素、三槽/空闲/字形图集回归 |
-| Metal 设备移除恢复 | 尚未实现 | 设备选择、队列/帧槽/图集重建与有界恢复，旧完成回调隔离 |
+| Windows 设备丢失恢复 | 本机硬件/WARP 及 [eb6eff0 两种 Windows CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37376434509) | 同一窗口自动重建、恢复后 92 个完成帧、1 个丢弃帧、正确 GPU 像素；另行强制完成通知竞态时序 |
+| Metal 设备移除/提交恢复 | 已实现；[e8a262d 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37378878913) | 同一窗口重建、Go 状态/Dispatch 保留、恢复后 92 帧及实际 drawable；三次恢复上限与失败后重新 Run；CI 注入不声称硬件拔除 |
 | 绘制正确性与性能 | 部分验证 | 裁剪、透明混合、圆角、线段、文本及多帧读回；真实设备 P50/P95 与输入延迟 |
 | gocode 消费新后端 | 仍依赖 v0.2.2 | 新框架版本及子模块更新后，在 Windows/两种 Mac 架构上重新验证 |
 
@@ -47,6 +47,9 @@ Metal 的渲染压力验证：
 CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-atlas -output metal-render-stress.json
 CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-eviction -output metal-glyph-eviction.json
 CGO_ENABLED=1 go run ./internal/metaltest -output metal-pixels
+CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -metal-recovery -output metal-recovery.json
+CGO_ENABLED=1 go run ./internal/metaltest -drawable-scale 1.5 -output metal-pixels-150
+CGO_ENABLED=1 go run ./internal/metaltest -drawable-scale 2 -output metal-pixels-200
 ```
 
 Direct3D 12 设备和像素验收：
@@ -86,6 +89,12 @@ go test -race -run '^TestWindowsAMD64NativeIntegration$' -count=1 .
 设备丢失诊断调用 [ID3D12Device5::RemoveDevice](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device5-removedevice)，真实执行同一设备的 removal 路径。本机硬件和 WARP 均通过：恢复前完成 8 帧、恢复后完成 92 帧，101 个已记录提交中 100 个已确认 GPU 完成、1 个丢弃帧，恢复 1 次，重建后实际窗口颜色正确。报告单独记录恢复前/后的完成数，验收至少 90 个恢复后完成帧。移除时 fence 的 UINT64_MAX 值只用于识别丢失，不当作完成证据。每次 Run 最多恢复三次，超限或新设备创建失败返回错误。
 
 两种 Mac CI 的 Metal 变化文本场景均通过 92 帧、一次 draw call、一页 R8 图集；CPU 编码 P95 在该轮 ARM64 / Intel runner 上分别为 4.196 / 6.325 ms。实际 drawable 的 F/组合重音/emoji mask 与 CoreText 对照 IoU=1，中文约 0.947、阿拉伯文约 0.859、office 约 0.926，边界最多相差一个物理像素。数据与 GPU/参考 PNG 保存为 CI artifacts；这些 runner 数值不代表其他设备，也不构成与 GPUI 的同机对比。
+
+Metal 恢复验证在真实 GPU 第九次成功完成后向生产恢复处理器发出诊断请求，验证队列/管线/帧槽/图集重新分配、NSWindow identity 保持、Go 状态及 Dispatch 继续生效、恢复后至少 90 个真实完成帧及 drawable 颜色。另行请求四次恢复，要求第三次之后返回上限错误，排空提交并能再次 Run；下一次的计数和快照独立。此注入不会物理断开 GPU，也不会将成功提交伪造为错误或丢弃帧。实际 eGPU 热拔插和系统 GPU 故障仍需真实硬件验收。
+
+e8a262d 两种 Mac 的实际结果为恢复前 9 帧、恢复后 92 帧，共 101 次成功完成、1 次资源恢复、0 次丢弃，Go 模型更新至 11，图集恢复为一页 1 MiB。四次请求的上限测试在 36 次完成后返回预期错误，下一次 Run 的快照为第 8 帧、恢复/丢弃计数归零。
+
+新增 1.5×/2× 密度诊断设置实际窗口 drawable 的像素尺寸，同时保持同一视图坐标和默认 GPU 绘制路径；GPU 读回必须反映请求的密度，并运行相同几何/Unicode 对照及恢复生命周期验收。默认测试仍使用系统自动选择的密度。该诊断验证 GPU 坐标和字形 scale，不声称改变了显示器硬件或系统缩放配置。
 
 变化文本场景包含 2048 个矩形和 32 个每帧更新的标签，本机硬件/WARP 均通过 92 帧：三个槽全使用、submitted = completed、一次 draw call、空闲期间提交和时钟计数不变、Dispatch 重新唤醒。14 个字形共享一页 1 MiB R8 图集，而不是为每种字符串创建纹理。图集更新的累计上传量另外报告，不混入实例数 × 80 的实例上传断言。
 

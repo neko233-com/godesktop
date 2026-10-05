@@ -36,14 +36,25 @@ type textReport struct {
 
 func main() {
 	output := flag.String("output", "bin/metal-pixels", "directory for actual GPU PNGs and diagnostics")
+	drawableScale := flag.Float64("drawable-scale", 0, "0 uses system density; 1..4 diagnostically override the actual drawable without changing display hardware")
 	flag.Parse()
-	if err := validate(*output); err != nil {
+	var environmentErr error
+	if *drawableScale == 0 {
+		environmentErr = os.Unsetenv("GODESKTOP_TEST_DRAWABLE_SCALE")
+	} else {
+		environmentErr = os.Setenv("GODESKTOP_TEST_DRAWABLE_SCALE", fmt.Sprint(*drawableScale))
+	}
+	if environmentErr != nil {
+		fmt.Fprintln(os.Stderr, environmentErr)
+		os.Exit(1)
+	}
+	if err := validate(*output, float32(*drawableScale)); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
 }
 
-func validate(output string) error {
+func validate(output string, requestedScale float32) error {
 	if err := os.MkdirAll(output, 0755); err != nil {
 		return err
 	}
@@ -61,6 +72,9 @@ func validate(output string) error {
 	geometry, geometryReport, err := render("geometry", commands)
 	if err != nil {
 		return err
+	}
+	if requestedScale > 0 && math.Abs(float64(geometryReport.Scale-requestedScale)) > .001 {
+		return fmt.Errorf("actual geometry drawable density %g, expected %g", geometryReport.Scale, requestedScale)
 	}
 	if err = savePNG(filepath.Join(output, "geometry-gpu.png"), geometry); err != nil {
 		return err
@@ -93,6 +107,9 @@ func validate(output string) error {
 	unicode, unicodeReport, err := render("unicode", commands)
 	if err != nil {
 		return err
+	}
+	if requestedScale > 0 && math.Abs(float64(unicodeReport.Scale-requestedScale)) > .001 {
+		return fmt.Errorf("actual Unicode drawable density %g, expected %g", unicodeReport.Scale, requestedScale)
 	}
 	if err = savePNG(filepath.Join(output, "unicode-gpu.png"), unicode); err != nil {
 		return err

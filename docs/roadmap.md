@@ -33,6 +33,7 @@
 - [x] Windows Direct3D 12 显式队列、flip model swapchain、三帧 fence 和自定义 HLSL 绘制。
 - [x] 两平台共享字形图集，按 glyph/font/size/scale 缓存；变化文本、淘汰与实际 GPU Unicode 像素验收。
 - [x] Windows 设备丢失后保留窗口并重建 GPU 资源，实际 RemoveDevice 的硬件/WARP 回归。
+- [x] Metal 资源有界恢复、同一窗口/Go 状态保留、恢复上限与失败后重新 Run；每次 Run 独立计数/快照。
 - [ ] 明确的帧调度与动画时钟、增量失效、布局缓存。
 - [ ] 虚拟列表与编辑器布局接口。
 - [ ] 设备丢失、内存压力、显示器迁移与长时运行测试。

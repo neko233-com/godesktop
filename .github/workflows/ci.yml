@@ -135,6 +135,11 @@ jobs:
       - name: Metal resources, window identity and Go state after recovery
         shell: bash
         run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -metal-recovery -output bin/metal-recovery.json
+      - name: Actual Metal drawable pixels at fractional and double density
+        shell: bash
+        run: |
+          go run ./internal/metaltest -drawable-scale 1.5 -output bin/metal-pixels-150
+          go run ./internal/metaltest -drawable-scale 2 -output bin/metal-pixels-200
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -144,6 +149,8 @@ jobs:
             bin/metal-render-stress.json
             bin/metal-glyph-eviction.json
             bin/metal-pixels/
+            bin/metal-pixels-150/
+            bin/metal-pixels-200/
             bin/metal-recovery.json*
           if-no-files-found: warn
 
