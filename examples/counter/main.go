@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"time"
 
 	ui "github.com/neko233-com/godesktop"
 	"github.com/neko233-com/godesktop/internal/platform"
@@ -12,10 +13,17 @@ import (
 func main() {
 	smoke := flag.Bool("smoke", false, "draw two frames, dispatch a state update, and exit")
 	flag.Parse()
+	if *smoke {
+		go func() {
+			time.Sleep(20 * time.Second)
+			log.Fatalf("native smoke timed out; completed submissions=%d", platform.RenderedFrames())
+		}()
+	}
 	count, frames := 0, 0
 	err := ui.Run(ui.WindowOptions{Title: "godesktop · Go 1.27", Width: 900, Height: 600}, func(cx *ui.Context) *ui.Element {
 		frames++
 		if *smoke {
+			fmt.Printf("native smoke: view frame %d\n", frames)
 			if frames == 1 {
 				cx.Dispatch(func() { count++ })
 			}
