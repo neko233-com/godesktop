@@ -8,40 +8,40 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
+#include <stdbool.h>
+#include <time.h>
 #include "bridge.h"
+#include "gpu_scene.h"
+#include "gpu_shader_metal.h"
 
+@interface GDFrameSlot : NSObject { @public _Atomic bool busy; }
+@property(nonatomic,strong) id<MTLBuffer> instances;
+@property(nonatomic) NSUInteger capacity;
+@end
+@implementation GDFrameSlot
+- (instancetype)init {
+    self=[super init];
+    if(self) atomic_init(&busy,false);
+    return self;
+}
+@end
 
-typedef struct {
-    float position[2], local[2], size[2], radius, color[4], uv[2];
-    uint32_t textured;
-} GDVertex;
-
-static NSString *const shader = @
-"#include <metal_stdlib>\n"
-"using namespace metal;\n"
-"struct Vertex { packed_float2 position, local, size; float radius; packed_float4 color; packed_float2 uv; uint textured; };\n"
-"struct Out { float4 position [[position]]; float2 local, size; float radius; float4 color; float2 uv; uint textured [[flat]]; };\n"
-"vertex Out vertex_main(uint id [[vertex_id]], const device Vertex *vertices [[buffer(0)]], constant float2 &viewport [[buffer(1)]]) {\n"
-"  Vertex v = vertices[id]; Out o; o.position=float4(float2(v.position)/viewport*float2(2,-2)+float2(-1,1),0,1);\n"
-"  o.local=v.local; o.size=v.size; o.radius=v.radius; o.color=v.color; o.uv=v.uv; o.textured=v.textured; return o;\n"
-"}\n"
-"fragment float4 fragment_main(Out in [[stage_in]], texture2d<float> glyph [[texture(0)]]) {\n"
-"  if(in.textured!=0) { constexpr sampler s(filter::linear,address::clamp_to_edge); float alpha=glyph.sample(s,in.uv).a*in.color.a; return float4(in.color.rgb*alpha,alpha); }\n"
-"  float2 q=abs(in.local-in.size*0.5)-(in.size*0.5-in.radius); float d=length(max(q,0.0))+min(max(q.x,q.y),0.0)-in.radius;\n"
-"  float alpha=(1.0-smoothstep(-fwidth(d)*0.5,fwidth(d)*0.5,d))*in.color.a; return float4(in.color.rgb*alpha,alpha);\n"
-"}\n";
+typedef struct { NSUInteger start, count, texture; } GDBatch;
 
 @interface GDView : MTKView <MTKViewDelegate>
 @property(nonatomic,strong) id<MTLCommandQueue> queue;
 @property(nonatomic,strong) id<MTLRenderPipelineState> pipeline;
 @property(nonatomic,strong) id<MTLTexture> white;
-@property(nonatomic,strong) id<MTLBuffer> vertices;
-@property(nonatomic) NSUInteger vertexCapacity;
+@property(nonatomic,strong) NSArray<GDFrameSlot *> *slots;
+@property(nonatomic) NSUInteger nextSlot;
+@property(nonatomic) BOOL deferred;
+@property(nonatomic,strong) dispatch_group_t outstanding;
 @property(nonatomic,strong) NSMutableDictionary<NSString *,id<MTLTexture>> *glyphs;
+@property(nonatomic) NSUInteger glyphBytes;
 @property(nonatomic,strong) NSData *scene;
 @property(nonatomic,strong) NSData *text;
 @property(nonatomic) GDColor background;
-@property(nonatomic,copy) NSString *failure;
+@property(atomic,copy) NSString *failure;
 @end
 
 @interface GDDelegate : NSObject <NSApplicationDelegate,NSWindowDelegate>
@@ -52,6 +52,13 @@ static GDView *active_view;
 static BOOL running;
 static _Atomic uint64_t generation;
 static _Atomic uint64_t rendered_frames;
+static _Atomic uint64_t submitted_frames, draw_calls, instance_count, uploaded_bytes, cpu_nanos, gpu_nanos;
+static _Atomic uint32_t used_slots, in_flight, max_in_flight;
+
+static uint64_t nanos(void) {
+    struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t);
+    return (uint64_t)t.tv_sec*1000000000+(uint64_t)t.tv_nsec;
+}
 
 static NSString *string_utf8(const char *bytes,size_t length) {
     return [[NSString alloc] initWithBytes:bytes length:length encoding:NSUTF8StringEncoding] ?: @"";
@@ -68,29 +75,6 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     *width=ceil(w)+2;
     *height=ceil(ascent+*descent+leading)+2;
 }
-static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
-    static const float corners[6][2]={{0,0},{1,0},{0,1},{1,0},{1,1},{0,1}};
-    for(int i=0;i<6;i++) {
-        float u=corners[i][0],v=corners[i][1];
-        GDVertex *vertex=&vertices[i];
-        *vertex=(GDVertex){
-            .position={command->bounds.x+u*command->bounds.w,command->bounds.y+v*command->bounds.h},
-            .local={u*command->bounds.w,v*command->bounds.h},
-            .size={command->bounds.w,command->bounds.h},.radius=command->radius,
-            .color={command->color.r,command->color.g,command->color.b,command->color.a},
-            .uv={u,v},.textured=textured?1:0
-        };
-        if(command->kind==3) {
-            float length=fmaxf(0.001f,hypotf(command->bounds.w,command->bounds.h));
-            float nx=command->bounds.w/length,ny=command->bounds.h/length;
-            vertex->position[0]=command->bounds.x+u*length*nx-(v-0.5f)*command->radius*ny;
-            vertex->position[1]=command->bounds.y+u*length*ny+(v-0.5f)*command->radius*nx;
-            vertex->local[0]=u*length; vertex->local[1]=v*command->radius;
-            vertex->size[0]=length; vertex->size[1]=command->radius; vertex->radius=0;
-        }
-    }
-}
-
 @implementation GDView
 - (BOOL)acceptsFirstResponder { return YES; }
 - (BOOL)isFlipped { return YES; }
@@ -136,12 +120,16 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
     NSString *key=[NSString stringWithFormat:@"%g/%g/%@/%@",command->font_size,scale,family,value];
     id<MTLTexture> existing=self.glyphs[key];
     if(existing) return existing;
-    if(self.glyphs.count>=1024) [self.glyphs removeAllObjects];
     CTLineRef line=text_line(value,command->font_size,family);
     float width,height; CGFloat descent;
     text_size(line,&width,&height,&descent);
     NSUInteger pixelWidth=MAX(1,ceil(width*scale)),pixelHeight=MAX(1,ceil(height*scale));
     if(pixelWidth>16384 || pixelHeight>16384) { CFRelease(line); [self fail:@"Text exceeds the Metal texture size limit"]; return nil; }
+    NSUInteger textureBytes=pixelWidth*pixelHeight*4;
+    if(textureBytes>16*1024*1024) { CFRelease(line); [self fail:@"Text exceeds the 16 MiB raster budget"]; return nil; }
+    if(self.glyphs.count>=1024 || self.glyphBytes+textureBytes>16*1024*1024) {
+        [self.glyphs removeAllObjects]; self.glyphBytes=0;
+    }
     CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
     CGContextRef context=CGBitmapContextCreate(NULL,pixelWidth,pixelHeight,8,pixelWidth*4,space,kCGImageAlphaPremultipliedLast|kCGBitmapByteOrder32Big);
     CGColorSpaceRelease(space);
@@ -156,6 +144,7 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
     if(texture) {
         [texture replaceRegion:MTLRegionMake2D(0,0,pixelWidth,pixelHeight) mipmapLevel:0 withBytes:CGBitmapContextGetData(context) bytesPerRow:pixelWidth*4];
         self.glyphs[key]=texture;
+        self.glyphBytes+=textureBytes;
     } else [self fail:@"Metal text texture allocation failed"];
     CGContextRelease(context);
     return texture;
@@ -163,57 +152,112 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
 - (void)drawInMTKView:(MTKView *)view {
     @autoreleasepool {
         if(self.bounds.size.width<=0 || self.bounds.size.height<=0) return;
+        GDFrameSlot *slot=nil;
+        NSUInteger slotIndex=0;
+        for(NSUInteger i=0;i<self.slots.count;i++) {
+            NSUInteger index=(self.nextSlot+i)%self.slots.count;
+            bool expected=false;
+            if(atomic_compare_exchange_strong(&self.slots[index]->busy,&expected,true)) {
+                slot=self.slots[index]; slotIndex=index; self.nextSlot=(index+1)%self.slots.count; break;
+            }
+        }
+        // Saturation defers the repaint. The GPU completion callback requests it
+        // again; the AppKit thread never waits for an in-flight upload buffer.
+        if(!slot) { self.deferred=YES; return; }
+        self.deferred=NO;
+        uint64_t started=nanos();
         gd_go_event(1,self.bounds.size.width,self.bounds.size.height,0,0);
-        if(self.failure) return;
+        if(self.failure) { atomic_store(&slot->busy,false); return; }
         NSUInteger count=self.scene.length/sizeof(GDCommand);
         const GDCommand *commands=self.scene.bytes;
-        NSUInteger needed=count*6*sizeof(GDVertex);
-        // Allocate once, grow geometrically. One upload per frame, no per-quad buffers.
-        if(needed>self.vertexCapacity) {
-            self.vertexCapacity=MAX(needed,self.vertexCapacity*2+4096);
-            self.vertices=[self.device newBufferWithLength:self.vertexCapacity options:MTLResourceStorageModeShared];
-            if(!self.vertices) { [self fail:@"Metal vertex allocation failed"]; return; }
+        if(count>16*1024*1024/sizeof(GDGPUInstance)) {
+            atomic_store(&slot->busy,false); [self fail:@"Scene exceeds the 16 MiB instance budget"]; return;
         }
-        GDVertex *vertices=self.vertices.contents;
-        for(NSUInteger i=0;i<count;i++) quad(vertices+i*6,&commands[i],commands[i].kind==2);
+        NSUInteger needed=count*sizeof(GDGPUInstance);
+        if(needed>slot.capacity) {
+            slot.capacity=MIN(16*1024*1024,MAX(needed,slot.capacity*2+4096));
+            slot.instances=[self.device newBufferWithLength:slot.capacity options:MTLResourceStorageModeShared|MTLResourceCPUCacheModeWriteCombined];
+            if(!slot.instances) { atomic_store(&slot->busy,false); [self fail:@"Metal instance allocation failed"]; return; }
+        }
         MTLRenderPassDescriptor *pass=self.currentRenderPassDescriptor;
         id<CAMetalDrawable> drawable=self.currentDrawable;
-        if(!pass || !drawable) return;
+        if(!pass || !drawable) {
+            atomic_store(&slot->busy,false); self.deferred=YES;
+            __weak GDView *weak=self;
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,16*NSEC_PER_MSEC),dispatch_get_main_queue(),^{
+                GDView *strong=weak;
+                if(running && active_view==strong && strong.deferred && strong.window.visible && !strong.window.miniaturized) [strong setNeedsDisplay:YES];
+            });
+            return;
+        }
+        GDBatch *batches=calloc(count+1,sizeof(GDBatch));
+        if(!batches) { atomic_store(&slot->busy,false); [self fail:@"Metal batch allocation failed"]; return; }
+        NSMutableArray<id<MTLTexture>> *textures=[NSMutableArray arrayWithObject:self.white];
+        GDGPUInstance *instances=slot.instances.contents;
+        NSUInteger encoded=0,batchCount=0,currentTexture=0;
+        CGFloat scale=drawable.texture.width/self.bounds.size.width;
+        for(NSUInteger i=0;i<count;i++) {
+            const GDCommand *command=&commands[i];
+            if(command->kind==4 || command->clip.w<=0 || command->clip.h<=0 || (command->kind==2 && !command->text_length)) continue;
+            if(command->kind==2) {
+                id<MTLTexture> texture=[self glyph:command scale:scale];
+                if(!texture) { free(batches); atomic_store(&slot->busy,false); return; }
+                if(textures[currentTexture]!=texture) {
+                    [textures addObject:texture]; currentTexture=textures.count-1;
+                }
+            }
+            if(!batchCount || batches[batchCount-1].texture!=currentTexture) {
+                batches[batchCount++]=(GDBatch){encoded,0,currentTexture};
+            }
+            instances[encoded++]=gd_gpu_instance(command);
+            batches[batchCount-1].count++;
+        }
         GDColor bg=self.background;
         pass.colorAttachments[0].clearColor=MTLClearColorMake(bg.r,bg.g,bg.b,bg.a);
         id<MTLCommandBuffer> buffer=[self.queue commandBuffer];
         id<MTLRenderCommandEncoder> encoder=[buffer renderCommandEncoderWithDescriptor:pass];
-        if(!buffer || !encoder) { [self fail:@"Metal command encoding failed"]; return; }
+        if(!buffer || !encoder) { free(batches); atomic_store(&slot->busy,false); [self fail:@"Metal command encoding failed"]; return; }
         [encoder setRenderPipelineState:self.pipeline];
-        [encoder setFragmentTexture:self.white atIndex:0];
         float viewport[2]={self.bounds.size.width,self.bounds.size.height};
-        if(count) [encoder setVertexBuffer:self.vertices offset:0 atIndex:0];
         [encoder setVertexBytes:viewport length:sizeof(viewport) atIndex:1];
-        CGFloat scale=drawable.texture.width/self.bounds.size.width;
-        for(NSUInteger i=0;i<count;i++) {
-            const GDCommand *command=&commands[i];
-            if(command->kind==4) continue;
-            NSUInteger x=MAX(0,floor(command->clip.x*scale)),y=MAX(0,floor(command->clip.y*scale));
-            NSUInteger right=MIN(drawable.texture.width,ceil((command->clip.x+command->clip.w)*scale));
-            NSUInteger bottom=MIN(drawable.texture.height,ceil((command->clip.y+command->clip.h)*scale));
-            if(right<=x || bottom<=y) continue;
-            [encoder setScissorRect:(MTLScissorRect){x,y,right-x,bottom-y}];
-            if(command->kind==2) {
-                if(!command->text_length) continue;
-                id<MTLTexture> glyph=[self glyph:command scale:scale];
-                if(!glyph) continue;
-                [encoder setFragmentTexture:glyph atIndex:0];
-            }
-            [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:i*6 vertexCount:6];
+        for(NSUInteger i=0;i<batchCount;i++) {
+            GDBatch batch=batches[i];
+            [encoder setVertexBuffer:slot.instances offset:batch.start*sizeof(GDGPUInstance) atIndex:0];
+            [encoder setFragmentTexture:textures[batch.texture] atIndex:0];
+            [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6 instanceCount:batch.count];
         }
+        free(batches);
         [encoder endEncoding];
+        dispatch_group_enter(self.outstanding);
+        uint32_t flight=atomic_fetch_add(&in_flight,1)+1;
+        uint32_t peak=atomic_load(&max_in_flight);
+        while(flight>peak && !atomic_compare_exchange_weak(&max_in_flight,&peak,flight)) {}
+        atomic_fetch_or(&used_slots,(uint32_t)(1u<<slotIndex));
+        atomic_store(&draw_calls,batchCount); atomic_store(&instance_count,encoded);
+        atomic_store(&uploaded_bytes,encoded*sizeof(GDGPUInstance));
+        uint64_t expectedGeneration=atomic_load(&generation);
+        [buffer addCompletedHandler:^(id<MTLCommandBuffer> completed) {
+            BOOL current=expectedGeneration==atomic_load(&generation);
+            if(current && completed.status==MTLCommandBufferStatusError) {
+                NSString *message=completed.error.localizedDescription ?: @"Metal submission failed";
+                self.failure=message;
+                dispatch_async(dispatch_get_main_queue(),^{ if(running && active_view==self) gd_quit(); });
+            } else if(current) {
+                atomic_fetch_add(&rendered_frames,1);
+                double elapsed=completed.GPUEndTime-completed.GPUStartTime;
+                if(elapsed>0) atomic_store(&gpu_nanos,(uint64_t)(elapsed*1000000000));
+            }
+            if(current) atomic_fetch_sub(&in_flight,1);
+            atomic_store(&slot->busy,false);
+            dispatch_group_leave(self.outstanding);
+            dispatch_async(dispatch_get_main_queue(),^{
+                if(running && active_view==self && self.deferred) { self.deferred=NO; [self setNeedsDisplay:YES]; }
+            });
+        }];
         [buffer presentDrawable:drawable];
+        atomic_fetch_add(&submitted_frames,1);
         [buffer commit];
-        // A single shared vertex buffer is safe only after the GPU finishes using it.
-        // A triple-buffered submission ring is planned for animation workloads.
-        [buffer waitUntilCompleted];
-        if(buffer.status==MTLCommandBufferStatusError) [self fail:buffer.error.localizedDescription ?: @"Metal submission failed"];
-        else atomic_fetch_add(&rendered_frames,1);
+        atomic_store(&cpu_nanos,nanos()-started);
     }
 }
 @end
@@ -234,6 +278,9 @@ const char *gd_run(const char *title,float width,float height,GDColor background
     static char *last_error;
     free(last_error); last_error=NULL;
     atomic_store(&rendered_frames,0);
+    atomic_store(&submitted_frames,0); atomic_store(&draw_calls,0); atomic_store(&instance_count,0);
+    atomic_store(&uploaded_bytes,0); atomic_store(&cpu_nanos,0); atomic_store(&gpu_nanos,0);
+    atomic_store(&used_slots,0); atomic_store(&in_flight,0); atomic_store(&max_in_flight,0);
     if(![NSThread isMainThread]) return "AppKit must run on the process main thread; call godesktop.Run from main";
     @autoreleasepool {
         [NSApplication sharedApplication];
@@ -257,6 +304,8 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         GDView *view=[[GDView alloc] initWithFrame:NSMakeRect(0,0,width,height) device:device];
         view.pipeline=state; view.queue=[device newCommandQueue];
         if(!view.queue) return "Metal command queue allocation failed";
+        view.slots=@[[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init]];
+        view.outstanding=dispatch_group_create();
         MTLTextureDescriptor *whiteDescriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:1 height:1 mipmapped:NO];
         view.white=[device newTextureWithDescriptor:whiteDescriptor];
         if(!view.white) return "Metal fallback texture allocation failed";
@@ -284,7 +333,10 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         [window center]; [window makeKeyAndOrderFront:nil]; [window makeFirstResponder:view];
         [NSApp activateIgnoringOtherApps:YES]; [view setNeedsDisplay:YES];
         [NSApp run];
-        running=NO; active_view=nil;
+        running=NO;
+        // Only shutdown drains the queue. Normal frames never wait for the GPU.
+        if(dispatch_group_wait(view.outstanding,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))) view.failure=@"Metal shutdown did not finish within five seconds";
+        active_view=nil;
         atomic_fetch_add(&generation,1);
         window.delegate=nil; [window orderOut:nil]; [window close];
         NSApp.delegate=nil; view.delegate=nil;
@@ -312,6 +364,15 @@ void gd_quit(void) {
     dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view.window close]; });
 }
 uint64_t gd_rendered_frames(void) { return atomic_load(&rendered_frames); }
+GDRenderStats gd_render_stats(void) {
+    return (GDRenderStats){
+        .backend=2,.frame_slots=3,.used_slots_mask=atomic_load(&used_slots),
+        .in_flight=atomic_load(&in_flight),.max_in_flight=atomic_load(&max_in_flight),
+        .submitted=atomic_load(&submitted_frames),.completed=atomic_load(&rendered_frames),
+        .draw_calls=atomic_load(&draw_calls),.instances=atomic_load(&instance_count),
+        .uploaded_bytes=atomic_load(&uploaded_bytes),.cpu_nanos=atomic_load(&cpu_nanos),.gpu_nanos=atomic_load(&gpu_nanos)
+    };
+}
 
 void gd_window_action(int action) {
     uint64_t expected=atomic_load(&generation);

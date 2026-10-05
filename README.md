@@ -14,7 +14,7 @@
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
 | --- | --- | --- | --- | --- |
 | Windows 10+ | Win32 | Direct2D，系统选择硬件加速或软件回退 | DirectWrite | amd64 |
-| macOS 13+ | AppKit | Metal | CoreText，缓存文本纹理 | arm64 / amd64 |
+| macOS 13+ | AppKit | Metal，实例化合批、三帧异步提交环 | CoreText，缓存文本纹理 | arm64 / amd64 |
 
 Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/doc/go1.27)。macOS 必须具备 Metal 设备。Linux 仅能构建和测试可移植核心；调用 `Run` 会明确返回不支持错误。
 
@@ -142,6 +142,8 @@ CI 在 Windows Server 2022 / 2025 上运行完整 amd64 检查，macOS arm64 / a
 
 [架构](docs/architecture.md) · [路线图](docs/roadmap.md) · [贡献说明](CONTRIBUTING.md)
 
-以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。当前 Metal 原型逐命令绘制并同步等待 GPU 完成，以保证共享缓冲安全；批处理、异步提交环、字形图集和大列表虚拟化仍需实现。布局 benchmark 只测 Go 核心，不代表完整帧耗时、输入延迟、GPU 性能或与 GPUI 的对比。
+以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。Metal 使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制不调用 `waitUntilCompleted`，提交环饱和时延后重绘。完整字形图集、Windows Direct3D 12 后端和大列表虚拟化仍需实现。
+
+macOS 可运行 `CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal`，检查真实 GPU 提交、三组缓冲复用、2048 个圆角矩形和 32 个共享文本命令的合批及上传量，并输出 CPU 帧编码 P50/P95。计数来自原生渲染器；没有 GPUI 同机对比，也不把 CI 虚拟环境中的数字当作真实设备性能保证。布局 benchmark 只测 Go 核心。
 
 MIT License。GPUI 是设计参考，本项目未复制其实现代码。

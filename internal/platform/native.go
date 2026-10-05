@@ -98,3 +98,17 @@ func WindowAction(action int) { C.gd_window_action(C.int(action)) }
 
 // RenderedFrames lets the native smoke example require actual submissions.
 func RenderedFrames() uint64 { return uint64(C.gd_rendered_frames()) }
+
+func RendererStats() RenderStats {
+	s := C.gd_render_stats()
+	name := "unavailable"
+	switch s.backend {
+	case 1:
+		name = "direct2d"
+	case 2:
+		name = "metal"
+	case 3:
+		name = "direct3d12"
+	}
+	return RenderStats{Backend: name, FrameSlots: uint32(s.frame_slots), UsedSlotsMask: uint32(s.used_slots_mask), InFlight: uint32(s.in_flight), MaxInFlight: uint32(s.max_in_flight), Submitted: uint64(s.submitted), Completed: uint64(s.completed), DrawCalls: uint64(s.draw_calls), Instances: uint64(s.instances), UploadedBytes: uint64(s.uploaded_bytes), BufferWaits: uint64(s.buffer_waits), CPUTimeNanos: uint64(s.cpu_nanos), GPUTimeNanos: uint64(s.gpu_nanos)}
+}

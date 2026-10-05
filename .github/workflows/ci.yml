@@ -77,10 +77,15 @@ jobs:
       - name: Native render and dispatch smoke test
         shell: bash
         run: go run ./examples/counter -smoke
+      - name: Metal instancing, batching and asynchronous ownership
+        shell: bash
+        run: go run ./internal/renderstress -require-backend metal -output bin/metal-render-stress.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: counter-${{ runner.os }}-${{ runner.arch }}
-          path: bin/counter*
+          path: |
+            bin/counter*
+            bin/metal-render-stress.json
           if-no-files-found: error
 
   core:

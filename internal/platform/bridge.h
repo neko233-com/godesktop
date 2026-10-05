@@ -19,15 +19,25 @@ typedef struct {
     uint32_t font_offset, font_length;
 } GDCommand;
 
+// Counters describe real native encoding/submission, independently of Go view
+// invocations. Backend: 0 unavailable, 1 legacy Direct2D, 2 Metal, 3 Direct3D 12.
+typedef struct {
+    uint32_t backend, frame_slots, used_slots_mask, in_flight, max_in_flight, reserved;
+    uint64_t submitted, completed, draw_calls, instances, uploaded_bytes;
+    uint64_t buffer_waits, cpu_nanos, gpu_nanos;
+} GDRenderStats;
+
 // Both languages must agree on the fixed, pointer-free scene ABI.
 #ifdef __cplusplus
 static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
 static_assert(sizeof(GDCommand) == 76 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68, "GD command ABI layout changed");
+static_assert(sizeof(GDRenderStats)==88 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #else
 _Static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 _Static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
 _Static_assert(sizeof(GDCommand) == 76 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68, "GD command ABI layout changed");
+_Static_assert(sizeof(GDRenderStats)==88 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #endif
 
 const char *gd_run(const char *title, float width, float height, GDColor background, int custom_titlebar);
@@ -37,6 +47,7 @@ void gd_wake(void);
 void gd_quit(void);
 void gd_window_action(int action);
 uint64_t gd_rendered_frames(void);
+GDRenderStats gd_render_stats(void);
 void gd_go_event(int kind, float x, float y, int key, int modifiers);
 
 #ifdef __cplusplus

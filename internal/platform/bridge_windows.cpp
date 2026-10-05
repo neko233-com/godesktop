@@ -14,6 +14,7 @@
 #include <tuple>
 #include <algorithm>
 #include "bridge.h"
+#include "gpu_scene.h"
 
 namespace {
 constexpr UINT wake_message = WM_APP + 1;
@@ -324,4 +325,12 @@ extern "C" void gd_measure(const char *text,size_t length,float size,const char 
 extern "C" void gd_wake() { if(auto handle=active_window.load()) PostMessageW(handle,wake_message,0,0); }
 extern "C" void gd_quit() { if(auto handle=active_window.load()) PostMessageW(handle,WM_CLOSE,0,0); }
 extern "C" void gd_window_action(int action) { if(auto handle=active_window.load()) PostMessageW(handle,action_message,action,0); }
+extern "C" GDRenderStats gd_render_stats(void) {
+    GDRenderStats result{};
+    result.backend=1; result.frame_slots=1;
+    result.submitted=rendered_frames.load();
+    // Direct2D has no explicit completion fence in this legacy path. Do not
+    // report submitted work as GPU-completed work.
+    return result;
+}
 extern "C" uint64_t gd_rendered_frames() { return rendered_frames.load(); }
