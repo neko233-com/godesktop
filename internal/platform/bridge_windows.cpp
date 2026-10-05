@@ -58,6 +58,8 @@ struct Window {
     bool removalInjected=false;
     bool completionRace=false;
     bool dirty=true,idle=false;
+    LONG layoutWidth=0,layoutHeight=0;
+    bool layoutValid=false;
     std::vector<GDCommand> commands;
     std::string text;
     std::map<std::tuple<std::string,float,std::string>,IDWriteTextLayout *> layouts;
@@ -151,12 +153,27 @@ struct Window {
         error="One frame exceeds the 16 MiB / 16384 glyph atlas budget";
         return false;
     }
+    void layout_for_client(LONG width,LONG height,float scale) {
+        gd_go_event(1,width/scale,height/scale,0,0);
+        layoutWidth=width; layoutHeight=height;
+        layoutValid=true;
+    }
+    void ensure_input_layout() {
+        RECT client{}; GetClientRect(handle,&client);
+        if(client.right>0 && client.bottom>0 && (!layoutValid || client.right!=layoutWidth || client.bottom!=layoutHeight)) {
+            // Pointer messages may arrive immediately after restoring/resizing,
+            // before the next DXGI-paced draw. Hit targets must use the current
+            // viewport even when a same-size old GPU snapshot is still readable.
+            layout_for_client(client.right,client.bottom,dpi(handle)/96.0f);
+            request_frame();
+        }
+    }
     bool draw() {
         RECT client{}; GetClientRect(handle,&client);
         if(client.right==0 || client.bottom==0) return true;
         uint64_t started=gd_dx12::monotonic_nanos();
         float scale=dpi(handle)/96.0f;
-        gd_go_event(1,client.right/scale,client.bottom/scale,0,0);
+        layout_for_client(client.right,client.bottom,scale);
         if(!error.empty() || !build_scene(scale)) return false;
         if(!surface->submit(scene,client.right/scale,client.bottom/scale,background,started,gd_dx12::monotonic_nanos())) { error=surface->error; return false; }
         publish_stats(); return true;
@@ -254,16 +271,20 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
     }
     case WM_ERASEBKGND: return 1;
     case WM_SIZE:
+        window->layoutValid=false;
         InvalidateRect(handle,nullptr,FALSE); return 0;
     case WM_DPICHANGED: {
+        window->layoutValid=false;
         auto suggested=reinterpret_cast<RECT *>(lparam);
         SetWindowPos(handle,nullptr,suggested->left,suggested->top,suggested->right-suggested->left,suggested->bottom-suggested->top,SWP_NOZORDER|SWP_NOACTIVATE);
         InvalidateRect(handle,nullptr,FALSE); return 0;
     }
     case WM_LBUTTONDOWN:
         SetFocus(handle); SetCapture(handle);
+        window->ensure_input_layout();
         gd_go_event(2,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,0); return 0;
     case WM_LBUTTONUP:
+        window->ensure_input_layout();
         gd_go_event(3,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,0);
         ReleaseCapture(); return 0;
     case WM_CAPTURECHANGED: case WM_KILLFOCUS:

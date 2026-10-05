@@ -193,6 +193,24 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("64bitPEAndSystemDependencies", func(t *testing.T) { mustNative(t, winprobe.ValidateAMD64PE(executable)) })
+	t.Run("resizeAndRestorePointerBeforePacedDraw", func(t *testing.T) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		restore := winprobe.Awareness()
+		defer restore()
+		p := startNative(t, executable, coverDir, "resize-input", 1)
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "frame" })
+		window := fixtureWindow(t, p, 0)
+		assertPixel(t, window, 10, 100, 0x102030)
+		mustNative(t, window.Send(0x100, 123, 0))
+		report := p.await(t, func(r testprotocol.Report) bool { return r.Event == "resize-input" })
+		if report.Error != "" || report.Clicks != [2]int{7, 0} || report.Frame < 8 || report.NativeFrames != report.BeforeNativeFrames {
+			t.Fatalf("input must hit current layout without waiting for another GPU frame: %+v", report)
+		}
+		mustNative(t, window.Close())
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "closed" })
+		p.exit(t)
+	})
 	t.Run("UnicodeGlyphPixelsAndClipping", func(t *testing.T) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()

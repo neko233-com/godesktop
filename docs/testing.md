@@ -22,6 +22,8 @@ powershell -ExecutionPolicy Bypass -File scripts/test-windows-amd64.ps1
 
 `native_windows_test.go` 的测试驱动只操作由测试进程 PID 和唯一标题确认的窗口，不发送全局键鼠输入。集成测试通过 stdin probe 在 UI 线程取得状态快照，避免用固定睡眠推断点击是否生效。消息调用、进程退出和 fixture 都有超时。
 
+尺寸变化后的立即点击回归在同一个 UI 输入回调内连续改变客户区宽度六次，每次立刻点击右侧锚定按钮，最后最小化/恢复并再次点击。回调期间不允许新 GPU 提交，七次点击都必须命中当前布局；未修复桥接的负向对照只能命中四次。生产桥接在尺寸或 DPI 变化后使布局失效，指针事件先同步更新 Go 命中区域，再由 DXGI 正常节奏绘制。
+
 ## 覆盖率
 
 核心测试与原生 fixture 的 Go 覆盖率通过 `go tool covdata` 合并；根包低于 **90%** 会让 Windows 验证失败。fixture 也启用 race 与严格 cgo 检查。覆盖率指 Go 语句，不能代表 C++ 图形驱动覆盖率；C++ 桥接通过原生行为、像素和 ABI 检查验证。

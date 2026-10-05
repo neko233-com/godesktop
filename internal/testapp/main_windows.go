@@ -18,6 +18,7 @@ import (
 	ui "github.com/neko233-com/godesktop"
 	"github.com/neko233-com/godesktop/internal/platform"
 	"github.com/neko233-com/godesktop/internal/testprotocol"
+	"github.com/neko233-com/godesktop/internal/winprobe"
 )
 
 var output sync.Mutex
@@ -65,6 +66,44 @@ func run(iteration int, scenario string) {
 	var saved *ui.Context
 	guard := ""
 	options := ui.WindowOptions{Title: fmt.Sprintf("godesktop-test-%d-%d", os.Getpid(), iteration), Width: 480, Height: 260, Background: ui.RGB(0x102030)}
+	if scenario == "resize-input" {
+		options.Input = func(_ *ui.Context, event ui.InputEvent) bool {
+			if event.Kind != ui.KeyPressed || event.Key != 123 { // F12
+				return false
+			}
+			before := platform.RenderedFrames()
+			window, inputErr := winprobe.Find(options.Title, uint32(os.Getpid()))
+			if inputErr == nil {
+				// One UI callback prevents the paced draw loop from running between
+				// resizing and the pointer gesture; no sleeps or GPU gates are used.
+				for _, width := range []int{650, 480, 650, 480, 650, 480} {
+					if inputErr = window.Resize(width, 360); inputErr != nil {
+						break
+					}
+					if inputErr = window.Pointer(0x201, width-20, 30); inputErr != nil {
+						break
+					}
+					if inputErr = window.Pointer(0x202, width-20, 30); inputErr != nil {
+						break
+					}
+				}
+			}
+			if inputErr == nil {
+				window.Show(6)
+				window.Show(9)
+				inputErr = window.Pointer(0x201, 460, 30)
+				if inputErr == nil {
+					inputErr = window.Pointer(0x202, 460, 30)
+				}
+			}
+			message := ""
+			if inputErr != nil {
+				message = inputErr.Error()
+			}
+			emit(testprotocol.Report{Event: "resize-input", Run: iteration, Frame: frames, Clicks: clicks, BeforeNativeFrames: before, NativeFrames: platform.RenderedFrames(), Error: message})
+			return true
+		}
+	}
 	if scenario == "custom-desktop" {
 		options.CustomTitlebar = true
 		options.Width = 10000
@@ -113,6 +152,9 @@ func run(iteration int, scenario string) {
 		emit(testprotocol.Report{Event: "frame", Run: iteration, Frame: frames, Clicks: clicks, Async: async, Guard: guard, NativeFrames: platform.RenderedFrames(), Metrics: metrics})
 		if scenario == "empty" {
 			return nil
+		}
+		if scenario == "resize-input" {
+			return ui.Row(ui.Column().Flex(1), ui.Button("Edge", func(*ui.Context) { clicks[0]++ }).Key("edge").Width(40).Height(40)).Height(40)
 		}
 		if scenario == "custom-desktop" {
 			return ui.Column(ui.Text("Custom titlebar").Height(36).Draggable(), ui.Column().Flex(1), ui.Column().Height(22).Background(ui.RGB(0x0078d4)))
