@@ -64,7 +64,13 @@ func run(iteration int, scenario string) {
 	clicks, async, frames := [2]int{}, 0, 0
 	var saved *ui.Context
 	guard := ""
-	err := ui.Run(ui.WindowOptions{Title: fmt.Sprintf("godesktop-test-%d-%d", os.Getpid(), iteration), Width: 480, Height: 260, Background: ui.RGB(0x102030)}, func(cx *ui.Context) *ui.Element {
+	options := ui.WindowOptions{Title: fmt.Sprintf("godesktop-test-%d-%d", os.Getpid(), iteration), Width: 480, Height: 260, Background: ui.RGB(0x102030)}
+	if scenario == "custom-desktop" {
+		options.CustomTitlebar = true
+		options.Width = 10000
+		options.Height = 10000
+	}
+	err := ui.Run(options, func(cx *ui.Context) *ui.Element {
 		saved = cx
 		frames++
 		if frames == 1 {
@@ -104,6 +110,9 @@ func run(iteration int, scenario string) {
 		emit(testprotocol.Report{Event: "frame", Run: iteration, Frame: frames, Clicks: clicks, Async: async, Guard: guard, NativeFrames: platform.RenderedFrames(), Metrics: metrics})
 		if scenario == "empty" {
 			return nil
+		}
+		if scenario == "custom-desktop" {
+			return ui.Column(ui.Text("Custom titlebar").Height(36).Draggable(), ui.Column().Flex(1), ui.Column().Height(22).Background(ui.RGB(0x0078d4)))
 		}
 		firstKey, secondKey := "primary", "secondary"
 		if scenario == "duplicate" {

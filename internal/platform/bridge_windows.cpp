@@ -260,6 +260,10 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                 int x=CW_USEDEFAULT,y=CW_USEDEFAULT;
                 if(custom_titlebar) {
                     RECT work{}; SystemParametersInfoW(SPI_GETWORKAREA,0,&work,0);
+                    if(work.right>work.left && work.bottom>work.top) {
+                        bounds.right=std::min(bounds.right,work.right-work.left);
+                        bounds.bottom=std::min(bounds.bottom,work.bottom-work.top);
+                    }
                     x=work.left+std::max(0L,(work.right-work.left-(bounds.right-bounds.left))/2);
                     y=work.top+std::max(0L,(work.bottom-work.top-(bounds.bottom-bounds.top))/2);
                 }

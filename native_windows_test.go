@@ -184,6 +184,29 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("64bitPEAndSystemDependencies", func(t *testing.T) { mustNative(t, winprobe.ValidateAMD64PE(executable)) })
+	t.Run("customWindowFitsDesktopAndKeepsFooterVisible", func(t *testing.T) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		restore := winprobe.Awareness()
+		defer restore()
+		p := startNative(t, executable, coverDir, "custom-desktop", 1)
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "frame" })
+		w := fixtureWindow(t, p, 0)
+		work, err := winprobe.WorkArea()
+		mustNative(t, err)
+		bounds, err := w.ScreenBounds()
+		mustNative(t, err)
+		if bounds.Left < work.Left || bounds.Top < work.Top || bounds.Right > work.Right || bounds.Bottom > work.Bottom {
+			t.Fatalf("window %+v exceeds work area %+v", bounds, work)
+		}
+		_, height, err := w.ClientSize()
+		mustNative(t, err)
+		dipHeight := float64(height) * 96 / float64(w.DPI())
+		assertPixel(t, w, 10, int(dipHeight)-10, 0x0078d4)
+		mustNative(t, w.Close())
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "closed" })
+		p.exit(t)
+	})
 	t.Run("realWindowInputPixelsAndSequentialRuns", func(t *testing.T) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()

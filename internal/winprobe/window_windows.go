@@ -16,6 +16,23 @@ var gdi = syscall.NewLazyDLL("gdi32.dll")
 type Rect struct{ Left, Top, Right, Bottom int32 }
 type Window uintptr
 
+func WorkArea() (Rect, error) {
+	var r Rect
+	ok, _, err := user.NewProc("SystemParametersInfoW").Call(0x30, 0, uintptr(unsafe.Pointer(&r)), 0)
+	if ok == 0 {
+		return r, err
+	}
+	return r, nil
+}
+func (w Window) ScreenBounds() (Rect, error) {
+	var r Rect
+	ok, _, err := user.NewProc("GetWindowRect").Call(uintptr(w), uintptr(unsafe.Pointer(&r)))
+	if ok == 0 {
+		return r, err
+	}
+	return r, nil
+}
+
 func Awareness() func() {
 	fn := user.NewProc("SetThreadDpiAwarenessContext")
 	old, _, _ := fn.Call(^uintptr(3)) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (-4).
