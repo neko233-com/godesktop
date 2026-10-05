@@ -39,13 +39,19 @@ macOS 在包初始化时锁定启动 OS 线程，`Run` 必须从 `main` goroutin
 
 Windows 使用持久 Direct2D render target / brush 和 DirectWrite layout 缓存。Direct2D 默认选择适用的硬件或软件路径，不保证无 GPU 时仍是硬件加速。设备丢失后重建 render target；文本布局不依赖 render target。窗口 DPI 变化会重建相关图形资源。
 
-macOS 使用 MTKView 的按需绘制模式。每个 80 字节实例在顶点着色器中产生六个三角形顶点；圆角矩形/线段通过距离函数着色，父级裁剪在片元着色器中执行。保持画家顺序，只有需要更换文本纹理时才分开相邻批次，几何命令可继续沿用当前绑定的纹理。CoreText 仍将整段文本光栅化为缓存纹理，缓存同时限制到 1024 项/16 MiB；单个光栅也限制到 16 MiB，尚无共享字形图集。
+macOS 14+ 使用 CAMetalDisplayLink 的显示同步回调和直接提供的 drawable，MTKView 自动绘制循环停用。重复重绘请求合并为 dirty 状态，每次回调最多绘制一帧；无 dirty 状态时暂停时钟，Dispatch、输入及窗口恢复重新唤醒。macOS 13 兼容路径使用 MTKView 的显示同步循环，诊断中的 frame clock 明确区分两个路径。两者都不使用无节奏的 setNeedsDisplay 链。
+
+每个 80 字节实例在顶点着色器中产生六个三角形顶点；圆角矩形/线段通过距离函数着色，父级裁剪在片元着色器中执行。保持画家顺序，只有需要更换文本纹理时才分开相邻批次，几何命令可继续沿用当前绑定的纹理。CoreText 仍将整段文本光栅化为缓存纹理，缓存同时限制到 1024 项/16 MiB；单个光栅也限制到 16 MiB，尚无共享字形图集。
 
 Metal 的三个上传缓冲分别拥有原子 busy 状态，完成回调释放该帧的缓冲；UI 线程不会覆盖 GPU 尚在读取的内存。提交环饱和时记录待重绘状态，由完成回调再请求绘制，正常帧不等待 GPU。只在窗口退出时有界地排空提交。每个缓冲限制到 16 MiB，空场景仍提交清屏。完成回调同时更新实际完成计数；窗口代数阻止超时关闭后的旧回调污染下一次 Run。
 
 `internal/platform.RendererStats` 区分实际提交和 GPU 完成，并报告最后一帧的实例数、draw call、上传字节、CPU 编码耗时及最近一次 Metal GPU 耗时。字段按原子分别读取，是诊断快照；不能当作同一时间点的事务或输入延迟测量。旧 Direct2D 路径没有显式完成 fence，诊断中保持 completed 为 0，而不将 EndDraw 当作 GPU 完成。
 
 帧 CPU 时间采用单调时钟的实际经过时间，包含 Go 视图/布局与传输、drawable 获取和提交编码三个阶段；不是线程 CPU 占用。压力报告分别保存阶段 P95，以区分布局开销、等待呈现资源和编码开销，各阶段最后一帧的时间之和必须等于总时间。
+
+CAMetalDisplayLink 在进入回调前提供 drawable，acquire 阶段只计渲染附件配置，系统在回调前的调度时间不在该 CPU 指标中。压力测试还断言多次请求被合并、空闲时停止提交及回调、Dispatch 后重新绘制，完整报告随 Mac CI artifact 保存。
+
+Windows 的 `internal/dx12test` 另行验证真正的 D3D12/DXIL 设备管线；它尚未替换默认 Win32/Direct2D 窗口。每个帧槽拥有独立的 allocator、上传缓冲、离屏 render target 和 readback buffer，fence 完成前禁止复用。合成 R8 纹理和八个实例检查片元裁剪、预乘 alpha、几何、画家顺序与 CPU/GPU ABI，像素取自 GPU copy，完全独立于 GDI/桌面合成。硬件和 WARP 都使用相同的 D3D12 管线；报告区分设备类型及调试层。queue gate 强制三帧在途，再验证第四次提交被推迟及原有帧数据未受覆盖。窗口 swapchain、字体图集和 gocode 的新版本依赖仍需完成，详见 [GPU 验收](rendering-modernization.md)。
 
 ## 边界
 

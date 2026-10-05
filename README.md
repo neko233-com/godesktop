@@ -7,14 +7,14 @@
 
 应用逻辑、状态和布局使用 Go；小型 C ABI 桥接系统窗口、文本引擎和图形 API。UI 不依赖 WebView、浏览器或 Rust。可选的 VSIX 扩展宿主使用独立 Node.js 进程，核心窗口不需要 Node.js。
 
-**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。
+**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)；Windows 离屏 D3D12 管线已能运行自定义 DXIL 并读回像素，默认窗口仍使用 Direct2D。
 
 ## 平台
 
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
 | --- | --- | --- | --- | --- |
 | Windows 10+ | Win32 | Direct2D，系统选择硬件加速或软件回退 | DirectWrite | amd64 |
-| macOS 13+ | AppKit | Metal，实例化合批、三帧异步提交环 | CoreText，缓存文本纹理 | arm64 / amd64 |
+| macOS 13+ | AppKit | Metal，实例化合批、三帧异步环；14+ CAMetalDisplayLink | CoreText，缓存文本纹理 | arm64 / amd64 |
 
 Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/doc/go1.27)。macOS 必须具备 Metal 设备。Linux 仅能构建和测试可移植核心；调用 `Run` 会明确返回不支持错误。
 

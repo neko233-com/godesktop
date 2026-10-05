@@ -48,6 +48,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 adapter validation failed' }
           go run ./internal/dx12test -warp -output .cache/dx12-warp
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 WARP validation failed' }
+          go run ./internal/dx12test -frames 7 -debug=false -output .cache/dx12-uninstrumented
+          if ($LASTEXITCODE -ne 0) { throw 'D3D12 uninstrumented/remainder validation failed' }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:
@@ -58,6 +60,7 @@ jobs:
             testdata/fuzz/
             .cache/dx12-default/
             .cache/dx12-warp/
+            .cache/dx12-uninstrumented/
           include-hidden-files: true
           if-no-files-found: warn
 
