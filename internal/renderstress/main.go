@@ -41,6 +41,7 @@ func run() error {
 	watchdog := time.AfterFunc(30*time.Second, func() { fmt.Fprintln(os.Stderr, "GPU stress watchdog expired"); os.Exit(1) })
 	defer watchdog.Stop()
 	var samples []uint64
+	var sceneSamples, acquireSamples, encodeSamples []uint64
 	var previous uint64
 	var mismatch error
 	started := time.Now()
@@ -54,6 +55,9 @@ func run() error {
 		if stats.Submitted > previous {
 			previous = stats.Submitted
 			samples = append(samples, stats.CPUTimeNanos)
+			sceneSamples = append(sceneSamples, stats.SceneTimeNanos)
+			acquireSamples = append(acquireSamples, stats.AcquireTimeNanos)
+			encodeSamples = append(encodeSamples, stats.EncodeTimeNanos)
 		}
 		if stats.Completed >= *frames {
 			cx.Quit()
@@ -96,14 +100,20 @@ func run() error {
 	if len(samples) < 3 || percentile(samples, 95) == 0 {
 		return errors.New("native frame CPU timings were not collected")
 	}
+	if stats.SceneTimeNanos+stats.AcquireTimeNanos+stats.EncodeTimeNanos != stats.CPUTimeNanos {
+		return fmt.Errorf("native timing phases do not add up: %+v", stats)
+	}
 	report := struct {
-		Renderer platform.RenderStats `json:"renderer"`
-		Scene    string               `json:"scene"`
-		Samples  int                  `json:"cpu_samples"`
-		CPU50    uint64               `json:"cpu_p50_nanos"`
-		CPU95    uint64               `json:"cpu_p95_nanos"`
-		Elapsed  float64              `json:"elapsed_seconds"`
-	}{stats, "2048 rounded quads + 32 shared-text commands; changing colors; native GPU", len(samples), percentile(samples, 50), percentile(samples, 95), time.Since(started).Seconds()}
+		Renderer  platform.RenderStats `json:"renderer"`
+		Scene     string               `json:"scene"`
+		Samples   int                  `json:"cpu_samples"`
+		CPU50     uint64               `json:"cpu_p50_nanos"`
+		CPU95     uint64               `json:"cpu_p95_nanos"`
+		Scene95   uint64               `json:"scene_p95_nanos"`
+		Acquire95 uint64               `json:"drawable_acquire_p95_nanos"`
+		Encode95  uint64               `json:"encode_p95_nanos"`
+		Elapsed   float64              `json:"elapsed_seconds"`
+	}{Renderer: stats, Scene: "2048 rounded quads + 32 shared-text commands; changing colors; native GPU", Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds()}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

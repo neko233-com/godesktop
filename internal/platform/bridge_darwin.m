@@ -53,6 +53,7 @@ static BOOL running;
 static _Atomic uint64_t generation;
 static _Atomic uint64_t rendered_frames;
 static _Atomic uint64_t submitted_frames, draw_calls, instance_count, uploaded_bytes, cpu_nanos, gpu_nanos;
+static _Atomic uint64_t scene_nanos, acquire_nanos, encode_nanos;
 static _Atomic uint32_t used_slots, in_flight, max_in_flight;
 
 static uint64_t nanos(void) {
@@ -179,8 +180,10 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
             slot.instances=[self.device newBufferWithLength:slot.capacity options:MTLResourceStorageModeShared|MTLResourceCPUCacheModeWriteCombined];
             if(!slot.instances) { atomic_store(&slot->busy,false); [self fail:@"Metal instance allocation failed"]; return; }
         }
+        uint64_t sceneEnd=nanos();
         MTLRenderPassDescriptor *pass=self.currentRenderPassDescriptor;
         id<CAMetalDrawable> drawable=self.currentDrawable;
+        uint64_t acquireEnd=nanos();
         if(!pass || !drawable) {
             atomic_store(&slot->busy,false); self.deferred=YES;
             __weak GDView *weak=self;
@@ -257,7 +260,11 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         [buffer presentDrawable:drawable];
         atomic_fetch_add(&submitted_frames,1);
         [buffer commit];
-        atomic_store(&cpu_nanos,nanos()-started);
+        uint64_t finished=nanos();
+        atomic_store(&cpu_nanos,finished-started);
+        atomic_store(&scene_nanos,sceneEnd-started);
+        atomic_store(&acquire_nanos,acquireEnd-sceneEnd);
+        atomic_store(&encode_nanos,finished-acquireEnd);
     }
 }
 @end
@@ -280,6 +287,7 @@ const char *gd_run(const char *title,float width,float height,GDColor background
     atomic_store(&rendered_frames,0);
     atomic_store(&submitted_frames,0); atomic_store(&draw_calls,0); atomic_store(&instance_count,0);
     atomic_store(&uploaded_bytes,0); atomic_store(&cpu_nanos,0); atomic_store(&gpu_nanos,0);
+    atomic_store(&scene_nanos,0); atomic_store(&acquire_nanos,0); atomic_store(&encode_nanos,0);
     atomic_store(&used_slots,0); atomic_store(&in_flight,0); atomic_store(&max_in_flight,0);
     if(![NSThread isMainThread]) return "AppKit must run on the process main thread; call godesktop.Run from main";
     @autoreleasepool {
@@ -370,7 +378,8 @@ GDRenderStats gd_render_stats(void) {
         .in_flight=atomic_load(&in_flight),.max_in_flight=atomic_load(&max_in_flight),
         .submitted=atomic_load(&submitted_frames),.completed=atomic_load(&rendered_frames),
         .draw_calls=atomic_load(&draw_calls),.instances=atomic_load(&instance_count),
-        .uploaded_bytes=atomic_load(&uploaded_bytes),.cpu_nanos=atomic_load(&cpu_nanos),.gpu_nanos=atomic_load(&gpu_nanos)
+        .uploaded_bytes=atomic_load(&uploaded_bytes),.cpu_nanos=atomic_load(&cpu_nanos),.gpu_nanos=atomic_load(&gpu_nanos),
+        .scene_nanos=atomic_load(&scene_nanos),.acquire_nanos=atomic_load(&acquire_nanos),.encode_nanos=atomic_load(&encode_nanos)
     };
 }
 

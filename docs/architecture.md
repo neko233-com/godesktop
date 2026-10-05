@@ -45,6 +45,8 @@ Metal 的三个上传缓冲分别拥有原子 busy 状态，完成回调释放�
 
 `internal/platform.RendererStats` 区分实际提交和 GPU 完成，并报告最后一帧的实例数、draw call、上传字节、CPU 编码耗时及最近一次 Metal GPU 耗时。字段按原子分别读取，是诊断快照；不能当作同一时间点的事务或输入延迟测量。旧 Direct2D 路径没有显式完成 fence，诊断中保持 completed 为 0，而不将 EndDraw 当作 GPU 完成。
 
+帧 CPU 时间采用单调时钟的实际经过时间，包含 Go 视图/布局与传输、drawable 获取和提交编码三个阶段；不是线程 CPU 占用。压力报告分别保存阶段 P95，以区分布局开销、等待呈现资源和编码开销，各阶段最后一帧的时间之和必须等于总时间。
+
 ## 边界
 
 `WindowOptions.Input` 在 UI 线程接收按键、Unicode scalar、指针和滚轮；返回 true 表示消费事件。应用维护编辑/滚动状态，框架尚无通用输入框或滚动容器。Windows 处理 UTF-16 surrogate pair，macOS 处理 NSEvent 字符；没有实现 IME 组合文本协议。自定义标题栏的 Draggable 区域映射系统拖动，边框命中保留 Windows 缩放，最大化限制到显示器工作区域。

@@ -42,4 +42,4 @@ Metal 的渲染压力验证：
 CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -output metal-render-stress.json
 ```
 
-该报告目前测量原生帧 CPU 编码耗时和最近一次 GPU 时间，不是完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。
+该报告的 CPU 时间为构建至 commit 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。
