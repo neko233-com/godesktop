@@ -13,7 +13,7 @@ actionlint .github/workflows/ci.yml
 git diff --check
 ```
 
-PowerShell 用户先设置 `$env:CGO_ENABLED = '1'`。工作流 lint 也可运行 `powershell -File scripts/validate-github-actions.ps1`；需要在 PATH 中安装 actionlint 和 ShellCheck。该脚本不自动下载工具。
+PowerShell 用户先设置 `$env:CGO_ENABLED = '1'`。Windows amd64 的完整验证运行 `powershell -File scripts/test-windows-amd64.ps1`，详细范围和覆盖率报告见 [自动化验证](docs/testing.md)。工作流 lint 也可运行 `powershell -File scripts/validate-github-actions.ps1`；需要在 PATH 中安装 actionlint 和 ShellCheck。该脚本不自动下载工具。
 
 性能变更应说明具体场景和限制。`BenchmarkLayout1000Elements` 只测已建立树的布局和命令生成，不包括视图构造、系统文字测量、cgo 传输或 GPU。不要把它当作完整 UI 的帧率。
 

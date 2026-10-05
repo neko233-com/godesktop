@@ -118,7 +118,9 @@ go build -trimpath -ldflags='-s -w -H=windowsgui' -o bin/counter.exe ./examples/
 CGO_ENABLED=1 go build -trimpath -ldflags='-s -w' -o bin/counter ./examples/counter
 ```
 
-CI 覆盖 Windows、macOS arm64、macOS amd64 的原生编译和 smoke，以及 Linux 核心测试。成功构建的计数器程序可以从 [Actions artifacts](https://github.com/neko233-com/godesktop/actions) 下载。macOS 的 `.app` 打包、签名和公证尚未实现；cgo 原生后端需要各平台的工具链，不能只设置 `GOOS` 从 Windows 直接交叉编译 macOS。
+Windows 的架构目标为 **x86-64 / amd64**。完整自动化检查可以运行 `powershell -File scripts/test-windows-amd64.ps1`：三轮 race、严格 cgo、真实 HWND 消息与像素、重复启动、fuzz、覆盖率门槛以及普通/GUI EXE 的 64 位架构和依赖检查。范围与边界见 [自动化验证](docs/testing.md)。
+
+CI 在 Windows Server 2022 / 2025 上运行完整 amd64 检查，macOS arm64 / amd64 执行原生编译和 smoke，Linux 执行核心与无 cgo 测试。计数器程序和覆盖率报告可以从 [Actions artifacts](https://github.com/neko233-com/godesktop/actions) 下载。macOS 的 `.app` 打包、签名和公证尚未实现；cgo 原生后端需要各平台的工具链，不能只设置 `GOOS` 从 Windows 直接交叉编译 macOS。
 
 ## 设计与性能
 

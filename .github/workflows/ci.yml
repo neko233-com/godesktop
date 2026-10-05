@@ -14,16 +14,45 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-amd64:
+    name: Windows amd64 / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Repeated race, native input, pixel, coverage, fuzz and EXE checks
+        shell: powershell
+        run: ./scripts/test-windows-amd64.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: windows-amd64-${{ matrix.os }}
+          path: |
+            .cache/windows-validation/
+            bin/counter*.exe
+            testdata/fuzz/
+          include-hidden-files: true
+          if-no-files-found: warn
+
   native:
     name: Native / ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-15, macos-15-intel]
+        os: [macos-15, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     env:
       CGO_ENABLED: '1'
+      GOEXPERIMENT: cgocheck2
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -31,18 +60,14 @@ jobs:
           go-version-file: go.mod
           cache: false
       - name: Test with race detector
-        run: go test -race ./...
+        run: go test -race -shuffle=on -count=3 ./...
       - name: Vet
         run: go vet ./...
       - name: Build example
         shell: bash
         run: |
           mkdir -p bin
-          if [ "$RUNNER_OS" = Windows ]; then
-            go build -trimpath -ldflags="-s -w" -o bin/counter.exe ./examples/counter
-          else
-            go build -trimpath -ldflags="-s -w" -o bin/counter ./examples/counter
-          fi
+          go build -trimpath -ldflags="-s -w" -o bin/counter ./examples/counter
       - name: Native render and dispatch smoke test
         shell: bash
         run: go run ./examples/counter -smoke
@@ -57,7 +82,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
-      CGO_ENABLED: '0'
+      CGO_ENABLED: '1'
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
@@ -72,6 +97,14 @@ jobs:
             echo "$unformatted"
             exit 1
           fi
-      - run: go test ./...
+      - run: go test -race -shuffle=on -count=3 ./...
+      - name: No-cgo fallback
+        env:
+          CGO_ENABLED: '0'
+        run: go test ./...
       - run: go vet ./...
+      - name: Geometry and layout fuzzing
+        run: |
+          go test -run '^$' -fuzz '^FuzzRectIntersection$' -fuzztime=5s -parallel=4 .
+          go test -run '^$' -fuzz '^FuzzLayoutClipsToViewport$' -fuzztime=5s -parallel=4 .
       - run: go test -run '^$' -bench . -benchmem ./...
