@@ -1,6 +1,6 @@
 # GPU 绘制目标与验收
 
-用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环、显示同步调度及有界资源恢复。进一步 GPU 正确性/性能验收及 gocode 发布依赖仍需完成。
+现代原生 GPU 管线已在 [v0.3.0](https://github.com/neko233-com/godesktop/releases/tag/v0.3.0) 发布，参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环、显示同步调度及有界资源恢复。[发布提交 3c7cd22 的五平台 CI](https://github.com/neko233-com/godesktop/actions/runs/37383466801) 全部通过。gocode 固定依赖这一公开模块版本，通过 GOWORK=off 独立构建和验证。
 
 ## 参考与技术选择
 
@@ -13,7 +13,7 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 
 着色器 API 的版本号不会单独证明性能。运行路径、异步资源所有权、字形复用、内存上限和真实 GPU 帧验证都必须有证据。
 
-## 当前证据和剩余工作
+## 当前证据
 
 | 项目 | 当前状态 | 必需证据 |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | Windows 设备丢失恢复 | 本机硬件/WARP 及 [eb6eff0 两种 Windows CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37376434509) | 同一窗口自动重建、恢复后 92 个完成帧、1 个丢弃帧、正确 GPU 像素；另行强制完成通知竞态时序 |
 | Metal 设备移除/提交恢复 | 已实现；[e8a262d 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37378878913) | 同一窗口重建、Go 状态/Dispatch 保留、恢复后 92 帧及实际 drawable；三次恢复上限与失败后重新 Run；CI 注入不声称硬件拔除 |
 | 绘制正确性与性能 | GPU 像素、字形/资源和原生 CPU 时间已验证；新增输入到完成像素测量 | 两 Mac 默认/1.5×/2× 实际 drawable；Windows 实际 swapchain/离屏 DXIL；本机 602 帧无插桩 CPU P50/P95 和 40 次 native 输入观察；不声称物理显示延迟或 GPUI 同机性能 |
-| gocode 消费新后端 | 仍依赖 v0.2.2 | 新框架版本及子模块更新后，在 Windows/两种 Mac 架构上重新验证 |
+| gocode 消费新后端 | 独立模块固定依赖 v0.3.0，无本地 replace | GOWORK=off 的三轮 Windows race/原生输入与 EXE smoke；[1aa401a 的五平台 CI](https://github.com/neko233-com/gocode/actions/runs/37384451387) |
 
 ## 预编译 Windows 着色器
 
@@ -63,7 +63,7 @@ go run ./internal/dx12test -frames 7 -debug=false -output .cache/dx12-uninstrume
 
 该验证实际运行仓库中的预编译 DXIL，并在 fence 完成后从 GPU render target 复制 BGRA 像素。每帧检查实例步长、变化的颜色、画家顺序、透明混合、裁剪、圆角及抗锯齿、水平/对角线、R8 覆盖率纹理。第一个三帧批次通过独立 queue gate 延迟 GPU 执行，断言第四次尝试不能覆盖任何在途 allocator/上传缓冲，再释放 gate 并验证三帧各自的颜色。readback 的等待属于诊断过程；正常 submit 遇到未完成 fence 时只返回 defer。
 
-默认设备优先选择支持 SM6 的硬件，缺少硬件时可使用 WARP；离屏报告明确记录 software、adapter 和 debug/GPU validation 是否可用。`-require-hardware` 拒绝 WARP，`-warp` 显式验证软件设备，`-require-debug-layer` 强制要求调试层。PNG 只包含离屏 GPU 验证场景；该夹具使用合成 R8 覆盖率，窗口字形图集由下述独立场景验证，gocode 的发布依赖尚未升级。
+默认设备优先选择支持 SM6 的硬件，缺少硬件时可使用 WARP；离屏报告明确记录 software、adapter 和 debug/GPU validation 是否可用。`-require-hardware` 拒绝 WARP，`-warp` 显式验证软件设备，`-require-debug-layer` 强制要求调试层。PNG 只包含离屏 GPU 验证场景；该夹具使用合成 R8 覆盖率，窗口字形图集由下述独立场景验证。
 
 设备报告同时保存 vendor/device ID 和原始 DXGI flags。[微软 DXGI 文档](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/d3d10-graphics-programming-guide-dxgi) 指出，主 Basic Render 适配器可能不设置 SOFTWARE 标志；`0x1414:0x008c` 仍按软件适配器识别并从硬件候选中排除。GitHub Windows runner 的 Basic Render/WARP 结果不能当作物理 GPU 性能数据；本机硬件证据来自明确要求硬件的 RTX 5070 Ti 验收。
 
@@ -109,8 +109,10 @@ go run -race ./internal/inputlatency -output .cache/dx12-input-latency-hardware.
 
 变化文本场景包含 2048 个矩形和 32 个每帧更新的标签，本机硬件/WARP 均通过 92 帧：三个槽全使用、submitted = completed、一次 draw call、空闲期间提交和时钟计数不变、Dispatch 重新唤醒。14 个字形共享一页 1 MiB R8 图集，而不是为每种字符串创建纹理。图集更新的累计上传量另外报告，不混入实例数 × 80 的实例上传断言。
 
+发布提交 3c7cd22 上重新执行 RTX 5070 Ti 无调试插桩验收：602 个提交全部完成，CPU P50/P95 为 0.881/1.390 ms，14 次光栅化、192626 次命中和 1 MiB 活动图集；40 次输入观察 P50/P95 为 16.625/17.278 ms。发布附件 `godesktop-v0.3.0-validation.zip` 保存该提交、复现命令、适配器报告、完整输入样本、GPU PNG 和 JSON；这些数值是该次本机结果。
+
 大字号场景改变字体大小，迫使活动缓存达到 16 页后淘汰；本机硬件验证产生 9 次淘汰、1339 次光栅化和 41509 次命中，页面峰值 16 MiB。旧页由在途帧保留，暂存与资源屏障保证 GPU 读取生命周期。验收上限为当前缓存 16 MiB、包含在途代数的峰值 64 MiB；同尺寸 CPU 镜像和每帧上传暂存另占内存，页面字节指标不是进程总内存。压力使用调试层/GPU 校验，不将其时间当作无插桩性能。
 
 原生窗口像素测试仅在 `GODESKTOP_READBACK=1` 时启用实际 swapchain 的 GPU copy，fence 完成后通过 PID/HWND 标识与序列号映射读回。测试核对 D3D12 后端属性、颜色/透明/裁剪、中文、分解/预组合音标、单色 emoji、阿拉伯文可见字形和文字裁剪；不使用 GDI 或桌面截图替代输出。可见字形检查不等于完整双向文字或彩色字体正确性，相关回归仍需补充。
 
-该报告的 CPU 时间为构建至 commit/present 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。CAMetalDisplayLink 在回调前提供 drawable，所以该路径的 acquire 时间只包含渲染附件配置，不包含系统在回调前的调度耗时。报告同时记录 frame clock、请求/回调/合并/暂停计数和空闲前后快照。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。
+该报告的 CPU 时间为构建至 commit/present 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。CAMetalDisplayLink 在回调前提供 drawable，所以该路径的 acquire 时间只包含渲染附件配置，不包含系统在回调前的调度耗时。报告同时记录 frame clock、请求/回调/合并/暂停计数和空闲前后快照。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。IME、无障碍、编辑器能力和更广的真实设备测试仍按路线图继续推进。

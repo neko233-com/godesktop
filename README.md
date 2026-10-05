@@ -43,7 +43,7 @@ CGO_ENABLED=1 go run ./examples/counter
 在已有应用中添加：
 
 ```sh
-go get github.com/neko233-com/godesktop
+go get github.com/neko233-com/godesktop@v0.3.0
 ```
 
 ```go
