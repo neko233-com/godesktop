@@ -68,6 +68,10 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 glyph eviction/lifetime validation failed' }
           go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -device-recovery -output .cache/dx12-window-recovery.json
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 actual device removal/recovery validation failed' }
+          $env:GODESKTOP_GPU_DEBUG = '0'
+          go run -race ./internal/inputlatency -output .cache/dx12-input-latency.json
+          if ($LASTEXITCODE -ne 0) { throw 'Native input to completed GPU pixel validation failed' }
+          $env:GODESKTOP_GPU_DEBUG = '1'
           $env:GODESKTOP_GPU_ADAPTER = 'warp'
           go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-warp.json
           if ($LASTEXITCODE -ne 0) { throw 'WARP D3D12 HWND validation failed' }
@@ -88,6 +92,7 @@ jobs:
             .cache/dx12-uninstrumented/
             .cache/dx12-window-*.json
             .cache/dx12-window-*.json.png
+            .cache/dx12-input-latency.json
           include-hidden-files: true
           if-no-files-found: warn
 

@@ -27,7 +27,7 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | Metal 共享字形图集 | 已接入默认路径；[8086828 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37374018496) | 92 帧、14 次光栅化、29426 次命中、1 MiB 图集；4 次淘汰、16 MiB 峰值；实际 drawable 几何/Unicode 与独立 CoreText 对照 |
 | Windows 设备丢失恢复 | 本机硬件/WARP 及 [eb6eff0 两种 Windows CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37376434509) | 同一窗口自动重建、恢复后 92 个完成帧、1 个丢弃帧、正确 GPU 像素；另行强制完成通知竞态时序 |
 | Metal 设备移除/提交恢复 | 已实现；[e8a262d 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37378878913) | 同一窗口重建、Go 状态/Dispatch 保留、恢复后 92 帧及实际 drawable；三次恢复上限与失败后重新 Run；CI 注入不声称硬件拔除 |
-| 绘制正确性与性能 | 部分验证 | 裁剪、透明混合、圆角、线段、文本及多帧读回；真实设备 P50/P95 与输入延迟 |
+| 绘制正确性与性能 | GPU 像素、字形/资源和原生 CPU 时间已验证；新增输入到完成像素测量 | 两 Mac 默认/1.5×/2× 实际 drawable；Windows 实际 swapchain/离屏 DXIL；本机 602 帧无插桩 CPU P50/P95 和 40 次 native 输入观察；不声称物理显示延迟或 GPUI 同机性能 |
 | gocode 消费新后端 | 仍依赖 v0.2.2 | 新框架版本及子模块更新后，在 Windows/两种 Mac 架构上重新验证 |
 
 ## 预编译 Windows 着色器
@@ -95,6 +95,17 @@ Metal 恢复验证在真实 GPU 第九次成功完成后向生产恢复处理器
 e8a262d 两种 Mac 的实际结果为恢复前 9 帧、恢复后 92 帧，共 101 次成功完成、1 次资源恢复、0 次丢弃，Go 模型更新至 11，图集恢复为一页 1 MiB。四次请求的上限测试在 36 次完成后返回预期错误，下一次 Run 的快照为第 8 帧、恢复/丢弃计数归零。
 
 新增 1.5×/2× 密度诊断设置实际窗口 drawable 的像素尺寸，同时保持同一视图坐标和默认 GPU 绘制路径；GPU 读回必须反映请求的密度，并运行相同几何/Unicode 对照及恢复生命周期验收。默认测试仍使用系统自动选择的密度。该诊断验证 GPU 坐标和字形 scale，不声称改变了显示器硬件或系统缩放配置。
+
+两种 Mac 在 d51d6ec 上的 1.5×/2× 验收均通过，实际 drawable 的 scale 分别为 1.5 / 2，Unicode mask 最低 IoU 分别约 0.753 / 0.901、边界最多相差一个物理像素；同样完成恢复上限与重新 Run。本机 RTX 硬件、关闭调试插桩的 602 帧变化文本场景，CPU P50/P95 为 0.891 / 1.450 ms，光栅化仍为 14 个字形、192626 次命中、图集保持 1 MiB。
+
+`internal/inputlatency` 从当前进程拥有的 HWND 注入 40 次 WM_CHAR，经 Go 输入/状态更新和默认 D3D12 绘制，再观察 fence 完成后像素。每次颜色唯一，旧帧无法满足下一次观察；报告保存所有样本、P50/P95 和 1 ms 消费端轮询间隔。本机硬件关闭调试层的此次 P50/P95 为 16.675 / 17.552 ms。测量包含 SendMessage 和 CPU 轮询，不能当作物理键盘或显示扫描延迟；CI 默认/WARP 结果仅证明路径和正确性，不能充当物理 GPU 性能。
+
+```powershell
+$env:CGO_ENABLED = '1'
+$env:GODESKTOP_GPU_ADAPTER = 'hardware'
+$env:GODESKTOP_GPU_DEBUG = '0'
+go run -race ./internal/inputlatency -output .cache/dx12-input-latency-hardware.json
+```
 
 变化文本场景包含 2048 个矩形和 32 个每帧更新的标签，本机硬件/WARP 均通过 92 帧：三个槽全使用、submitted = completed、一次 draw call、空闲期间提交和时钟计数不变、Dispatch 重新唤醒。14 个字形共享一页 1 MiB R8 图集，而不是为每种字符串创建纹理。图集更新的累计上传量另外报告，不混入实例数 × 80 的实例上传断言。
 
