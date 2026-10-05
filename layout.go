@@ -1,0 +1,190 @@
+package godesktop
+
+import (
+	"fmt"
+
+	"github.com/neko233-com/godesktop/internal/platform"
+)
+
+type textKey struct {
+	text string
+	size float32
+}
+type dimensions struct{ w, h float32 }
+type target struct {
+	key    string
+	bounds rect
+	click  func(*Context)
+}
+type frame struct {
+	commands  []platform.Command
+	targets   []target
+	measure   func(string, float32) (float32, float32)
+	textCache map[textKey]dimensions
+	measured  map[*Element]dimensions
+	focus     string
+	keys      map[string]bool
+}
+
+func (f *frame) textSize(e *Element) dimensions {
+	k := textKey{e.text, e.fontSize}
+	if d, ok := f.textCache[k]; ok {
+		return d
+	}
+	w, h := f.measure(e.text, e.fontSize)
+	d := dimensions{nonnegative(w), nonnegative(h)}
+	// Bound the cache even when labels contain ever-changing state.
+	if len(f.textCache) >= 1024 {
+		clear(f.textCache)
+	}
+	f.textCache[k] = d
+	return d
+}
+
+func (f *frame) size(e *Element) dimensions {
+	if e == nil {
+		return dimensions{}
+	}
+	if d, ok := f.measured[e]; ok {
+		return d
+	}
+	var d dimensions
+	if e.kind == textKind || e.kind == buttonKind {
+		d = f.textSize(e)
+	} else {
+		count := 0
+		for _, c := range e.children {
+			if c == nil {
+				continue
+			}
+			child := f.size(c)
+			if e.kind == rowKind {
+				d.w += child.w
+				d.h = max(d.h, child.h)
+			} else {
+				d.h += child.h
+				d.w = max(d.w, child.w)
+			}
+			count++
+		}
+		if count > 1 {
+			if e.kind == rowKind {
+				d.w += float32(count-1) * e.gap
+			} else {
+				d.h += float32(count-1) * e.gap
+			}
+		}
+	}
+	d.w += e.padding * 2
+	d.h += e.padding * 2
+	if e.width > 0 {
+		d.w = e.width
+	}
+	if e.height > 0 {
+		d.h = e.height
+	}
+	f.measured[e] = d
+	return d
+}
+
+func nativeRect(r rect) platform.Rect { return platform.Rect{X: r.x, Y: r.y, W: r.w, H: r.h} }
+func nativeColor(c Color) platform.Color {
+	return platform.Color{R: unit(c.R), G: unit(c.G), B: unit(c.B), A: unit(c.A)}
+}
+
+func (f *frame) rectangle(bounds, clip rect, color Color, radius float32) {
+	if color.A <= 0 || clip.w <= 0 || clip.h <= 0 {
+		return
+	}
+	f.commands = append(f.commands, platform.Command{Kind: platform.Rectangle, Bounds: nativeRect(bounds), Clip: nativeRect(clip), Color: nativeColor(color), Radius: min(radius, min(bounds.w, bounds.h)/2)})
+}
+
+func (f *frame) layout(e *Element, bounds, clip rect, path string) {
+	if e == nil || bounds.w <= 0 || bounds.h <= 0 {
+		return
+	}
+	clip = clip.intersect(bounds)
+	if clip.w <= 0 || clip.h <= 0 {
+		return
+	}
+	f.rectangle(bounds, clip, e.background, e.radius)
+	inner := rect{bounds.x + e.padding, bounds.y + e.padding, max(0, bounds.w-e.padding*2), max(0, bounds.h-e.padding*2)}
+	if e.kind == textKind || e.kind == buttonKind {
+		if e.kind == buttonKind && e.click != nil {
+			key := e.key
+			if key == "" {
+				key = path
+			}
+			if f.keys[key] {
+				panic(fmt.Sprintf("godesktop: duplicate button key %q", key))
+			}
+			f.keys[key] = true
+			f.targets = append(f.targets, target{key, clip, e.click})
+			if key == f.focus {
+				f.rectangle(rect{bounds.x, bounds.y, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
+				f.rectangle(rect{bounds.x, bounds.y + bounds.h - 2, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
+			}
+		}
+		d := f.textSize(e)
+		textClip := clip.intersect(inner)
+		if e.kind == buttonKind {
+			inner.x += max(0, (inner.w-d.w)/2)
+		}
+		inner.y += max(0, (inner.h-d.h)/2)
+		// Preserve the shaped dimensions; overflowing text is clipped, not scaled.
+		inner.w, inner.h = d.w, d.h
+		color := e.foreground
+		if e.kind == buttonKind && e.click == nil {
+			color.A *= 0.45
+		}
+		if inner.w > 0 && inner.h > 0 && textClip.w > 0 && textClip.h > 0 {
+			f.commands = append(f.commands, platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text})
+		}
+		return
+	}
+	main, total, weight, count := inner.h, float32(0), float32(0), 0
+	if e.kind == rowKind {
+		main = inner.w
+	}
+	for _, c := range e.children {
+		if c == nil {
+			continue
+		}
+		d := f.size(c)
+		length := d.h
+		if e.kind == rowKind {
+			length = d.w
+		}
+		total += length
+		weight += c.grow
+		count++
+	}
+	if count > 1 {
+		total += float32(count-1) * e.gap
+	}
+	remaining, offset := max(0, main-total), float32(0)
+	for i, c := range e.children {
+		if c == nil {
+			continue
+		}
+		d := f.size(c)
+		length := d.h
+		if e.kind == rowKind {
+			length = d.w
+		}
+		if weight > 0 {
+			length += remaining * c.grow / weight
+		}
+		child := rect{inner.x, inner.y + offset, inner.w, length}
+		if e.kind == rowKind {
+			child = rect{inner.x + offset, inner.y, length, inner.h}
+			if c.height > 0 {
+				child.h = min(child.h, c.height)
+			}
+		} else if c.width > 0 {
+			child.w = min(child.w, c.width)
+		}
+		f.layout(c, child, clip.intersect(inner), fmt.Sprintf("%s/%d", path, i))
+		offset += length + e.gap
+	}
+}

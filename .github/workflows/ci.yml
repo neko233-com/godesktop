@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Native / ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-15, macos-15-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    env:
+      CGO_ENABLED: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Test with race detector
+        run: go test -race ./...
+      - name: Vet
+        run: go vet ./...
+      - name: Build example
+        shell: bash
+        run: |
+          mkdir -p bin
+          if [ "$RUNNER_OS" = Windows ]; then
+            go build -trimpath -ldflags="-s -w" -o bin/counter.exe ./examples/counter
+          else
+            go build -trimpath -ldflags="-s -w" -o bin/counter ./examples/counter
+          fi
+      - name: Native render and dispatch smoke test
+        shell: bash
+        run: go run ./examples/counter -smoke
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: counter-${{ runner.os }}-${{ runner.arch }}
+          path: bin/counter*
+          if-no-files-found: error
+
+  core:
+    name: Portable core / Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      CGO_ENABLED: '0'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Formatting
+        shell: bash
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "$unformatted"
+            exit 1
+          fi
+      - run: go test ./...
+      - run: go vet ./...
+      - run: go test -run '^$' -bench . -benchmem ./...
