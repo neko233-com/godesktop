@@ -267,6 +267,8 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 			y := int(float64(height)*96/float64(w.DPI())) - 10
 			assertPixel(t, w, 10, y, 0x0078d4)
 			for i := 0; i < 3; i++ {
+				// Snapshot while an asynchronous repaint can publish a new frame.
+				mustNative(t, w.Send(0x0f, 0, 0))
 				captured, err := w.Capture()
 				mustNative(t, err)
 				pixel := captured.RGBAAt(int(10*float64(w.DPI())/96), height-int(10*float64(w.DPI())/96))

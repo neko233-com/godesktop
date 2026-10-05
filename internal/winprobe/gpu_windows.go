@@ -7,6 +7,7 @@ import (
 	"image"
 	"math"
 	"syscall"
+	"time"
 	"unsafe"
 )
 
@@ -22,7 +23,7 @@ type gpuHeader struct {
 
 // withGPUReadback consumes a test-enabled, fenced GPU copy from exactly this
 // process-owned HWND. It never substitutes GDI/desktop pixels for GPU output.
-func (w Window) withGPUReadback(read func(gpuHeader, []byte) error) error {
+func (w Window) withGPUReadback(sample *image.Point, read func(gpuHeader, []byte) error) error {
 	property, err := syscall.UTF16PtrFromString("godesktop.backend")
 	if err != nil {
 		return err
@@ -61,12 +62,15 @@ func (w Window) withGPUReadback(read func(gpuHeader, []byte) error) error {
 		}
 		return nil
 	}
-	for range 5 {
+	deadline := time.Now().Add(time.Second)
+	var pixels []byte
+	for time.Now().Before(deadline) {
 		var header gpuHeader
 		if err := copyNative(view, unsafe.Pointer(&header), unsafe.Sizeof(header)); err != nil {
 			return err
 		}
 		if header.Sequence&1 != 0 {
+			time.Sleep(2 * time.Millisecond)
 			continue
 		}
 		if header.Magic != 0x32314447 || header.Version != 1 || header.PID != pid || header.HWND != uint64(w) || header.Frame == 0 {
@@ -83,32 +87,38 @@ func (w Window) withGPUReadback(read func(gpuHeader, []byte) error) error {
 		if width != int(header.Width) || height != int(header.Height) {
 			return fmt.Errorf("GPU readback has not caught up with window resize")
 		}
-		pixels := make([]byte, int(bytes))
-		if err := copyNative(view+64, unsafe.Pointer(&pixels[0]), uintptr(bytes)); err != nil {
+		address, size := view+64, bytes
+		if sample != nil {
+			if sample.X < 0 || sample.Y < 0 || sample.X >= int(header.Width) || sample.Y >= int(header.Height) {
+				return fmt.Errorf("GPU pixel outside client bounds")
+			}
+			address += uintptr(sample.Y)*uintptr(header.Stride) + uintptr(sample.X)*4
+			size = 4
+		}
+		if uint64(len(pixels)) != size {
+			pixels = make([]byte, int(size))
+		}
+		if err := copyNative(address, unsafe.Pointer(&pixels[0]), uintptr(size)); err != nil {
 			return err
 		}
-		readErr := read(header, pixels)
 		var after uint64
 		if err := copyNative(view+40, unsafe.Pointer(&after), unsafe.Sizeof(after)); err != nil {
 			return err
 		}
 		if header.Sequence == after {
-			return readErr
+			return read(header, pixels)
 		}
+		time.Sleep(2 * time.Millisecond)
 	}
-	return fmt.Errorf("GPU readback changed during capture")
+	return fmt.Errorf("GPU readback did not stabilize within one second")
 }
 
 func (w Window) gpuPixel(x, y int) (uint32, error) {
 	scale := float64(w.DPI()) / 96
 	px, py := int(math.Round(float64(x)*scale)), int(math.Round(float64(y)*scale))
 	var value uint32
-	err := w.withGPUReadback(func(header gpuHeader, pixels []byte) error {
-		if px < 0 || py < 0 || px >= int(header.Width) || py >= int(header.Height) {
-			return fmt.Errorf("GPU pixel outside client bounds")
-		}
-		offset := py*int(header.Stride) + px*4
-		value = uint32(pixels[offset+2])<<16 | uint32(pixels[offset+1])<<8 | uint32(pixels[offset])
+	err := w.withGPUReadback(&image.Point{X: px, Y: py}, func(_ gpuHeader, pixels []byte) error {
+		value = uint32(pixels[2])<<16 | uint32(pixels[1])<<8 | uint32(pixels[0])
 		return nil
 	})
 	return value, err
@@ -116,7 +126,7 @@ func (w Window) gpuPixel(x, y int) (uint32, error) {
 
 func (w Window) gpuCapture() (*image.RGBA, error) {
 	var captured *image.RGBA
-	err := w.withGPUReadback(func(header gpuHeader, pixels []byte) error {
+	err := w.withGPUReadback(nil, func(header gpuHeader, pixels []byte) error {
 		captured = image.NewRGBA(image.Rect(0, 0, int(header.Width), int(header.Height)))
 		copy(captured.Pix, pixels)
 		return nil
