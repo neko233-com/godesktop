@@ -18,7 +18,7 @@ static NSString *const shader = @
 "}\n"
 "fragment float4 fragment_main(Out in [[stage_in]], texture2d<float> glyph [[texture(0)]]) {\n"
 "  if(any(in.point<in.clip.xy)||any(in.point>=in.clip.xy+in.clip.zw)) discard_fragment();\n"
-"  if(in.kind==2) { constexpr sampler s(filter::linear,address::clamp_to_edge); float alpha=glyph.sample(s,in.uv).a*in.color.a; return float4(in.color.rgb*alpha,alpha); }\n"
+"  if(in.kind==2) { constexpr sampler s(filter::linear,address::clamp_to_edge); float alpha=glyph.sample(s,in.uv).r*in.color.a; return float4(in.color.rgb*alpha,alpha); }\n"
 "  float2 q=abs(in.local-in.size*0.5)-(in.size*0.5-in.radius); float distance=length(max(q,0.0))+min(max(q.x,q.y),0.0)-in.radius;\n"
 "  float softness=max(fwidth(distance)*0.5,0.0001); float alpha=(1.0-smoothstep(-softness,softness,distance))*in.color.a; return float4(in.color.rgb*alpha,alpha);\n"
 "}\n";

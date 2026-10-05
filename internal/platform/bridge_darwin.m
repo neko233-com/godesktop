@@ -14,10 +14,13 @@
 #include "bridge.h"
 #include "gpu_scene.h"
 #include "gpu_shader_metal.h"
+#include "gpu_glyphs_metal.h"
 
 @interface GDFrameSlot : NSObject { @public _Atomic bool busy; }
 @property(nonatomic,strong) id<MTLBuffer> instances;
 @property(nonatomic) NSUInteger capacity;
+@property(nonatomic,strong) id<MTLBuffer> readback;
+@property(nonatomic) NSUInteger readbackCapacity;
 @end
 @implementation GDFrameSlot
 - (instancetype)init {
@@ -27,12 +30,19 @@
 }
 @end
 
-typedef struct { NSUInteger start, count, texture; } GDBatch;
+@interface GDMetalSnapshot : NSObject
+@property(nonatomic,strong) NSData *pixels;
+@property(nonatomic) uint32_t width,height,stride;
+@property(nonatomic) uint64_t frame;
+@end
+@implementation GDMetalSnapshot
+@end
+static NSLock *snapshot_lock;
+static GDMetalSnapshot *last_snapshot;
 
 @interface GDView : MTKView <MTKViewDelegate>
 @property(nonatomic,strong) id<MTLCommandQueue> queue;
 @property(nonatomic,strong) id<MTLRenderPipelineState> pipeline;
-@property(nonatomic,strong) id<MTLTexture> white;
 @property(nonatomic,strong) NSArray<GDFrameSlot *> *slots;
 @property(nonatomic) NSUInteger nextSlot;
 @property(nonatomic) BOOL deferred;
@@ -41,17 +51,19 @@ typedef struct { NSUInteger start, count, texture; } GDBatch;
 // The availability-qualified driver owns the Metal display link on macOS 14+.
 @property(nonatomic,strong) id frameClock;
 @property(nonatomic,strong) dispatch_group_t outstanding;
-@property(nonatomic,strong) NSMutableDictionary<NSString *,id<MTLTexture>> *glyphs;
-@property(nonatomic) NSUInteger glyphBytes;
+@property(nonatomic,strong) GDGlyphAtlas *atlas;
+@property(nonatomic,strong) NSMutableDictionary<NSArray *,id> *layouts;
 @property(nonatomic,strong) NSData *scene;
 @property(nonatomic,strong) NSData *text;
 @property(nonatomic) GDColor background;
+@property(nonatomic) BOOL readback;
 @property(atomic,copy) NSString *failure;
 - (void)requestFrame;
 - (void)pauseFrameClock;
 - (void)startFrameClock;
 - (void)stopFrameClock;
 - (void)renderDrawable:(id<CAMetalDrawable>)drawable;
+- (void)publishGlyphStats;
 @end
 
 API_AVAILABLE(macos(14.0))
@@ -73,6 +85,8 @@ static _Atomic uint64_t scene_nanos, acquire_nanos, encode_nanos;
 static _Atomic uint32_t used_slots, in_flight, max_in_flight;
 static _Atomic uint32_t frame_clock;
 static _Atomic uint64_t frame_requests, frame_ticks, coalesced_requests, idle_pauses;
+static _Atomic uint64_t glyph_rasterizations,glyph_cache_hits,glyph_cache_entries,glyph_atlas_pages;
+static _Atomic uint64_t glyph_atlas_bytes,glyph_atlas_peak_bytes,glyph_atlas_epochs,glyph_uploaded_bytes;
 
 static uint64_t nanos(void) {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t);
@@ -181,41 +195,51 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     self.failure=message;
     gd_quit();
 }
-- (id<MTLTexture>)glyph:(const GDCommand *)command scale:(CGFloat)scale {
-    const char *bytes=(const char *)self.text.bytes+command->text_offset;
-    NSString *value=string_utf8(bytes,command->text_length);
+- (CTLineRef)layout:(const GDCommand *)command {
+    NSString *value=string_utf8((const char *)self.text.bytes+command->text_offset,command->text_length);
     NSString *family=string_utf8((const char *)self.text.bytes+command->font_offset,command->font_length);
-    NSString *key=[NSString stringWithFormat:@"%g/%g/%@/%@",command->font_size,scale,family,value];
-    id<MTLTexture> existing=self.glyphs[key];
-    if(existing) return existing;
+    NSArray *key=@[value,family,@(command->font_size)];
+    id existing=self.layouts[key];
+    if(existing) return (__bridge CTLineRef)existing;
+    if(self.layouts.count>=1024) [self.layouts removeAllObjects];
     CTLineRef line=text_line(value,command->font_size,family);
-    float width,height; CGFloat descent;
-    text_size(line,&width,&height,&descent);
-    NSUInteger pixelWidth=MAX(1,ceil(width*scale)),pixelHeight=MAX(1,ceil(height*scale));
-    if(pixelWidth>16384 || pixelHeight>16384) { CFRelease(line); [self fail:@"Text exceeds the Metal texture size limit"]; return nil; }
-    NSUInteger textureBytes=pixelWidth*pixelHeight*4;
-    if(textureBytes>16*1024*1024) { CFRelease(line); [self fail:@"Text exceeds the 16 MiB raster budget"]; return nil; }
-    if(self.glyphs.count>=1024 || self.glyphBytes+textureBytes>16*1024*1024) {
-        [self.glyphs removeAllObjects]; self.glyphBytes=0;
+    if(!line) { [self fail:@"CoreText line allocation failed"]; return NULL; }
+    self.layouts[key]=CFBridgingRelease(line);
+    return (__bridge CTLineRef)self.layouts[key];
+}
+- (GDGlyphScene *)buildGlyphScene:(CGFloat)scale {
+    for(NSUInteger attempt=0;attempt<2;attempt++) {
+        GDGlyphScene *scene=[[GDGlyphScene alloc] initWithWhite:[self.atlas white]];
+        const GDCommand *commands=self.scene.bytes;
+        for(NSUInteger i=0;i<self.scene.length/sizeof(GDCommand);i++) {
+            const GDCommand *command=&commands[i];
+            if(command->kind==4 || command->clip.w<=0 || command->clip.h<=0) continue;
+            BOOL success;
+            if(command->kind==2) {
+                if(!command->text_length) continue;
+                CTLineRef line=[self layout:command];
+                if(!line) return nil;
+                success=[scene appendLine:line command:command atlas:self.atlas scale:scale];
+            } else success=[scene append:gd_gpu_instance(command) page:nil];
+            if(!success) {
+                if(self.atlas.full) break;
+                [self fail:scene.failure ?: self.atlas.failure ?: @"CoreText glyph scene failed"];
+                return nil;
+            }
+        }
+        if(!self.atlas.full) return scene;
+        scene=nil; [self.atlas clear];
     }
-    CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
-    CGContextRef context=CGBitmapContextCreate(NULL,pixelWidth,pixelHeight,8,pixelWidth*4,space,kCGImageAlphaPremultipliedLast|kCGBitmapByteOrder32Big);
-    CGColorSpaceRelease(space);
-    if(!context) { CFRelease(line); [self fail:@"Text bitmap allocation failed"]; return nil; }
-    CGContextScaleCTM(context,scale,scale);
-    CGContextSetTextPosition(context,1,descent+1);
-    CTLineDraw(line,context);
-    CFRelease(line);
-    MTLTextureDescriptor *descriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:pixelWidth height:pixelHeight mipmapped:NO];
-    descriptor.usage=MTLTextureUsageShaderRead;
-    id<MTLTexture> texture=[self.device newTextureWithDescriptor:descriptor];
-    if(texture) {
-        [texture replaceRegion:MTLRegionMake2D(0,0,pixelWidth,pixelHeight) mipmapLevel:0 withBytes:CGBitmapContextGetData(context) bytesPerRow:pixelWidth*4];
-        self.glyphs[key]=texture;
-        self.glyphBytes+=textureBytes;
-    } else [self fail:@"Metal text texture allocation failed"];
-    CGContextRelease(context);
-    return texture;
+    [self fail:@"One frame exceeds the 16 MiB / 16384 glyph atlas budget"]; return nil;
+}
+- (void)publishGlyphStats {
+    GDGlyphAtlas *atlas=self.atlas;
+    uint64_t pages=atomic_load(&atlas.usage->pages);
+    atomic_store(&glyph_rasterizations,atlas.rasterized); atomic_store(&glyph_cache_hits,atlas.hits);
+    atomic_store(&glyph_cache_entries,atlas.glyphs.count); atomic_store(&glyph_atlas_pages,pages);
+    atomic_store(&glyph_atlas_bytes,pages*GDAtlasEdge*GDAtlasEdge);
+    atomic_store(&glyph_atlas_peak_bytes,atomic_load(&atlas.usage->peak)*GDAtlasEdge*GDAtlasEdge);
+    atomic_store(&glyph_atlas_epochs,atlas.epochs); atomic_store(&glyph_uploaded_bytes,atlas.uploadedBytes);
 }
 - (void)drawInMTKView:(MTKView *)view {
     // MTKView must never obtain a second drawable while the modern driver
@@ -246,17 +270,6 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         uint64_t started=nanos();
         gd_go_event(1,self.bounds.size.width,self.bounds.size.height,0,0);
         if(self.failure) { atomic_store(&slot->busy,false); return; }
-        NSUInteger count=self.scene.length/sizeof(GDCommand);
-        const GDCommand *commands=self.scene.bytes;
-        if(count>16*1024*1024/sizeof(GDGPUInstance)) {
-            atomic_store(&slot->busy,false); [self fail:@"Scene exceeds the 16 MiB instance budget"]; return;
-        }
-        NSUInteger needed=count*sizeof(GDGPUInstance);
-        if(needed>slot.capacity) {
-            slot.capacity=MIN(16*1024*1024,MAX(needed,slot.capacity*2+4096));
-            slot.instances=[self.device newBufferWithLength:slot.capacity options:MTLResourceStorageModeShared|MTLResourceCPUCacheModeWriteCombined];
-            if(!slot.instances) { atomic_store(&slot->busy,false); [self fail:@"Metal instance allocation failed"]; return; }
-        }
         uint64_t sceneEnd=nanos();
         id<CAMetalDrawable> drawable=supplied;
         MTLRenderPassDescriptor *pass=nil;
@@ -274,44 +287,55 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
             atomic_store(&slot->busy,false); self.deferred=YES; self.frameDirty=YES;
             return;
         }
-        GDBatch *batches=calloc(count+1,sizeof(GDBatch));
-        if(!batches) { atomic_store(&slot->busy,false); [self fail:@"Metal batch allocation failed"]; return; }
-        NSMutableArray<id<MTLTexture>> *textures=[NSMutableArray arrayWithObject:self.white];
-        GDGPUInstance *instances=slot.instances.contents;
-        NSUInteger encoded=0,batchCount=0,currentTexture=0;
         CGFloat scale=drawable.texture.width/self.bounds.size.width;
-        for(NSUInteger i=0;i<count;i++) {
-            const GDCommand *command=&commands[i];
-            if(command->kind==4 || command->clip.w<=0 || command->clip.h<=0 || (command->kind==2 && !command->text_length)) continue;
-            if(command->kind==2) {
-                id<MTLTexture> texture=[self glyph:command scale:scale];
-                if(!texture) { free(batches); atomic_store(&slot->busy,false); return; }
-                if(textures[currentTexture]!=texture) {
-                    [textures addObject:texture]; currentTexture=textures.count-1;
-                }
-            }
-            if(!batchCount || batches[batchCount-1].texture!=currentTexture) {
-                batches[batchCount++]=(GDBatch){encoded,0,currentTexture};
-            }
-            instances[encoded++]=gd_gpu_instance(command);
-            batches[batchCount-1].count++;
+        GDGlyphScene *native=[self buildGlyphScene:scale];
+        if(!native) { atomic_store(&slot->busy,false); return; }
+        NSUInteger needed=MAX(sizeof(GDGPUInstance),native.instances.length);
+        if(needed>slot.capacity) {
+            slot.capacity=MIN(16*1024*1024,MAX(needed,slot.capacity*2+4096));
+            slot.instances=[self.device newBufferWithLength:slot.capacity options:MTLResourceStorageModeShared|MTLResourceCPUCacheModeWriteCombined];
+            if(!slot.instances) { atomic_store(&slot->busy,false); [self fail:@"Metal instance allocation failed"]; return; }
         }
+        if(native.instances.length) memcpy(slot.instances.contents,native.instances.bytes,native.instances.length);
+        uint64_t nativeSceneEnd=nanos();
+        NSUInteger encoded=native.instances.length/sizeof(GDGPUInstance),batchCount=native.batches.length/sizeof(GDBatch);
+        const GDBatch *batches=native.batches.bytes;
         GDColor bg=self.background;
         pass.colorAttachments[0].clearColor=MTLClearColorMake(bg.r,bg.g,bg.b,bg.a);
         id<MTLCommandBuffer> buffer=[self.queue commandBuffer];
+        if(!buffer) { atomic_store(&slot->busy,false); [self fail:@"Metal command buffer allocation failed"]; return; }
+        __block NSArray<GDAtlasPage *> *heldPages=[native.pages copy];
+        __block NSArray<id<MTLBuffer>> *heldUploads=[self.atlas encodePages:heldPages buffer:buffer];
+        if(!heldUploads) { atomic_store(&slot->busy,false); [self fail:self.atlas.failure]; return; }
         id<MTLRenderCommandEncoder> encoder=[buffer renderCommandEncoderWithDescriptor:pass];
-        if(!buffer || !encoder) { free(batches); atomic_store(&slot->busy,false); [self fail:@"Metal command encoding failed"]; return; }
+        if(!encoder) { atomic_store(&slot->busy,false); [self fail:@"Metal command encoding failed"]; return; }
         [encoder setRenderPipelineState:self.pipeline];
         float viewport[2]={self.bounds.size.width,self.bounds.size.height};
         [encoder setVertexBytes:viewport length:sizeof(viewport) atIndex:1];
         for(NSUInteger i=0;i<batchCount;i++) {
             GDBatch batch=batches[i];
             [encoder setVertexBuffer:slot.instances offset:batch.start*sizeof(GDGPUInstance) atIndex:0];
-            [encoder setFragmentTexture:textures[batch.texture] atIndex:0];
+            [encoder setFragmentTexture:heldPages[batch.texture].texture atIndex:0];
             [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6 instanceCount:batch.count];
         }
-        free(batches);
         [encoder endEncoding];
+        id<MTLBuffer> readback=nil;
+        NSUInteger readbackPitch=0;
+        uint32_t readbackWidth=0,readbackHeight=0;
+        if(self.readback) {
+            readbackWidth=(uint32_t)drawable.texture.width; readbackHeight=(uint32_t)drawable.texture.height;
+            readbackPitch=((NSUInteger)readbackWidth*4+255)&~(NSUInteger)255;
+            NSUInteger bytes=readbackPitch*readbackHeight;
+            if(bytes>64*1024*1024) { atomic_store(&slot->busy,false); [self fail:@"GPU diagnostic capture exceeds 64 MiB"]; return; }
+            if(bytes>slot.readbackCapacity) {
+                slot.readback=[self.device newBufferWithLength:bytes options:MTLResourceStorageModeShared]; slot.readbackCapacity=bytes;
+            }
+            readback=slot.readback;
+            id<MTLBlitCommandEncoder> copy=[buffer blitCommandEncoder];
+            if(!readback || !copy) { atomic_store(&slot->busy,false); [self fail:@"Metal drawable readback allocation failed"]; return; }
+            [copy copyFromTexture:drawable.texture sourceSlice:0 sourceLevel:0 sourceOrigin:MTLOriginMake(0,0,0) sourceSize:MTLSizeMake(readbackWidth,readbackHeight,1) toBuffer:readback destinationOffset:0 destinationBytesPerRow:readbackPitch destinationBytesPerImage:bytes];
+            [copy endEncoding];
+        }
         dispatch_group_enter(self.outstanding);
         uint32_t flight=atomic_fetch_add(&in_flight,1)+1;
         uint32_t peak=atomic_load(&max_in_flight);
@@ -320,6 +344,7 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         atomic_store(&draw_calls,batchCount); atomic_store(&instance_count,encoded);
         atomic_store(&uploaded_bytes,encoded*sizeof(GDGPUInstance));
         uint64_t expectedGeneration=atomic_load(&generation);
+        uint64_t serial=atomic_load(&submitted_frames)+1;
         [buffer addCompletedHandler:^(id<MTLCommandBuffer> completed) {
             BOOL current=expectedGeneration==atomic_load(&generation);
             if(current && completed.status==MTLCommandBufferStatusError) {
@@ -327,11 +352,21 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
                 self.failure=message;
                 dispatch_async(dispatch_get_main_queue(),^{ if(running && active_view==self) gd_quit(); });
             } else if(current) {
+                if(readback) {
+                    NSMutableData *pixels=[NSMutableData dataWithLength:(NSUInteger)readbackWidth*readbackHeight*4];
+                    for(NSUInteger row=0;row<readbackHeight;row++) memcpy((unsigned char *)pixels.mutableBytes+row*readbackWidth*4,(const unsigned char *)readback.contents+row*readbackPitch,readbackWidth*4);
+                    GDMetalSnapshot *snapshot=[[GDMetalSnapshot alloc] init];
+                    snapshot.pixels=pixels; snapshot.width=readbackWidth; snapshot.height=readbackHeight; snapshot.stride=readbackWidth*4; snapshot.frame=serial;
+                    [snapshot_lock lock];
+                    if(!last_snapshot || last_snapshot.frame<serial) last_snapshot=snapshot;
+                    [snapshot_lock unlock];
+                }
                 atomic_fetch_add(&rendered_frames,1);
                 double elapsed=completed.GPUEndTime-completed.GPUStartTime;
                 if(elapsed>0) atomic_store(&gpu_nanos,(uint64_t)(elapsed*1000000000));
             }
             if(current) atomic_fetch_sub(&in_flight,1);
+            heldPages=nil; heldUploads=nil;
             atomic_store(&slot->busy,false);
             dispatch_group_leave(self.outstanding);
             dispatch_async(dispatch_get_main_queue(),^{
@@ -346,9 +381,10 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         if(self.modernFrameClock) [drawable present];
         uint64_t finished=nanos();
         atomic_store(&cpu_nanos,finished-started);
-        atomic_store(&scene_nanos,sceneEnd-started);
+        atomic_store(&scene_nanos,(sceneEnd-started)+(nativeSceneEnd-acquireEnd));
         atomic_store(&acquire_nanos,acquireEnd-sceneEnd);
-        atomic_store(&encode_nanos,finished-acquireEnd);
+        atomic_store(&encode_nanos,finished-nativeSceneEnd);
+        [self publishGlyphStats];
     }
 }
 @end
@@ -390,8 +426,12 @@ const char *gd_run(const char *title,float width,float height,GDColor background
     atomic_store(&used_slots,0); atomic_store(&in_flight,0); atomic_store(&max_in_flight,0);
     atomic_store(&frame_clock,0); atomic_store(&frame_requests,0); atomic_store(&frame_ticks,0);
     atomic_store(&coalesced_requests,0); atomic_store(&idle_pauses,0);
+    atomic_store(&glyph_rasterizations,0); atomic_store(&glyph_cache_hits,0); atomic_store(&glyph_cache_entries,0); atomic_store(&glyph_atlas_pages,0);
+    atomic_store(&glyph_atlas_bytes,0); atomic_store(&glyph_atlas_peak_bytes,0); atomic_store(&glyph_atlas_epochs,0); atomic_store(&glyph_uploaded_bytes,0);
     if(![NSThread isMainThread]) return "AppKit must run on the process main thread; call godesktop.Run from main";
     @autoreleasepool {
+        if(!snapshot_lock) snapshot_lock=[[NSLock alloc] init];
+        [snapshot_lock lock]; last_snapshot=nil; [snapshot_lock unlock];
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
         id<MTLDevice> device=MTLCreateSystemDefaultDevice();
@@ -415,13 +455,12 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         if(!view.queue) return "Metal command queue allocation failed";
         view.slots=@[[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init]];
         view.outstanding=dispatch_group_create();
-        MTLTextureDescriptor *whiteDescriptor=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA8Unorm width:1 height:1 mipmapped:NO];
-        view.white=[device newTextureWithDescriptor:whiteDescriptor];
-        if(!view.white) return "Metal fallback texture allocation failed";
-        uint32_t white=0xffffffff;
-        [view.white replaceRegion:MTLRegionMake2D(0,0,1,1) mipmapLevel:0 withBytes:&white bytesPerRow:4];
         view.background=background;
-        view.glyphs=[NSMutableDictionary dictionary]; view.scene=[NSData data]; view.text=[NSData data];
+        const char *readback=getenv("GODESKTOP_READBACK");
+        view.readback=readback && strcmp(readback,"1")==0;
+        view.framebufferOnly=!view.readback;
+        view.atlas=[[GDGlyphAtlas alloc] initWithDevice:device]; view.layouts=[NSMutableDictionary dictionary];
+        view.scene=[NSData data]; view.text=[NSData data];
         view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
         view.paused=YES; view.enableSetNeedsDisplay=NO; view.delegate=view;
         GDDelegate *delegate=[[GDDelegate alloc] init];
@@ -446,6 +485,7 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         [view stopFrameClock];
         // Only shutdown drains the queue. Normal frames never wait for the GPU.
         if(dispatch_group_wait(view.outstanding,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))) view.failure=@"Metal shutdown did not finish within five seconds";
+        [view publishGlyphStats];
         active_view=nil;
         atomic_fetch_add(&generation,1);
         window.delegate=nil; [window orderOut:nil]; [window close];
@@ -474,6 +514,36 @@ void gd_quit(void) {
     dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view.window close]; });
 }
 uint64_t gd_rendered_frames(void) { return atomic_load(&rendered_frames); }
+const char *gd_metal_snapshot(GDGPUSnapshot *result) {
+    memset(result,0,sizeof(*result));
+    [snapshot_lock lock]; GDMetalSnapshot *snapshot=last_snapshot; [snapshot_lock unlock];
+    if(!snapshot) return "No completed Metal drawable readback; enable GODESKTOP_READBACK=1";
+    result->width=snapshot.width; result->height=snapshot.height; result->stride=snapshot.stride;
+    result->frame=snapshot.frame; result->bytes=snapshot.pixels.length;
+    result->pixels=malloc(result->bytes);
+    if(!result->pixels) return "Metal snapshot copy allocation failed";
+    memcpy(result->pixels,snapshot.pixels.bytes,result->bytes); return NULL;
+}
+const char *gd_metal_text_reference(const char *text,size_t length,const char *font,size_t font_length,float size,float scale,uint32_t width,uint32_t height,GDGPUSnapshot *result) {
+    memset(result,0,sizeof(*result));
+    if(!width || !height || (uint64_t)width*height*4>64*1024*1024 || !isfinite(scale) || scale<=0) return "Invalid text reference bounds";
+    result->width=width; result->height=height; result->stride=width*4; result->bytes=(uint64_t)width*height*4;
+    result->pixels=calloc(1,result->bytes);
+    if(!result->pixels) return "Text reference allocation failed";
+    CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
+    CGContextRef context=CGBitmapContextCreate(result->pixels,width,height,8,width*4,space,kCGImageAlphaPremultipliedLast|kCGBitmapByteOrder32Big);
+    CGColorSpaceRelease(space);
+    if(!context) return "Text reference bitmap context allocation failed";
+    CTLineRef line=text_line(string_utf8(text,length),size,string_utf8(font,font_length));
+    if(!line) { CGContextRelease(context); return "CoreText reference line allocation failed"; }
+    CGFloat ascent,descent,leading;
+    CTLineGetTypographicBounds(line,&ascent,&descent,&leading);
+    CGContextSetAllowsFontSmoothing(context,false); CGContextSetShouldSmoothFonts(context,false);
+    CGContextScaleCTM(context,scale,scale);
+    CGContextSetTextPosition(context,1,height/scale-ceil(ascent+leading)-1);
+    CTLineDraw(line,context);
+    CFRelease(line); CGContextRelease(context); return NULL;
+}
 GDRenderStats gd_render_stats(void) {
     return (GDRenderStats){
         .backend=2,.frame_slots=3,.used_slots_mask=atomic_load(&used_slots),
@@ -484,7 +554,10 @@ GDRenderStats gd_render_stats(void) {
         .uploaded_bytes=atomic_load(&uploaded_bytes),.cpu_nanos=atomic_load(&cpu_nanos),.gpu_nanos=atomic_load(&gpu_nanos),
         .scene_nanos=atomic_load(&scene_nanos),.acquire_nanos=atomic_load(&acquire_nanos),.encode_nanos=atomic_load(&encode_nanos),
         .frame_requests=atomic_load(&frame_requests),.frame_ticks=atomic_load(&frame_ticks),
-        .coalesced_requests=atomic_load(&coalesced_requests),.idle_pauses=atomic_load(&idle_pauses)
+        .coalesced_requests=atomic_load(&coalesced_requests),.idle_pauses=atomic_load(&idle_pauses),
+        .glyph_rasterizations=atomic_load(&glyph_rasterizations),.glyph_cache_hits=atomic_load(&glyph_cache_hits),.glyph_cache_entries=atomic_load(&glyph_cache_entries),
+        .glyph_atlas_pages=atomic_load(&glyph_atlas_pages),.glyph_atlas_bytes=atomic_load(&glyph_atlas_bytes),.glyph_atlas_peak_bytes=atomic_load(&glyph_atlas_peak_bytes),
+        .glyph_atlas_epochs=atomic_load(&glyph_atlas_epochs),.glyph_uploaded_bytes=atomic_load(&glyph_uploaded_bytes)
     };
 }
 

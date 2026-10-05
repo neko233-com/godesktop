@@ -63,6 +63,16 @@ typedef struct {
     unsigned char *pixels;
 } GDGPUProbe;
 const char *gd_dx12_probe(uint32_t flags, uint32_t frames, GDGPUProbe *result);
+
+// macOS diagnostics copy the actual drawable only after GPU completion.
+// Pixel buffers returned here are C allocations owned/freed by the caller.
+typedef struct {
+    uint32_t width,height,stride,reserved;
+    uint64_t frame,bytes;
+    unsigned char *pixels;
+} GDGPUSnapshot;
+const char *gd_metal_snapshot(GDGPUSnapshot *result);
+const char *gd_metal_text_reference(const char *text,size_t length,const char *font,size_t font_length,float size,float scale,uint32_t width,uint32_t height,GDGPUSnapshot *result);
 void gd_go_event(int kind, float x, float y, int key, int modifiers);
 
 #ifdef __cplusplus

@@ -116,16 +116,25 @@ jobs:
       - name: Native render and dispatch smoke test
         shell: bash
         run: go run ./examples/counter -smoke
-      - name: Metal instancing, display pacing, idle wake and asynchronous ownership
+      - name: Metal instancing, glyph reuse, display pacing and idle wake
         shell: bash
-        run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -output bin/metal-render-stress.json
+        run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-atlas -output bin/metal-render-stress.json
+      - name: Metal glyph eviction and asynchronous page ownership
+        shell: bash
+        run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-eviction -output bin/metal-glyph-eviction.json
+      - name: Actual Metal drawable geometry and Unicode pixels
+        shell: bash
+        run: go run ./internal/metaltest -output bin/metal-pixels
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
         with:
           name: counter-${{ runner.os }}-${{ runner.arch }}
           path: |
             bin/counter*
             bin/metal-render-stress.json
-          if-no-files-found: error
+            bin/metal-glyph-eviction.json
+            bin/metal-pixels/
+          if-no-files-found: warn
 
   core:
     name: Portable core / Ubuntu
