@@ -4,6 +4,9 @@ package platform
 // counters, UsedSlotsMask and glyph rasterization/hit/upload/peak/epoch counters
 // are cumulative within a Run; cache entries/pages/bytes describe live resources.
 // Other fields describe the last frame. Metal counters can change between reads.
+// DeviceRecoveries counts resource rebuilds. DroppedFrames counts old submissions
+// abandoned without confirmed GPU completion; after draining, Submitted equals
+// Completed plus DroppedFrames. Ordinary rendering has no dropped frames.
 // CPUTimeNanos is elapsed wall time through commit/present, including drawable waits;
 // SceneTimeNanos, AcquireTimeNanos and EncodeTimeNanos split that interval.
 type RenderStats struct {
@@ -36,4 +39,6 @@ type RenderStats struct {
 	GlyphAtlasPeakBytes uint64 `json:"glyph_atlas_peak_bytes"`
 	GlyphAtlasEpochs    uint64 `json:"glyph_atlas_epochs"`
 	GlyphUploadedBytes  uint64 `json:"glyph_uploaded_bytes"`
+	DeviceRecoveries    uint64 `json:"device_recoveries"`
+	DroppedFrames       uint64 `json:"dropped_frames"`
 }

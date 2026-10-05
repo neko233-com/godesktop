@@ -37,7 +37,7 @@ macOS 在包初始化时锁定启动 OS 线程，`Run` 必须从 `main` goroutin
 
 `internal/platform/bridge.h` 定义固定布局的绘制命令、矩形、颜色和事件 ABI。每帧通过 C 分配的命令数组与 UTF-8 文本块提交，原生侧同步复制，调用结束后 Go 释放临时块。原生代码不保留 Go 指针。后台唤醒和退出不读取 Go 状态。
 
-Windows 使用默认 Direct3D 12/DXIL 管线、三个 BGRA flip swapchain 缓冲和 DXGI frame-latency waitable object。消息与显示时钟通过 MsgWaitForMultipleObjectsEx 协同等待，每帧先确认显示时钟和该槽 fence，再复用 allocator、实例上传内存与描述符。空闲时不提交帧；Dispatch/输入/恢复重新请求绘制。缩放只在尺寸变化时排空队列并重建 swapchain 缓冲，DPI 参与字形缓存键。设备丢失目前返回明确错误，自动重建仍待实现。
+Windows 使用默认 Direct3D 12/DXIL 管线、三个 BGRA flip swapchain 缓冲和 DXGI frame-latency waitable object。消息与显示时钟通过 MsgWaitForMultipleObjectsEx 协同等待，每帧先确认显示时钟和该槽 fence，再复用 allocator、实例上传内存与描述符。空闲时不提交帧；Dispatch/输入/恢复重新请求绘制。缩放只在尺寸变化时排空队列并重建 swapchain 缓冲，DPI 参与字形缓存键。独立 removal fence 事件在空闲时也能唤醒设备丢失处理。重建保留 HWND、Go 状态和诊断映射，释放旧设备资源并重建 swapchain、管线、帧槽与字形图集。每次 Run 最多恢复三次；失败返回明确错误。未确认完成的旧提交计入 dropped frames，不把 UINT64_MAX fence 当作 GPU 成功完成。
 
 DirectWrite 对文本整形，然后按 font face/glyph/size/scale/方向与测量模式缓存独立字形的 R8 覆盖率。1024×1024 图集页采用带边距的 shelf packing，活动缓存最多 16 页/16384 字形；清空旧缓存时，在途帧仍通过 shared_ptr 保留所需页面。包括三个在途代数和当前代数，页面峰值限制按 64 MiB 验收；每页另有同尺寸 CPU 镜像，提交槽持有上传暂存直到 fence 完成。纹理更新与绘制在同一 GPU 队列中按资源屏障排序，不覆盖 GPU 正在读取的上传数据。
 
@@ -46,6 +46,10 @@ macOS 14+ 使用 CAMetalDisplayLink 的显示同步回调和直接提供的 draw
 每个 80 字节实例在顶点着色器中产生六个三角形顶点；圆角矩形/线段通过距离函数着色，父级裁剪在片元着色器中执行。保持画家顺序，只有需要更换文本纹理时才分开相邻批次，几何命令可继续沿用当前绑定的纹理。CoreText 仍将整段文本光栅化为缓存纹理，缓存同时限制到 1024 项/16 MiB；单个光栅也限制到 16 MiB，尚无共享字形图集。
 
 Metal 的三个上传缓冲分别拥有原子 busy 状态，完成回调释放该帧的缓冲；UI 线程不会覆盖 GPU 尚在读取的内存。提交环饱和时记录待重绘状态，由完成回调再请求绘制，正常帧不等待 GPU。只在窗口退出时有界地排空提交。每个缓冲限制到 16 MiB，空场景仍提交清屏。完成回调同时更新实际完成计数；窗口代数阻止超时关闭后的旧回调污染下一次 Run。
+
+CoreText 的 CTLine/CTRun 负责整形、组合字符和字体回退；Metal 图集按实际 CTFont、glyph、size、scale 缓存独立覆盖率，使用带边距的 1024×1024 R8 页。活动缓存最多 16 页/16384 字形，耗尽后清空并重建一次当前场景。私有 GPU 纹理由每次提交独立的 shared staging buffer 更新；上传和绘制在同一队列按序编码。完成回调前保留该帧引用的页面和 staging，避免淘汰时释放在途纹理。图集峰值上限验收为 64 MiB，另有同尺寸 CPU 镜像与暂存；emoji 使用单色覆盖率。Metal 场景追加实例前检查 16 MiB 上限。
+
+macOS 设置 GODESKTOP_READBACK=1 时才允许 drawable 读回：在实际窗口纹理绘制后、呈现前编码 blit，每槽独立的读回缓冲在完成回调后复制为不可变快照。内部诊断 API 返回最新已完成帧的像素与 serial；关闭时排空队列后仍可读取。普通窗口保持 framebufferOnly，不承担诊断 copy 与 CPU 图像成本。
 
 `internal/platform.RendererStats` 区分实际提交和 GPU 完成，并报告最后一帧的实例数、draw call、实例上传字节和 CPU/GPU 耗时。Windows 快照用互斥锁复制，Metal 字段按原子分别读取；跨两次调用不能当作同一事务或输入延迟测量。字形诊断另报光栅化/命中/条目数、活动和在途图集页面字节、峰值、淘汰代数以及累计图集上传量。
 

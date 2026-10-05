@@ -37,6 +37,10 @@ struct WindowFrame {
     WindowFrame& operator=(const WindowFrame&)=delete;
 };
 class Surface {
+    struct RemovalWatch {
+        HANDLE event=nullptr;
+        ~RemovalWatch() { if(event) CloseHandle(event); }
+    } removal; // Destroyed after the device and its fence registrations.
     Device engine;
     std::array<WindowFrame,3> frames;
     IDXGISwapChain3 *swapchain=nullptr;
@@ -47,7 +51,7 @@ class Surface {
     bool diagnostic=false,latencyReady=false;
     UINT pixelWidth=0,pixelHeight=0;
     UINT64 lastFence=0;
-    Capture capture;
+    Capture *capture=nullptr; // Window-owned mapping survives device rebuilding.
     bool ok(HRESULT hr,const char *operation) {
         if(SUCCEEDED(hr)) return true;
         char message[192]; std::snprintf(message,sizeof(message),"%s failed (HRESULT 0x%08lx)",operation,static_cast<unsigned long>(hr));
@@ -108,9 +112,13 @@ public:
         drop(queries); drop(list); drop(rtvs); drop(swapchain);
         if(latency) CloseHandle(latency);
     }
-    bool open(HWND window,UINT width,UINT height,bool readback,bool hardwareOnly,bool warpOnly,bool debug) {
+    bool open(HWND window,UINT width,UINT height,Capture *readback,bool hardwareOnly,bool warpOnly,bool debug) {
+        capture=readback;
         diagnostic=readback;
         if(!engine.open(hardwareOnly,warpOnly,debug,false,false)) { error=engine.error; return false; }
+        removal.event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+        if(!removal.event) { error="Create device removal event failed"; return false; }
+        if(!ok(engine.completion()->SetEventOnCompletion(UINT64_MAX,removal.event),"Watch device removal")) return false;
         DXGI_SWAP_CHAIN_DESC1 description{};
         description.Width=width; description.Height=height; description.Format=DXGI_FORMAT_B8G8R8A8_UNORM;
         description.SampleDesc.Count=1; description.BufferUsage=DXGI_USAGE_RENDER_TARGET_OUTPUT;
@@ -135,7 +143,6 @@ public:
         D3D12_QUERY_HEAP_DESC query{}; query.Type=D3D12_QUERY_HEAP_TYPE_TIMESTAMP; query.Count=6;
         if(!ok(engine.native()->CreateQueryHeap(&query,IID_PPV_ARGS(&queries)),"Create window GPU timestamps")) return false;
         if(!targets(width,height)) return false;
-        if(diagnostic && !capture.open(window)) { error="GPU readback mapping creation failed"; return false; }
         if(!SetPropW(window,L"godesktop.backend",reinterpret_cast<HANDLE>(uintptr_t(3)))) { error="Publish D3D12 HWND identity failed"; return false; }
         return true;
     }
@@ -148,7 +155,7 @@ public:
             if(!ok(frame.readback->Map(0,&range,&mapped),"Map fenced window readback")) return false;
             UINT64 times[2]; std::memcpy(times,static_cast<unsigned char *>(mapped)+frame.pixelBytes,16);
             if(times[1]>=times[0] && engine.timestampFrequency()) stats.gpu_nanos=static_cast<UINT64>((times[1]-times[0])*(1e9/engine.timestampFrequency()));
-            if(diagnostic) capture.publish(frame.width,frame.height,static_cast<unsigned char *>(mapped)+frame.footprint.Offset,frame.footprint.Footprint.RowPitch,frame.serial);
+            if(diagnostic) capture->publish(frame.width,frame.height,static_cast<unsigned char *>(mapped)+frame.footprint.Offset,frame.footprint.Footprint.RowPitch,frame.serial);
             D3D12_RANGE written{0,0}; frame.readback->Unmap(0,&written);
             frame.collected=true; frame.retire(); stats.completed++; stats.in_flight--;
         }
@@ -172,6 +179,7 @@ public:
         return latencyReady;
     }
     HANDLE frameClock() const { return latencyReady?nullptr:latency; }
+    HANDLE removalEvent() const { return removal.event; }
     void clockSignalled() { latencyReady=true; }
     HANDLE pendingCompletion() {
         if(lastFence>engine.completion()->GetCompletedValue()) {
@@ -248,6 +256,14 @@ public:
         if(!poll()) return false;
         if(!engine.validate_messages()) { error=engine.error; return false; }
         return true;
+    }
+    bool deviceLost() const { return engine.native() && FAILED(engine.native()->GetDeviceRemovedReason()); }
+    // Diagnostic fault injection removes only this renderer's D3D12 device.
+    // It does not trigger a machine-wide TDR or touch other application windows.
+    bool removeDevice() {
+        ID3D12Device5 *device=nullptr;
+        if(!ok(engine.native()->QueryInterface(IID_PPV_ARGS(&device)),"D3D12 device removal test interface")) return false;
+        device->RemoveDevice(); drop(device); return true;
     }
 };
 }

@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"runtime"
 	"sort"
 	"time"
 
@@ -36,6 +37,7 @@ func run() error {
 	requireClock := flag.String("require-frame-clock", "cametaldisplaylink", "required native frame clock")
 	glyphAtlas := flag.Bool("glyph-atlas", false, "vary text every frame and require bounded per-glyph reuse")
 	glyphEviction := flag.Bool("glyph-eviction", false, "vary large font sizes to exercise atlas eviction and GPU lifetime")
+	deviceRecovery := flag.Bool("device-recovery", false, "remove this Windows renderer's actual D3D12 device and require recovery")
 	output := flag.String("output", "", "optional JSON report filename")
 	flag.Parse()
 	if *frames < 6 || *frames > 10000 {
@@ -43,6 +45,17 @@ func run() error {
 	}
 	if *glyphAtlas && *glyphEviction {
 		return errors.New("choose glyph reuse or glyph eviction validation")
+	}
+	if *deviceRecovery {
+		if runtime.GOOS != "windows" || *requireBackend != "direct3d12" || *glyphAtlas || *glyphEviction {
+			return errors.New("device recovery requires the Windows D3D12 scene without glyph stress flags")
+		}
+		if err := os.Setenv("GODESKTOP_TEST_DEVICE_REMOVAL", "9"); err != nil {
+			return err
+		}
+		if err := os.Setenv("GODESKTOP_READBACK", "1"); err != nil {
+			return err
+		}
 	}
 	watchdog := time.AfterFunc(30*time.Second, func() { fmt.Fprintln(os.Stderr, "GPU stress watchdog expired"); os.Exit(1) })
 	defer watchdog.Stop()
@@ -73,6 +86,9 @@ func run() error {
 			encodeSamples = append(encodeSamples, stats.EncodeTimeNanos)
 		}
 		if idleFinished {
+			if *deviceRecovery {
+				mismatch = recoveryPixels(*output)
+			}
 			cx.Quit()
 		} else if stats.Completed >= *frames {
 			if !idleStarted {
@@ -124,8 +140,14 @@ func run() error {
 		return mismatch
 	}
 	stats := platform.RendererStats()
-	if stats.Submitted < *frames || stats.Completed != stats.Submitted || stats.InFlight != 0 {
+	if stats.Completed < *frames || stats.Completed+stats.DroppedFrames != stats.Submitted || stats.InFlight != 0 {
 		return fmt.Errorf("submissions did not drain: %+v", stats)
+	}
+	if *deviceRecovery && (stats.DeviceRecoveries != 1 || stats.DroppedFrames == 0 || stats.DroppedFrames > 3 || stats.GlyphRasterizations < 6 || stats.GlyphAtlasBytes != 1024*1024) {
+		return fmt.Errorf("actual device removal did not rebuild a bounded renderer: %+v", stats)
+	}
+	if !*deviceRecovery && (stats.DeviceRecoveries != 0 || stats.DroppedFrames != 0) {
+		return fmt.Errorf("ordinary rendering unexpectedly lost a device or frame: %+v", stats)
 	}
 	if stats.FrameSlots != 3 || stats.UsedSlotsMask != 7 || stats.MaxInFlight == 0 || stats.MaxInFlight > 3 || stats.BufferWaits != 0 {
 		return fmt.Errorf("three-slot asynchronous ownership failed: %+v", stats)

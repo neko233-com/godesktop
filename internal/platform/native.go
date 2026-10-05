@@ -131,5 +131,6 @@ func RendererStats() RenderStats {
 		GlyphRasterizations: uint64(s.glyph_rasterizations), GlyphCacheHits: uint64(s.glyph_cache_hits), GlyphCacheEntries: uint64(s.glyph_cache_entries),
 		GlyphAtlasPages: uint64(s.glyph_atlas_pages), GlyphAtlasBytes: uint64(s.glyph_atlas_bytes), GlyphAtlasPeakBytes: uint64(s.glyph_atlas_peak_bytes),
 		GlyphAtlasEpochs: uint64(s.glyph_atlas_epochs), GlyphUploadedBytes: uint64(s.glyph_uploaded_bytes),
+		DeviceRecoveries: uint64(s.device_recoveries), DroppedFrames: uint64(s.dropped_frames),
 	}
 }

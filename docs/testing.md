@@ -45,11 +45,15 @@ go run ./internal/pecheck ./bin/counter.exe
 
 CI 使用 Windows Server 2022 和 2025 的 amd64 runner 执行上述完整脚本；macOS Intel / Apple Silicon 执行三轮 race、严格 cgo、编译和原生 smoke；Ubuntu 执行核心 race、fuzz 和无 cgo 回退检查。Windows 报告和两种 EXE 都上传为 artifacts，失败时也保留已生成的报告。
 
-两种 Mac 架构还运行 `internal/renderstress`：持续绘制至少 90 个实际完成的 GPU 帧，检查三个上传缓冲都被使用、在途帧不超过三、正常提交没有显式缓冲等待、退出时所有提交完成。场景包含 2048 个圆角矩形和 32 个共享文本命令，要求最多两次 draw call、每实例 80 字节上传，并保存原生 CPU 编码 P50/P95。该验证证明执行了新的 Metal 实例化/异步路径，不证明全部像素正确或 GPUI 同机性能；后续 GPU 读回与共享字形图集仍需覆盖。
+两种 Mac 架构还运行 `internal/renderstress`：持续绘制至少 90 个实际完成的 GPU 帧，检查三个上传缓冲都被使用、在途帧不超过三、正常提交没有显式缓冲等待、退出时所有提交完成。变化文本场景包含 2048 个圆角矩形和 32 个标签，要求最多两次 draw call、每实例 80 字节上传、最多 14 个光栅化字形和一页 1 MiB R8 图集，并保存原生 CPU 编码 P50/P95。另行运行大字号缓存淘汰，检查活动/在途页面上限和提交完成。
+
+`internal/metaltest` 在同一进程启动两次真实 AppKit 窗口，从实际 drawable 在 GPU 完成后复制像素。几何样本检查透明混合、矩形裁剪、圆角和斜线；文字与独立 CoreText 整行绘制比较方向、位置和 ink mask，覆盖中文、单色 emoji、阿拉伯文、连字、组合/预组合重音和 shader 裁剪。单字形光栅化与整行亚像素相位可能改变边缘，验收要求 mask IoU >= 0.60、边界差 <= 2 DIP × scale 对应的物理像素；重音对照另要求近乎相同覆盖率。实际 GPU PNG、参考 PNG 和 JSON 随失败/成功 artifacts 保存。CI 显示器目前 scale=1；此验证不代表全部字体、缩放或完整文本编辑输入。
 
 Windows CI 使用 `scripts/validate-shaders.ps1` 检查预编译 DXIL 与 HLSL/实例 ABI 一致。固定微软 DXC 版本和下载 SHA256，避免应用构建依赖网络或运行时编译器。默认 HWND 已使用 D3D12；CI 分别验证默认适配器和 WARP 的实际窗口压力、字形复用、DXGI 节奏、空闲唤醒以及 WARP 原生输入/像素。PE 检查要求 D3D12/DXGI/DirectWrite 系统导入并拒绝 Direct2D 依赖。
 
 工作区新增测试覆盖零基准 Flex、字体缓存隔离、矢量图标、标题拖动区域和窗口按钮生命周期。扩展测试通过真实 VSIX/Node 进程检查安装路径约束、大小限制、版本排序、并发命令、输出/文档事件、未知 API 错误和死循环超时。Node.js 是扩展测试的必需工具，CI 显式安装。
+
+Windows 的 `internal/renderstress -device-recovery` 在第九次提交后调用该 renderer 的 ID3D12Device5::RemoveDevice，实际使 fence 进入 removed 状态，然后继续同一 HWND/Go 状态绘制并读回正确像素。硬件与 WARP 分别验证恢复一次、丢弃 1–3 个未确认帧、后续至少 90 个真实 GPU 完成、submitted = completed + dropped、空闲暂停/唤醒以及重建后的 1 MiB 图集。普通场景仍要求 submitted = completed；诊断报告不会把丢弃帧算成完成帧。该调用不触发全系统 TDR。
 
 自定义标题栏窗口的初始尺寸限制到 Windows 显示器工作区。原生回归测试请求 10000×10000 DIP 窗口，检查实际窗口不越过工作区；最大化后检查客户区与工作区完全一致，并验证正常、最大化、还原三个状态下的底部状态栏像素和连续截图，避免小屏幕或不可见边框裁掉窗口内容。
 

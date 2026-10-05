@@ -1,6 +1,6 @@
 # GPU 绘制目标与验收
 
-用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。Windows 默认窗口已替换为 Direct3D 12，并加入 DirectWrite R8 字形图集；Metal 字形图集、设备丢失恢复、完整 GPU 正确性/性能验收及 gocode 发布依赖仍需完成。
+用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环及显示同步调度。Metal 设备移除恢复、进一步 GPU 正确性/性能验收及 gocode 发布依赖仍需完成。
 
 ## 参考与技术选择
 
@@ -22,9 +22,11 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | Metal 显示同步调度 | 已接入 macOS 14+ 默认路径，两种 Mac CI 已通过 | CAMetalDisplayLink 直接提供 drawable；连续请求合并；空闲期间 GPU 提交和回调计数不增加；Dispatch 能重新唤醒 |
 | GPU 诊断 | 已实现原生计数与 CPU/GPU 时间 | 原生压力报告；不能以 Go view 次数代替 GPU 完成数 |
 | Direct3D 12 着色器 | 可复现编译；默认窗口与离屏共用设备/PSO 创建 | RTX 5070 Ti 与 WARP 已通过 90 帧 × 16 个离屏 GPU 像素检查；[此前 Windows 2022/2025 离屏 CI 均通过](https://github.com/neko233-com/godesktop/actions/runs/37362077757) |
-| Windows 默认 Direct3D 12 | 已接入 HWND flip swapchain、DXGI 显示同步、三帧 fence | 本机硬件已通过完整三轮 race/原生测试与 92 帧压力；实际 swapchain GPU 读回覆盖输入、缩放、最大化、恢复和重复启动；设备丢失自动重建仍待完成 |
+| Windows 默认 Direct3D 12 | 已接入 HWND flip swapchain、DXGI 显示同步、三帧 fence | 本机硬件已通过完整三轮 race/原生测试与 92 帧压力；实际 swapchain GPU 读回覆盖输入、缩放、最大化、恢复和重复启动 |
 | Windows R8 字形图集 | 已接入默认 DirectWrite 文本路径 | 变化的文本 92 帧只光栅化 14 字形、29426 次命中、1 MiB 图集；中文/组合音标/emoji/阿拉伯文/裁剪的实际 GPU 像素；大字号淘汰压力和字节峰值 |
-| Metal 共享字形图集 | 尚未实现 | glyph/font/size/scale 缓存、复用计数、字节上限、跨帧生命周期、Unicode GPU 像素验证 |
+| Metal 共享字形图集 | 已接入默认路径；[8086828 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37374018496) | 92 帧、14 次光栅化、29426 次命中、1 MiB 图集；4 次淘汰、16 MiB 峰值；实际 drawable 几何/Unicode 与独立 CoreText 对照 |
+| Windows 设备丢失恢复 | 已实现；本机硬件/WARP 的实际 RemoveDevice 已通过，CI 待验收 | 同一窗口自动重建、至少 90 个后续完成帧、丢弃帧单独计数、正确 GPU 像素、三槽/空闲/字形图集回归 |
+| Metal 设备移除恢复 | 尚未实现 | 设备选择、队列/帧槽/图集重建与有界恢复，旧完成回调隔离 |
 | 绘制正确性与性能 | 部分验证 | 裁剪、透明混合、圆角、线段、文本及多帧读回；真实设备 P50/P95 与输入延迟 |
 | gocode 消费新后端 | 仍依赖 v0.2.2 | 新框架版本及子模块更新后，在 Windows/两种 Mac 架构上重新验证 |
 
@@ -42,7 +44,9 @@ powershell -File scripts/validate-shaders.ps1 -Regenerate
 Metal 的渲染压力验证：
 
 ```sh
-CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -output metal-render-stress.json
+CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-atlas -output metal-render-stress.json
+CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-eviction -output metal-glyph-eviction.json
+CGO_ENABLED=1 go run ./internal/metaltest -output metal-pixels
 ```
 
 Direct3D 12 设备和像素验收：
@@ -71,12 +75,17 @@ $env:GODESKTOP_GPU_DEBUG = '1'
 $env:GODESKTOP_GPU_ADAPTER = 'hardware'
 go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-glyph-stress.json
 go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-eviction -output .cache/dx12-window-eviction.json
+go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -device-recovery -output .cache/dx12-window-recovery.json
 $env:GODESKTOP_GPU_ADAPTER = 'warp'
 go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-warp.json
 go test -race -run '^TestWindowsAMD64NativeIntegration$' -count=1 .
 ```
 
 所有场景走同一 HWND/D3D12 管线。DXGI frame-latency 对象与消息循环协同调度，显示就绪且该槽 fence 完成后才提交；正常帧不等待缓冲，缩放/退出才有界排空。三个帧槽各自持有 allocator、实例上传、描述符和图集上传暂存。
+
+设备丢失诊断调用 [ID3D12Device5::RemoveDevice](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device5-removedevice)，真实执行同一设备的 removal 路径。本机硬件和 WARP 均通过：93 个已记录提交、92 个已确认 GPU 完成、1 个丢弃帧、恢复 1 次，重建后实际窗口颜色正确。移除时 fence 的 UINT64_MAX 值只用于识别丢失，不当作完成证据。每次 Run 最多恢复三次，超限或新设备创建失败返回错误。
+
+两种 Mac CI 的 Metal 变化文本场景均通过 92 帧、一次 draw call、一页 R8 图集；CPU 编码 P95 在该轮 ARM64 / Intel runner 上分别为 4.196 / 6.325 ms。实际 drawable 的 F/组合重音/emoji mask 与 CoreText 对照 IoU=1，中文约 0.947、阿拉伯文约 0.859、office 约 0.926，边界最多相差一个物理像素。数据与 GPU/参考 PNG 保存为 CI artifacts；这些 runner 数值不代表其他设备，也不构成与 GPUI 的同机对比。
 
 变化文本场景包含 2048 个矩形和 32 个每帧更新的标签，本机硬件/WARP 均通过 92 帧：三个槽全使用、submitted = completed、一次 draw call、空闲期间提交和时钟计数不变、Dispatch 重新唤醒。14 个字形共享一页 1 MiB R8 图集，而不是为每种字符串创建纹理。图集更新的累计上传量另外报告，不混入实例数 × 80 的实例上传断言。
 

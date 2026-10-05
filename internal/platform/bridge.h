@@ -30,6 +30,7 @@ typedef struct {
     uint64_t frame_requests, frame_ticks, coalesced_requests, idle_pauses;
     uint64_t glyph_rasterizations, glyph_cache_hits, glyph_cache_entries, glyph_atlas_pages;
     uint64_t glyph_atlas_bytes, glyph_atlas_peak_bytes, glyph_atlas_epochs, glyph_uploaded_bytes;
+    uint64_t device_recoveries, dropped_frames;
 } GDRenderStats;
 
 // Both languages must agree on the fixed, pointer-free scene ABI.
@@ -37,12 +38,12 @@ typedef struct {
 static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
 static_assert(sizeof(GDCommand) == 76 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68, "GD command ABI layout changed");
-static_assert(sizeof(GDRenderStats)==208 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
+static_assert(sizeof(GDRenderStats)==224 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #else
 _Static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 _Static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
 _Static_assert(sizeof(GDCommand) == 76 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68, "GD command ABI layout changed");
-_Static_assert(sizeof(GDRenderStats)==208 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
+_Static_assert(sizeof(GDRenderStats)==224 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #endif
 
 const char *gd_run(const char *title, float width, float height, GDColor background, int custom_titlebar);

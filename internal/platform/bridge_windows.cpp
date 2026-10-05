@@ -45,37 +45,61 @@ int metric_for_dpi(int index,HWND window) {
 struct Window {
     HWND handle=nullptr;
     IDWriteFactory *text_factory=nullptr;
-    gd_dx12::Surface surface;
+    gd_dx12::Capture capture;
+    std::unique_ptr<gd_dx12::Surface> surface=std::make_unique<gd_dx12::Surface>();
     gd_dx12::GlyphAtlas atlas;
     gd_dx12::Scene scene;
     GDColor background{};
     bool custom_titlebar=false;
     unsigned high_surrogate=0;
     bool readback=false;
+    bool hardwareOnly=false,warpOnly=false,debug=false;
+    uint64_t removeAfter=0;
+    bool removalInjected=false;
     bool dirty=true,idle=false;
     std::vector<GDCommand> commands;
     std::string text;
     std::map<std::tuple<std::string,float,std::string>,IDWriteTextLayout *> layouts;
     std::string error;
 
-    ~Window() { surface.finish(); clear_text(); release(text_factory); }
+    ~Window() { surface->finish(); clear_text(); release(text_factory); }
     void clear_text() { for(auto &item:layouts) release(item.second); layouts.clear(); }
     void publish_stats() {
-        surface.stats.glyph_rasterizations=atlas.rasterized;
-        surface.stats.glyph_cache_hits=atlas.hits;
-        surface.stats.glyph_cache_entries=atlas.entries();
-        surface.stats.glyph_atlas_pages=atlas.accounting->pages;
-        surface.stats.glyph_atlas_bytes=atlas.accounting->pages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
-        surface.stats.glyph_atlas_peak_bytes=atlas.accounting->peakPages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
-        surface.stats.glyph_atlas_epochs=atlas.epochs;
+        surface->stats.glyph_rasterizations=atlas.rasterized;
+        surface->stats.glyph_cache_hits=atlas.hits;
+        surface->stats.glyph_cache_entries=atlas.entries();
+        surface->stats.glyph_atlas_pages=atlas.accounting->pages;
+        surface->stats.glyph_atlas_bytes=atlas.accounting->pages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
+        surface->stats.glyph_atlas_peak_bytes=atlas.accounting->peakPages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
+        surface->stats.glyph_atlas_epochs=atlas.epochs;
         std::lock_guard<std::mutex> lock(stats_mutex);
-        latest_stats=surface.stats;
-        rendered_frames.store(surface.stats.completed);
+        latest_stats=surface->stats;
+        rendered_frames.store(surface->stats.completed);
     }
     void request_frame() {
-        surface.stats.frame_requests++;
-        if(dirty) surface.stats.coalesced_requests++;
+        surface->stats.frame_requests++;
+        if(dirty) surface->stats.coalesced_requests++;
         dirty=true; idle=false;
+    }
+    bool open_surface(UINT width,UINT height) {
+        return surface->open(handle,width,height,readback?&capture:nullptr,hardwareOnly,warpOnly,debug);
+    }
+    bool recover_surface() {
+        if(!surface->deviceLost()) { error=surface->error; return false; }
+        GDRenderStats saved=surface->stats;
+        if(saved.device_recoveries>=3) { error="D3D12 device was lost repeatedly; three recovery attempts exhausted: "+surface->error; return false; }
+        // UINT64_MAX is the device-removed fence sentinel, never a successful
+        // submission. Account for abandoned work separately from GPU completion.
+        saved.dropped_frames=saved.submitted-saved.completed;
+        saved.in_flight=0; saved.device_recoveries++;
+        scene=gd_dx12::Scene{}; atlas.clear();
+        surface.reset(); // Releases the old swapchain and all device resources.
+        surface=std::make_unique<gd_dx12::Surface>();
+        surface->stats=saved;
+        RECT client{}; GetClientRect(handle,&client);
+        if(!open_surface(std::max(1L,client.right),std::max(1L,client.bottom))) { error="D3D12 device recovery failed: "+surface->error; return false; }
+        dirty=true; idle=false; error.clear(); publish_stats();
+        return true;
     }
     void fail(const char *operation,HRESULT result) {
         char message[192];
@@ -133,7 +157,7 @@ struct Window {
         float scale=dpi(handle)/96.0f;
         gd_go_event(1,client.right/scale,client.bottom/scale,0,0);
         if(!error.empty() || !build_scene(scale)) return false;
-        if(!surface.submit(scene,client.right/scale,client.bottom/scale,background,started,gd_dx12::monotonic_nanos())) { error=surface.error; return false; }
+        if(!surface->submit(scene,client.right/scale,client.bottom/scale,background,started,gd_dx12::monotonic_nanos())) { error=surface->error; return false; }
         publish_stats(); return true;
     }
     bool event_loop() {
@@ -141,33 +165,40 @@ struct Window {
             MSG message{};
             while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
                 if(message.message==WM_QUIT) {
-                    bool finished=surface.finish();
+                    bool finished=surface->finish();
                     publish_stats();
-                    if(!finished) error=surface.error.empty()?"GPU window shutdown failed":surface.error;
+                    if(!finished) error=surface->error.empty()?"GPU window shutdown failed":surface->error;
                     return finished;
                 }
                 TranslateMessage(&message); DispatchMessageW(&message);
             }
-            if(!surface.poll()) { error=surface.error; return false; }
+            if(removeAfter && !removalInjected && surface->stats.submitted>=removeAfter) {
+                removalInjected=true;
+                if(!surface->removeDevice()) { error=surface->error; return false; }
+                if(recover_surface()) continue;
+                return false;
+            }
+            if(!surface->poll()) { if(recover_surface()) continue; return false; }
             publish_stats();
             RECT client{}; GetClientRect(handle,&client);
             bool visible=IsWindowVisible(handle) && !IsIconic(handle) && client.right>0 && client.bottom>0;
             if(dirty && visible) {
-                if(!surface.resize(client.right,client.bottom)) { error=surface.error; return false; }
-                if(surface.ready()) {
+                if(!surface->resize(client.right,client.bottom)) { if(recover_surface()) continue; return false; }
+                if(surface->ready()) {
                     dirty=false;
-                    if(!draw()) return false;
+                    if(!draw()) { if(surface->deviceLost() && recover_surface()) continue; return false; }
                     continue;
                 }
             }
-            if(!dirty && !idle) { idle=true; surface.stats.idle_pauses++; publish_stats(); }
-            HANDLE handles[2]{}; unsigned count=0,clockIndex=UINT_MAX;
-            if(dirty && visible) if(auto clock=surface.frameClock()) { clockIndex=count; handles[count++]=clock; }
-            if(auto completion=surface.pendingCompletion()) handles[count++]=completion;
-            if(!surface.error.empty()) { error=surface.error; return false; }
+            if(!dirty && !idle) { idle=true; surface->stats.idle_pauses++; publish_stats(); }
+            HANDLE handles[3]{}; unsigned count=0,clockIndex=UINT_MAX;
+            if(auto removal=surface->removalEvent()) handles[count++]=removal;
+            if(dirty && visible) if(auto clock=surface->frameClock()) { clockIndex=count; handles[count++]=clock; }
+            if(auto completion=surface->pendingCompletion()) handles[count++]=completion;
+            if(!surface->error.empty()) { if(recover_surface()) continue; return false; }
             DWORD result=MsgWaitForMultipleObjectsEx(count,handles,INFINITE,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
             if(result==WAIT_FAILED) { error="GPU/message wait failed"; return false; }
-            if(clockIndex!=UINT_MAX && result==WAIT_OBJECT_0+clockIndex) surface.clockSignalled();
+            if(clockIndex!=UINT_MAX && result==WAIT_OBJECT_0+clockIndex) surface->clockSignalled();
         }
     }
 
@@ -333,7 +364,11 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                     wchar_t adapter[32]{},debug[2]{};
                     GetEnvironmentVariableW(L"GODESKTOP_GPU_ADAPTER",adapter,32);
                     GetEnvironmentVariableW(L"GODESKTOP_GPU_DEBUG",debug,2);
-                    if(!window.surface.open(handle,client.right,client.bottom,window.readback,wcscmp(adapter,L"hardware")==0,wcscmp(adapter,L"warp")==0,debug[0]==L'1')) window.error=window.surface.error;
+                    window.hardwareOnly=wcscmp(adapter,L"hardware")==0; window.warpOnly=wcscmp(adapter,L"warp")==0; window.debug=debug[0]==L'1';
+                    wchar_t removal[32]{}; GetEnvironmentVariableW(L"GODESKTOP_TEST_DEVICE_REMOVAL",removal,32);
+                    window.removeAfter=_wcstoui64(removal,nullptr,10);
+                    if(window.readback && !window.capture.open(handle)) window.error="GPU readback mapping creation failed";
+                    else if(!window.open_surface(client.right,client.bottom)) window.error=window.surface->error;
                     else {
                         ShowWindow(handle,SW_SHOW); UpdateWindow(handle);
                         if(window.readback) SetWindowPos(handle,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
