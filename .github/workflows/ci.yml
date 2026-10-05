@@ -34,6 +34,9 @@ jobs:
       - name: Repeated race, native input, pixel, coverage, fuzz and EXE checks
         shell: powershell
         run: ./scripts/test-windows-amd64.ps1
+      - name: Verify reproducible Direct3D 12 DXIL
+        shell: powershell
+        run: ./scripts/validate-shaders.ps1
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
         with:

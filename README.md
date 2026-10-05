@@ -140,7 +140,7 @@ CI 在 Windows Server 2022 / 2025 上运行完整 amd64 检查，macOS arm64 / a
 
 ## 设计与性能
 
-[架构](docs/architecture.md) · [路线图](docs/roadmap.md) · [贡献说明](CONTRIBUTING.md)
+[架构](docs/architecture.md) · [现代绘制验收](docs/rendering-modernization.md) · [路线图](docs/roadmap.md) · [贡献说明](CONTRIBUTING.md)
 
 以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。Metal 使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制不调用 `waitUntilCompleted`，提交环饱和时延后重绘。完整字形图集、Windows Direct3D 12 后端和大列表虚拟化仍需实现。
 
