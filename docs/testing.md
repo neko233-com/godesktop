@@ -55,6 +55,8 @@ Windows CI 使用 `scripts/validate-shaders.ps1` 检查预编译 DXIL 与 HLSL/�
 
 Windows 的 `internal/renderstress -device-recovery` 在第九次提交后调用该 renderer 的 ID3D12Device5::RemoveDevice，实际使 fence 进入 removed 状态，然后继续同一 HWND/Go 状态绘制并读回正确像素。硬件与 WARP 分别验证恢复一次、丢弃 1–3 个未确认帧、后续至少 90 个真实 GPU 完成、submitted = completed + dropped、空闲暂停/唤醒以及重建后的 1 MiB 图集。普通场景仍要求 submitted = completed；诊断报告不会把丢弃帧算成完成帧。该调用不触发全系统 TDR。
 
+`-completion-race` 使用同一真实提交路径，在 CPU 收集前主动等待 GPU fence 完成，然后调用生产 completion watcher，要求它仍返回已经完成但尚未收集的提交事件。这样可稳定覆盖 GPU 恰好在 poll 与监听注册之间完成的时序，避免消息循环空闲时漏收最后一帧；普通压力场景继续验证零显式缓冲等待。这个单独诊断场景的同步等待不属于正常绘制路径，报告明确标记 diagnostic_completion_race。
+
 自定义标题栏窗口的初始尺寸限制到 Windows 显示器工作区。原生回归测试请求 10000×10000 DIP 窗口，检查实际窗口不越过工作区；最大化后检查客户区与工作区完全一致，并验证正常、最大化、还原三个状态下的底部状态栏像素和连续截图，避免小屏幕或不可见边框裁掉窗口内容。
 
 `gocode` 子仓库有自己的五平台 CI 和 Windows 脚本：真实窗口测试文件选择、中文/emoji 输入、保存、扩展命令、标题栏命中、窗口缩放/关闭和 PE amd64；原生 smoke 同时要求真实绘制和已安装 VSIX 命令执行。截图和构建产物保存在其 Actions artifacts。父仓库 `go test ./...` 不会自动进入独立子模块，应分别验证两个仓库。

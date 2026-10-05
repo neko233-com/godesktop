@@ -62,6 +62,8 @@ jobs:
         run: |
           go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-default.json
           if ($LASTEXITCODE -ne 0) { throw 'Default D3D12 HWND validation failed' }
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -completion-race -output .cache/dx12-window-completion-race.json
+          if ($LASTEXITCODE -ne 0) { throw 'D3D12 completion-before-idle-wait race validation failed' }
           go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-eviction -output .cache/dx12-window-eviction.json
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 glyph eviction/lifetime validation failed' }
           go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -device-recovery -output .cache/dx12-window-recovery.json

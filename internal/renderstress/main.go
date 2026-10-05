@@ -38,6 +38,7 @@ func run() error {
 	glyphAtlas := flag.Bool("glyph-atlas", false, "vary text every frame and require bounded per-glyph reuse")
 	glyphEviction := flag.Bool("glyph-eviction", false, "vary large font sizes to exercise atlas eviction and GPU lifetime")
 	deviceRecovery := flag.Bool("device-recovery", false, "remove this Windows renderer's actual D3D12 device and require recovery")
+	completionRace := flag.Bool("completion-race", false, "diagnostically finish the D3D12 GPU between poll and the idle fence wait")
 	output := flag.String("output", "", "optional JSON report filename")
 	flag.Parse()
 	if *frames < 6 || *frames > 10000 {
@@ -57,6 +58,14 @@ func run() error {
 			return err
 		}
 	}
+	if *completionRace {
+		if runtime.GOOS != "windows" || *requireBackend != "direct3d12" {
+			return errors.New("completion race probe requires Windows D3D12")
+		}
+		if err := os.Setenv("GODESKTOP_TEST_COMPLETION_RACE", "1"); err != nil {
+			return err
+		}
+	}
 	watchdog := time.AfterFunc(30*time.Second, func() { fmt.Fprintln(os.Stderr, "GPU stress watchdog expired"); os.Exit(1) })
 	defer watchdog.Stop()
 	var samples []uint64
@@ -64,10 +73,16 @@ func run() error {
 	var previous uint64
 	var mismatch error
 	var idleStarted, idleFinished bool
+	var recoveryObserved bool
+	var completedBeforeRecovery uint64
 	var idleBefore, idleAfter platform.RenderStats
 	started := time.Now()
 	err := ui.Run(ui.WindowOptions{Title: "godesktop native GPU stress", Width: 1000, Height: 650}, func(cx *ui.Context) *ui.Element {
 		stats := platform.RendererStats()
+		if *deviceRecovery && stats.DeviceRecoveries > 0 && !recoveryObserved {
+			recoveryObserved = true
+			completedBeforeRecovery = stats.Completed
+		}
 		if stats.Backend != *requireBackend {
 			mismatch = fmt.Errorf("required %s renderer, got %s", *requireBackend, stats.Backend)
 			cx.Quit()
@@ -90,7 +105,7 @@ func run() error {
 				mismatch = recoveryPixels(*output)
 			}
 			cx.Quit()
-		} else if stats.Completed >= *frames {
+		} else if stats.Completed >= *frames+completedBeforeRecovery {
 			if !idleStarted {
 				idleStarted = true
 				go func() {
@@ -143,7 +158,7 @@ func run() error {
 	if stats.Completed < *frames || stats.Completed+stats.DroppedFrames != stats.Submitted || stats.InFlight != 0 {
 		return fmt.Errorf("submissions did not drain: %+v", stats)
 	}
-	if *deviceRecovery && (stats.DeviceRecoveries != 1 || stats.DroppedFrames == 0 || stats.DroppedFrames > 3 || stats.GlyphRasterizations < 6 || stats.GlyphAtlasBytes != 1024*1024) {
+	if *deviceRecovery && (!recoveryObserved || stats.Completed-completedBeforeRecovery < *frames || stats.DeviceRecoveries != 1 || stats.DroppedFrames == 0 || stats.DroppedFrames > 3 || stats.GlyphRasterizations < 6 || stats.GlyphAtlasBytes != 1024*1024) {
 		return fmt.Errorf("actual device removal did not rebuild a bounded renderer: %+v", stats)
 	}
 	if !*deviceRecovery && (stats.DeviceRecoveries != 0 || stats.DroppedFrames != 0) {
@@ -173,19 +188,26 @@ func run() error {
 	if *glyphEviction && (stats.GlyphAtlasEpochs == 0 || stats.GlyphRasterizations < *frames*10 || stats.GlyphCacheHits < *frames*32*3 || stats.GlyphCacheEntries > 16384 || stats.GlyphAtlasPages > 16 || stats.GlyphAtlasBytes > 16*1024*1024 || stats.GlyphAtlasPeakBytes > 64*1024*1024 || stats.GlyphUploadedBytes < 16*1024*1024) {
 		return fmt.Errorf("glyph eviction/resource ownership failed: %+v", stats)
 	}
+	var completedSinceRecovery uint64
+	if *deviceRecovery {
+		completedSinceRecovery = stats.Completed - completedBeforeRecovery
+	}
 	report := struct {
-		Renderer   platform.RenderStats `json:"renderer"`
-		Scene      string               `json:"scene"`
-		Samples    int                  `json:"cpu_samples"`
-		CPU50      uint64               `json:"cpu_p50_nanos"`
-		CPU95      uint64               `json:"cpu_p95_nanos"`
-		Scene95    uint64               `json:"scene_p95_nanos"`
-		Acquire95  uint64               `json:"drawable_acquire_p95_nanos"`
-		Encode95   uint64               `json:"encode_p95_nanos"`
-		Elapsed    float64              `json:"elapsed_seconds"`
-		IdleBefore platform.RenderStats `json:"idle_before"`
-		IdleAfter  platform.RenderStats `json:"idle_after"`
-	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter}
+		Renderer       platform.RenderStats `json:"renderer"`
+		Scene          string               `json:"scene"`
+		Samples        int                  `json:"cpu_samples"`
+		CPU50          uint64               `json:"cpu_p50_nanos"`
+		CPU95          uint64               `json:"cpu_p95_nanos"`
+		Scene95        uint64               `json:"scene_p95_nanos"`
+		Acquire95      uint64               `json:"drawable_acquire_p95_nanos"`
+		Encode95       uint64               `json:"encode_p95_nanos"`
+		Elapsed        float64              `json:"elapsed_seconds"`
+		IdleBefore     platform.RenderStats `json:"idle_before"`
+		IdleAfter      platform.RenderStats `json:"idle_after"`
+		BeforeRecovery uint64               `json:"completed_before_recovery,omitempty"`
+		SinceRecovery  uint64               `json:"completed_since_recovery,omitempty"`
+		CompletionRace bool                 `json:"diagnostic_completion_race,omitempty"`
+	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter, BeforeRecovery: completedBeforeRecovery, SinceRecovery: completedSinceRecovery, CompletionRace: *completionRace}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

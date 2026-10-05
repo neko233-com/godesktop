@@ -83,7 +83,7 @@ go test -race -run '^TestWindowsAMD64NativeIntegration$' -count=1 .
 
 所有场景走同一 HWND/D3D12 管线。DXGI frame-latency 对象与消息循环协同调度，显示就绪且该槽 fence 完成后才提交；正常帧不等待缓冲，缩放/退出才有界排空。三个帧槽各自持有 allocator、实例上传、描述符和图集上传暂存。
 
-设备丢失诊断调用 [ID3D12Device5::RemoveDevice](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device5-removedevice)，真实执行同一设备的 removal 路径。本机硬件和 WARP 均通过：93 个已记录提交、92 个已确认 GPU 完成、1 个丢弃帧、恢复 1 次，重建后实际窗口颜色正确。移除时 fence 的 UINT64_MAX 值只用于识别丢失，不当作完成证据。每次 Run 最多恢复三次，超限或新设备创建失败返回错误。
+设备丢失诊断调用 [ID3D12Device5::RemoveDevice](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device5-removedevice)，真实执行同一设备的 removal 路径。本机硬件和 WARP 均通过：恢复前完成 8 帧、恢复后完成 92 帧，101 个已记录提交中 100 个已确认 GPU 完成、1 个丢弃帧，恢复 1 次，重建后实际窗口颜色正确。报告单独记录恢复前/后的完成数，验收至少 90 个恢复后完成帧。移除时 fence 的 UINT64_MAX 值只用于识别丢失，不当作完成证据。每次 Run 最多恢复三次，超限或新设备创建失败返回错误。
 
 两种 Mac CI 的 Metal 变化文本场景均通过 92 帧、一次 draw call、一页 R8 图集；CPU 编码 P95 在该轮 ARM64 / Intel runner 上分别为 4.196 / 6.325 ms。实际 drawable 的 F/组合重音/emoji mask 与 CoreText 对照 IoU=1，中文约 0.947、阿拉伯文约 0.859、office 约 0.926，边界最多相差一个物理像素。数据与 GPU/参考 PNG 保存为 CI artifacts；这些 runner 数值不代表其他设备，也不构成与 GPUI 的同机对比。
 

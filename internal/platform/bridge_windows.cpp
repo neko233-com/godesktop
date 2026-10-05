@@ -56,6 +56,7 @@ struct Window {
     bool hardwareOnly=false,warpOnly=false,debug=false;
     uint64_t removeAfter=0;
     bool removalInjected=false;
+    bool completionRace=false;
     bool dirty=true,idle=false;
     std::vector<GDCommand> commands;
     std::string text;
@@ -187,6 +188,7 @@ struct Window {
                 if(surface->ready()) {
                     dirty=false;
                     if(!draw()) { if(surface->deviceLost() && recover_surface()) continue; return false; }
+                    if(completionRace && !surface->diagnosticCompleteBeforeWatch()) { error=surface->error; return false; }
                     continue;
                 }
             }
@@ -367,6 +369,8 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                     window.hardwareOnly=wcscmp(adapter,L"hardware")==0; window.warpOnly=wcscmp(adapter,L"warp")==0; window.debug=debug[0]==L'1';
                     wchar_t removal[32]{}; GetEnvironmentVariableW(L"GODESKTOP_TEST_DEVICE_REMOVAL",removal,32);
                     window.removeAfter=_wcstoui64(removal,nullptr,10);
+                    wchar_t completion[2]{}; GetEnvironmentVariableW(L"GODESKTOP_TEST_COMPLETION_RACE",completion,2);
+                    window.completionRace=completion[0]==L'1';
                     if(window.readback && !window.capture.open(handle)) window.error="GPU readback mapping creation failed";
                     else if(!window.open_surface(client.right,client.bottom)) window.error=window.surface->error;
                     else {

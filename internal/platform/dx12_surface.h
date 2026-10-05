@@ -182,13 +182,32 @@ public:
     HANDLE removalEvent() const { return removal.event; }
     void clockSignalled() { latencyReady=true; }
     HANDLE pendingCompletion() {
-        if(lastFence>engine.completion()->GetCompletedValue()) {
+        // Keep watching until poll collected the submission. The GPU can finish
+        // between poll and this call; skipping an already-signalled fence would
+        // leave CPU counters/resources pending while the UI sleeps indefinitely.
+        if(stats.in_flight) {
             if(!engine.watch(lastFence)) { error=engine.error; return nullptr; }
             return engine.completionEvent();
         }
         return nullptr;
     }
+    // Acceptance-only: finish the GPU after poll but before registering the
+    // idle wait. Normal rendering never calls this synchronous diagnostic hook.
+    bool diagnosticCompleteBeforeWatch() {
+        if(!stats.in_flight) { error="Completion race probe has no submitted frame"; return false; }
+        if(!engine.watch(lastFence)) { error=engine.error; return false; }
+        if(WaitForSingleObject(engine.completionEvent(),5000)!=WAIT_OBJECT_0) { error="Completion race probe did not finish within five seconds"; return false; }
+        // The production watcher must still return an event even though the GPU
+        // is now complete and the CPU has not yet collected the submission.
+        HANDLE event=pendingCompletion();
+        if(!event || WaitForSingleObject(event,100)!=WAIT_OBJECT_0) { error="Completed submission lost its CPU collection notification"; return false; }
+        return true;
+    }
     bool submit(const Scene &scene,float dipWidth,float dipHeight,GDColor background,UINT64 started,UINT64 sceneEnd) {
+        // ready() already proved the reused slot's fence complete. Collect it
+        // again here so completion between the earlier poll and ready cannot
+        // overwrite an uncollected slot's serial/readback or inflate in_flight.
+        if(!poll()) return false;
         unsigned index=swapchain->GetCurrentBackBufferIndex();
         auto &frame=frames[index];
         if(!latencyReady || engine.completion()->GetCompletedValue()<frame.fence) { error="D3D12 frame submitted before DXGI/fence readiness"; return false; }
