@@ -51,6 +51,16 @@ void gd_quit(void);
 void gd_window_action(int action);
 uint64_t gd_rendered_frames(void);
 GDRenderStats gd_render_stats(void);
+
+// Windows-only offscreen acceptance probe. Every image is copied from a D3D12
+// render target after its GPU fence completes; no desktop/GDI pixels are used.
+// The caller frees json and pixels with free(), including on a returned error.
+typedef struct {
+    uint32_t width, height, frames, stride;
+    char *json;
+    unsigned char *pixels;
+} GDGPUProbe;
+const char *gd_dx12_probe(uint32_t flags, uint32_t frames, GDGPUProbe *result);
 void gd_go_event(int kind, float x, float y, int key, int modifiers);
 
 #ifdef __cplusplus

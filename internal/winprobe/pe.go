@@ -24,6 +24,9 @@ func ValidateAMD64PE(path string) error {
 		return err
 	}
 	allowed := map[string]bool{"d2d1.dll": true, "dwrite.dll": true, "kernel32.dll": true, "user32.dll": true, "gdi32.dll": true, "ole32.dll": true, "advapi32.dll": true, "shell32.dll": true, "ntdll.dll": true, "msvcrt.dll": true, "ucrtbase.dll": true}
+	// D3D12 acceptance probes share the native package. These system imports
+	// do not prove that the window's legacy Direct2D path has been replaced.
+	allowed["d3d12.dll"], allowed["dxgi.dll"] = true, true
 	seen := make(map[string]bool)
 	for _, symbol := range symbols {
 		_, library, found := strings.Cut(symbol, ":")

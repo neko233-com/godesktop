@@ -3,7 +3,7 @@ package platform
 // RenderStats reports the most recently encoded/completed native frame. Frame
 // counters and UsedSlotsMask are cumulative within a Run; other fields describe
 // the last frame. Individual counters may change between snapshot field reads.
-// CPUTimeNanos is elapsed wall time through commit, including drawable waits;
+// CPUTimeNanos is elapsed wall time through commit/present, including drawable waits;
 // SceneTimeNanos, AcquireTimeNanos and EncodeTimeNanos split that interval.
 type RenderStats struct {
 	Backend           string `json:"backend"`
