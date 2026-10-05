@@ -38,6 +38,7 @@ func run() error {
 	glyphAtlas := flag.Bool("glyph-atlas", false, "vary text every frame and require bounded per-glyph reuse")
 	glyphEviction := flag.Bool("glyph-eviction", false, "vary large font sizes to exercise atlas eviction and GPU lifetime")
 	deviceRecovery := flag.Bool("device-recovery", false, "remove this Windows renderer's actual D3D12 device and require recovery")
+	metalRecovery := flag.Bool("metal-recovery", false, "inject a recovery request after actual Metal GPU completion; hardware stays connected")
 	completionRace := flag.Bool("completion-race", false, "diagnostically finish the D3D12 GPU between poll and the idle fence wait")
 	output := flag.String("output", "", "optional JSON report filename")
 	flag.Parse()
@@ -58,6 +59,16 @@ func run() error {
 			return err
 		}
 	}
+	if *metalRecovery {
+		if runtime.GOOS != "darwin" || *requireBackend != "metal" || *glyphAtlas || *glyphEviction || *deviceRecovery {
+			return errors.New("Metal recovery requires the macOS Metal scene without other glyph/recovery flags")
+		}
+		for key, value := range map[string]string{"GODESKTOP_TEST_METAL_RECOVERY": "9", "GODESKTOP_TEST_METAL_RECOVERIES": "1", "GODESKTOP_READBACK": "1"} {
+			if err := os.Setenv(key, value); err != nil {
+				return err
+			}
+		}
+	}
 	if *completionRace {
 		if runtime.GOOS != "windows" || *requireBackend != "direct3d12" {
 			return errors.New("completion race probe requires Windows D3D12")
@@ -75,13 +86,37 @@ func run() error {
 	var idleStarted, idleFinished bool
 	var recoveryObserved bool
 	var completedBeforeRecovery uint64
+	var windowIdentity uint64
+	var modelState int
+	var modelInitialized, dispatchedAfterRecovery bool
 	var idleBefore, idleAfter platform.RenderStats
 	started := time.Now()
 	err := ui.Run(ui.WindowOptions{Title: "godesktop native GPU stress", Width: 1000, Height: 650}, func(cx *ui.Context) *ui.Element {
 		stats := platform.RendererStats()
-		if *deviceRecovery && stats.DeviceRecoveries > 0 && !recoveryObserved {
+		if *metalRecovery {
+			identity := metalWindowIdentity()
+			if identity == 0 || (windowIdentity != 0 && identity != windowIdentity) {
+				mismatch = fmt.Errorf("Metal recovery replaced the native window: before=%d after=%d", windowIdentity, identity)
+				cx.Quit()
+				return nil
+			}
+			windowIdentity = identity
+			if !modelInitialized {
+				modelInitialized = true
+				cx.Dispatch(func() { modelState = 7 })
+			}
+		}
+		if (*deviceRecovery || *metalRecovery) && stats.DeviceRecoveries > 0 && !recoveryObserved {
 			recoveryObserved = true
 			completedBeforeRecovery = stats.Completed
+			if *metalRecovery {
+				if modelState != 7 {
+					mismatch = fmt.Errorf("Go state was lost during Metal resource replacement: %d", modelState)
+					cx.Quit()
+					return nil
+				}
+				cx.Dispatch(func() { modelState, dispatchedAfterRecovery = 11, true })
+			}
 		}
 		if stats.Backend != *requireBackend {
 			mismatch = fmt.Errorf("required %s renderer, got %s", *requireBackend, stats.Backend)
@@ -103,6 +138,9 @@ func run() error {
 		if idleFinished {
 			if *deviceRecovery {
 				mismatch = recoveryPixels(*output)
+			}
+			if *metalRecovery {
+				mismatch = metalRecoveryPixels(*output)
 			}
 			cx.Quit()
 		} else if stats.Completed >= *frames+completedBeforeRecovery {
@@ -136,6 +174,9 @@ func run() error {
 			// Shared shaped text, varied clip regions and geometry interleaved with
 			// it must remain in painter order while reusing the same texture batch.
 			label := "GPU"
+			if *metalRecovery {
+				label = fmt.Sprintf("GPU %d", modelState)
+			}
 			fontSize := float32(12)
 			if *glyphAtlas {
 				label = fmt.Sprintf("GPU %06d", stats.Submitted%1000000)
@@ -161,7 +202,10 @@ func run() error {
 	if *deviceRecovery && (!recoveryObserved || stats.Completed-completedBeforeRecovery < *frames || stats.DeviceRecoveries != 1 || stats.DroppedFrames == 0 || stats.DroppedFrames > 3 || stats.GlyphRasterizations < 6 || stats.GlyphAtlasBytes != 1024*1024) {
 		return fmt.Errorf("actual device removal did not rebuild a bounded renderer: %+v", stats)
 	}
-	if !*deviceRecovery && (stats.DeviceRecoveries != 0 || stats.DroppedFrames != 0) {
+	if *metalRecovery && (!recoveryObserved || stats.Completed-completedBeforeRecovery < *frames || stats.DeviceRecoveries != 1 || stats.DroppedFrames != 0 || !dispatchedAfterRecovery || modelState != 11 || stats.GlyphRasterizations < 6 || stats.GlyphAtlasBytes != 1024*1024) {
+		return fmt.Errorf("Metal resource/state recovery failed: model=%d renderer=%+v", modelState, stats)
+	}
+	if !*deviceRecovery && !*metalRecovery && (stats.DeviceRecoveries != 0 || stats.DroppedFrames != 0) {
 		return fmt.Errorf("ordinary rendering unexpectedly lost a device or frame: %+v", stats)
 	}
 	if stats.FrameSlots != 3 || stats.UsedSlotsMask != 7 || stats.MaxInFlight == 0 || stats.MaxInFlight > 3 || stats.BufferWaits != 0 {
@@ -189,7 +233,7 @@ func run() error {
 		return fmt.Errorf("glyph eviction/resource ownership failed: %+v", stats)
 	}
 	var completedSinceRecovery uint64
-	if *deviceRecovery {
+	if *deviceRecovery || *metalRecovery {
 		completedSinceRecovery = stats.Completed - completedBeforeRecovery
 	}
 	report := struct {
@@ -207,7 +251,10 @@ func run() error {
 		BeforeRecovery uint64               `json:"completed_before_recovery,omitempty"`
 		SinceRecovery  uint64               `json:"completed_since_recovery,omitempty"`
 		CompletionRace bool                 `json:"diagnostic_completion_race,omitempty"`
-	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter, BeforeRecovery: completedBeforeRecovery, SinceRecovery: completedSinceRecovery, CompletionRace: *completionRace}
+		MetalRecovery  bool                 `json:"diagnostic_metal_recovery,omitempty"`
+		WindowIdentity uint64               `json:"native_window_identity,omitempty"`
+		ModelState     int                  `json:"go_model_state_after_recovery,omitempty"`
+	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter, BeforeRecovery: completedBeforeRecovery, SinceRecovery: completedSinceRecovery, CompletionRace: *completionRace, MetalRecovery: *metalRecovery, WindowIdentity: windowIdentity, ModelState: modelState}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

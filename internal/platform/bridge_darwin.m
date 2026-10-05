@@ -37,11 +37,52 @@
 @end
 @implementation GDMetalSnapshot
 @end
-static NSLock *snapshot_lock;
-static GDMetalSnapshot *last_snapshot;
+// Each Run owns its counters and snapshots. A timed-out old completion retains
+// only its old state and cannot overwrite a subsequently started Run's state.
+@interface GDRunState : NSObject { @public
+    _Atomic uint64_t rendered_frames,submitted_frames,draw_calls,instance_count,uploaded_bytes,cpu_nanos,gpu_nanos;
+    _Atomic uint64_t scene_nanos,acquire_nanos,encode_nanos;
+    _Atomic uint32_t used_slots,in_flight,max_in_flight,frame_clock;
+    _Atomic uint64_t frame_requests,frame_ticks,coalesced_requests,idle_pauses;
+    _Atomic uint64_t glyph_rasterizations,glyph_cache_hits,glyph_cache_entries,glyph_atlas_pages;
+    _Atomic uint64_t glyph_atlas_bytes,glyph_atlas_peak_bytes,glyph_atlas_epochs,glyph_uploaded_bytes;
+    _Atomic uint64_t device_recoveries,dropped_frames,diagnostic_recovery_remaining;
+    uint64_t diagnostic_recovery_interval;
+}
+@property(nonatomic,strong) NSLock *snapshotLock;
+@property(nonatomic,strong) GDMetalSnapshot *snapshot;
+@end
+@implementation GDRunState
+- (instancetype)init {
+    self=[super init];
+    if(self) {
+        atomic_init(&rendered_frames,0); atomic_init(&submitted_frames,0); atomic_init(&draw_calls,0); atomic_init(&instance_count,0);
+        atomic_init(&uploaded_bytes,0); atomic_init(&cpu_nanos,0); atomic_init(&gpu_nanos,0);
+        atomic_init(&scene_nanos,0); atomic_init(&acquire_nanos,0); atomic_init(&encode_nanos,0);
+        atomic_init(&used_slots,0); atomic_init(&in_flight,0); atomic_init(&max_in_flight,0); atomic_init(&frame_clock,0);
+        atomic_init(&frame_requests,0); atomic_init(&frame_ticks,0); atomic_init(&coalesced_requests,0); atomic_init(&idle_pauses,0);
+        atomic_init(&glyph_rasterizations,0); atomic_init(&glyph_cache_hits,0); atomic_init(&glyph_cache_entries,0); atomic_init(&glyph_atlas_pages,0);
+        atomic_init(&glyph_atlas_bytes,0); atomic_init(&glyph_atlas_peak_bytes,0); atomic_init(&glyph_atlas_epochs,0); atomic_init(&glyph_uploaded_bytes,0);
+        atomic_init(&device_recoveries,0); atomic_init(&dropped_frames,0); atomic_init(&diagnostic_recovery_remaining,0);
+        self.snapshotLock=[[NSLock alloc] init];
+    }
+    return self;
+}
+@end
+static GDRunState *latest_metrics;
+static NSLock *metrics_lock;
+static NSLock *state_lock(void) {
+    static dispatch_once_t once;
+    dispatch_once(&once,^{ metrics_lock=[[NSLock alloc] init]; });
+    return metrics_lock;
+}
+static GDRunState *current_metrics(void) {
+    NSLock *lock=state_lock(); [lock lock]; GDRunState *metrics=latest_metrics; [lock unlock]; return metrics;
+}
 
-@interface GDView : MTKView <MTKViewDelegate>
+@interface GDView : MTKView <MTKViewDelegate> { @public _Atomic bool recoveryRequested; }
 @property(nonatomic,strong) id<MTLCommandQueue> queue;
+@property(nonatomic,strong) GDRunState *metrics;
 @property(nonatomic,strong) id<MTLRenderPipelineState> pipeline;
 @property(nonatomic,strong) NSArray<GDFrameSlot *> *slots;
 @property(nonatomic) NSUInteger nextSlot;
@@ -58,12 +99,18 @@ static GDMetalSnapshot *last_snapshot;
 @property(nonatomic) GDColor background;
 @property(nonatomic) BOOL readback;
 @property(atomic,copy) NSString *failure;
+@property(nonatomic,strong) id<NSObject> deviceObserver;
 - (void)requestFrame;
 - (void)pauseFrameClock;
 - (void)startFrameClock;
 - (void)stopFrameClock;
 - (void)renderDrawable:(id<CAMetalDrawable>)drawable;
 - (void)publishGlyphStats;
+- (void)fail:(NSString *)message;
+- (void)observeDevices;
+- (void)stopObservingDevices;
+- (void)requestRecovery:(NSString *)reason excluding:(uint64_t)registryID;
+- (void)recoverExcluding:(uint64_t)registryID reason:(NSString *)reason;
 @end
 
 API_AVAILABLE(macos(14.0))
@@ -79,14 +126,6 @@ API_AVAILABLE(macos(14.0))
 static GDView *active_view;
 static BOOL running;
 static _Atomic uint64_t generation;
-static _Atomic uint64_t rendered_frames;
-static _Atomic uint64_t submitted_frames, draw_calls, instance_count, uploaded_bytes, cpu_nanos, gpu_nanos;
-static _Atomic uint64_t scene_nanos, acquire_nanos, encode_nanos;
-static _Atomic uint32_t used_slots, in_flight, max_in_flight;
-static _Atomic uint32_t frame_clock;
-static _Atomic uint64_t frame_requests, frame_ticks, coalesced_requests, idle_pauses;
-static _Atomic uint64_t glyph_rasterizations,glyph_cache_hits,glyph_cache_entries,glyph_atlas_pages;
-static _Atomic uint64_t glyph_atlas_bytes,glyph_atlas_peak_bytes,glyph_atlas_epochs,glyph_uploaded_bytes;
 
 static uint64_t nanos(void) {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t);
@@ -107,6 +146,42 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     double w=CTLineGetTypographicBounds(line,&ascent,descent,&leading);
     *width=ceil(w)+2;
     *height=ceil(ascent+*descent+leading)+2;
+}
+static id<MTLDevice> select_device(uint64_t excluded) {
+    id<MTLDevice> preferred=MTLCreateSystemDefaultDevice();
+    if(preferred && (!excluded || preferred.registryID!=excluded)) return preferred;
+    for(id<MTLDevice> candidate in MTLCopyAllDevices()) if(candidate.registryID!=excluded) return candidate;
+    return nil;
+}
+static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor background,BOOL readback,GDRunState *metrics,NSString **failure) {
+    NSError *error=nil;
+    id<MTLLibrary> library=[device newLibraryWithSource:shader options:nil error:&error];
+    if(!library) { *failure=error.localizedDescription ?: @"Metal shader library allocation failed"; return nil; }
+    MTLRenderPipelineDescriptor *pipeline=[[MTLRenderPipelineDescriptor alloc] init];
+    pipeline.vertexFunction=[library newFunctionWithName:@"vertex_main"];
+    pipeline.fragmentFunction=[library newFunctionWithName:@"fragment_main"];
+    pipeline.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm;
+    pipeline.colorAttachments[0].blendingEnabled=YES;
+    pipeline.colorAttachments[0].sourceRGBBlendFactor=MTLBlendFactorOne;
+    pipeline.colorAttachments[0].destinationRGBBlendFactor=MTLBlendFactorOneMinusSourceAlpha;
+    pipeline.colorAttachments[0].sourceAlphaBlendFactor=MTLBlendFactorOne;
+    pipeline.colorAttachments[0].destinationAlphaBlendFactor=MTLBlendFactorOneMinusSourceAlpha;
+    id<MTLRenderPipelineState> state=[device newRenderPipelineStateWithDescriptor:pipeline error:&error];
+    if(!state) { *failure=error.localizedDescription ?: @"Metal pipeline allocation failed"; return nil; }
+    GDView *view=[[GDView alloc] initWithFrame:frame device:device];
+    if(!view) { *failure=@"Metal view allocation failed"; return nil; }
+    atomic_init(&view->recoveryRequested,false);
+    view.metrics=metrics;
+    view.pipeline=state; view.queue=[device newCommandQueue];
+    if(!view.queue) { *failure=@"Metal command queue allocation failed"; return nil; }
+    view.slots=@[[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init]];
+    view.outstanding=dispatch_group_create(); view.background=background;
+    view.readback=readback; view.framebufferOnly=!readback;
+    view.atlas=[[GDGlyphAtlas alloc] initWithDevice:device]; view.layouts=[NSMutableDictionary dictionary];
+    view.scene=[NSData data]; view.text=[NSData data];
+    view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
+    view.paused=YES; view.enableSetNeedsDisplay=NO; view.delegate=view;
+    return view;
 }
 @implementation GDView
 - (BOOL)acceptsFirstResponder { return YES; }
@@ -143,9 +218,11 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
 - (void)scrollWheel:(NSEvent *)event { gd_go_event(7,0,event.scrollingDeltaY/(event.hasPreciseScrollingDeltas?12.0f:1.0f),0,0); }
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size { [self requestFrame]; }
 - (void)requestFrame {
-    atomic_fetch_add(&frame_requests,1);
-    if(self.frameDirty) atomic_fetch_add(&coalesced_requests,1);
+    GDRunState *metrics=self.metrics;
+    atomic_fetch_add(&metrics->frame_requests,1);
+    if(self.frameDirty) atomic_fetch_add(&metrics->coalesced_requests,1);
     self.frameDirty=YES;
+    if(atomic_load(&recoveryRequested)) return;
     if(!self.window.visible || self.window.miniaturized) return;
     if(@available(macOS 14.0,*)) {
         if(self.frameClock) { ((GDMetalFrameClock *)self.frameClock).link.paused=NO; return; }
@@ -155,16 +232,18 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     self.paused=NO;
 }
 - (void)pauseFrameClock {
+    GDRunState *metrics=self.metrics;
     if(@available(macOS 14.0,*)) {
         if(self.frameClock) {
             GDMetalFrameClock *clock=self.frameClock;
-            if(!clock.link.paused) { clock.link.paused=YES; atomic_fetch_add(&idle_pauses,1); }
+            if(!clock.link.paused) { clock.link.paused=YES; atomic_fetch_add(&metrics->idle_pauses,1); }
             return;
         }
     }
-    if(!self.paused) { self.paused=YES; atomic_fetch_add(&idle_pauses,1); }
+    if(!self.paused) { self.paused=YES; atomic_fetch_add(&metrics->idle_pauses,1); }
 }
 - (void)startFrameClock {
+    GDRunState *metrics=self.metrics;
     if(@available(macOS 14.0,*)) {
         GDMetalFrameClock *clock=[[GDMetalFrameClock alloc] init];
         clock.view=self;
@@ -176,11 +255,11 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         clock.link.paused=YES;
         self.frameClock=clock; self.modernFrameClock=YES;
         self.paused=YES;
-        atomic_store(&frame_clock,2);
+        atomic_store(&metrics->frame_clock,2);
         [clock.link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
     } else {
         self.preferredFramesPerSecond=MAX(1,self.window.screen.maximumFramesPerSecond);
-        atomic_store(&frame_clock,1);
+        atomic_store(&metrics->frame_clock,1);
     }
     [self requestFrame];
 }
@@ -194,6 +273,65 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
 - (void)fail:(NSString *)message {
     self.failure=message;
     gd_quit();
+}
+- (void)observeDevices {
+    __weak GDView *weakView=self;
+    id<NSObject> observer=nil;
+    MTLCopyAllDevicesWithObserver(&observer,^(id<MTLDevice> device,MTLDeviceNotificationName notification) {
+        if(![notification isEqualToString:MTLDeviceRemovalRequestedNotification] && ![notification isEqualToString:MTLDeviceWasRemovedNotification]) return;
+        uint64_t registryID=device.registryID;
+        dispatch_async(dispatch_get_main_queue(),^{
+            GDView *view=weakView;
+            if(running && view && active_view==view && view.device.registryID==registryID)
+                [view requestRecovery:@"Metal GPU removal notification" excluding:registryID];
+        });
+    });
+    self.deviceObserver=observer;
+}
+- (void)stopObservingDevices {
+    if(self.deviceObserver) { MTLRemoveDeviceObserver(self.deviceObserver); self.deviceObserver=nil; }
+}
+- (void)requestRecovery:(NSString *)reason excluding:(uint64_t)registryID {
+    bool expected=false;
+    if(!atomic_compare_exchange_strong(&recoveryRequested,&expected,true)) return;
+    uint64_t expectedGeneration=atomic_load(&generation);
+    dispatch_async(dispatch_get_main_queue(),^{
+        if(running && active_view==self && expectedGeneration==atomic_load(&generation)) [self recoverExcluding:registryID reason:reason];
+    });
+}
+- (void)recoverExcluding:(uint64_t)registryID reason:(NSString *)reason {
+    GDRunState *metrics=self.metrics;
+    [self stopFrameClock]; [self stopObservingDevices];
+    if(atomic_load(&metrics->device_recoveries)>=3) { [self fail:[@"Metal GPU recovery limit exhausted: " stringByAppendingString:reason]]; return; }
+    // Recovery is exceptional. Normal rendering still never waits for a slot.
+    if(dispatch_group_wait(self.outstanding,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))) { [self fail:@"Metal recovery could not drain submissions within five seconds"]; return; }
+    [self publishGlyphStats];
+    NSWindow *window=self.window;
+    NSRect frame=self.frame; GDColor background=self.background; BOOL readback=self.readback;
+    NSData *scene=self.scene,*text=self.text;
+    NSMutableDictionary *layouts=self.layouts;
+    GDGlyphAtlas *previous=self.atlas;
+    // Release every old device-dependent resource before constructing the new
+    // queue. Completed frames remain completed; failed submissions are counted
+    // separately by their completion handlers.
+    [previous clear]; self.atlas=nil; self.slots=nil; self.pipeline=nil; self.queue=nil;
+    self.delegate=nil; [self releaseDrawables]; self.device=nil;
+    id<MTLDevice> device=select_device(registryID);
+    if(!device) { [self fail:@"No usable alternate Metal device after GPU removal"]; return; }
+    NSString *failure=nil;
+    GDView *replacement=create_gpu_view(frame,device,background,readback,metrics,&failure);
+    if(!replacement) { [self fail:[@"Metal GPU recovery failed: " stringByAppendingString:failure ?: @"unknown error"]]; return; }
+    replacement.scene=scene; replacement.text=text; replacement.layouts=layouts;
+    replacement.atlas.usage=previous.usage;
+    replacement.atlas.rasterized=previous.rasterized; replacement.atlas.hits=previous.hits;
+    replacement.atlas.epochs=previous.epochs; replacement.atlas.uploadedBytes=previous.uploadedBytes;
+    // Keep the Run generation stable: already queued Go Dispatch/Quit/window
+    // actions must target this same window after its view is replaced. Old view
+    // completion/UI callbacks check identity and cannot affect the replacement.
+    active_view=replacement; window.contentView=replacement;
+    [window makeFirstResponder:replacement]; gd_go_event(5,0,0,0,0);
+    atomic_fetch_add(&metrics->device_recoveries,1);
+    [replacement publishGlyphStats]; [replacement observeDevices]; [replacement startFrameClock];
 }
 - (CTLineRef)layout:(const GDCommand *)command {
     NSString *value=string_utf8((const char *)self.text.bytes+command->text_offset,command->text_length);
@@ -233,26 +371,31 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     [self fail:@"One frame exceeds the 16 MiB / 16384 glyph atlas budget"]; return nil;
 }
 - (void)publishGlyphStats {
+    GDRunState *metrics=self.metrics;
     GDGlyphAtlas *atlas=self.atlas;
+    if(!atlas) { atomic_store(&metrics->glyph_cache_entries,0); atomic_store(&metrics->glyph_atlas_pages,0); atomic_store(&metrics->glyph_atlas_bytes,0); return; }
     uint64_t pages=atomic_load(&atlas.usage->pages);
-    atomic_store(&glyph_rasterizations,atlas.rasterized); atomic_store(&glyph_cache_hits,atlas.hits);
-    atomic_store(&glyph_cache_entries,atlas.glyphs.count); atomic_store(&glyph_atlas_pages,pages);
-    atomic_store(&glyph_atlas_bytes,pages*GDAtlasEdge*GDAtlasEdge);
-    atomic_store(&glyph_atlas_peak_bytes,atomic_load(&atlas.usage->peak)*GDAtlasEdge*GDAtlasEdge);
-    atomic_store(&glyph_atlas_epochs,atlas.epochs); atomic_store(&glyph_uploaded_bytes,atlas.uploadedBytes);
+    atomic_store(&metrics->glyph_rasterizations,atlas.rasterized); atomic_store(&metrics->glyph_cache_hits,atlas.hits);
+    atomic_store(&metrics->glyph_cache_entries,atlas.glyphs.count); atomic_store(&metrics->glyph_atlas_pages,pages);
+    atomic_store(&metrics->glyph_atlas_bytes,pages*GDAtlasEdge*GDAtlasEdge);
+    atomic_store(&metrics->glyph_atlas_peak_bytes,atomic_load(&atlas.usage->peak)*GDAtlasEdge*GDAtlasEdge);
+    atomic_store(&metrics->glyph_atlas_epochs,atlas.epochs); atomic_store(&metrics->glyph_uploaded_bytes,atlas.uploadedBytes);
 }
 - (void)drawInMTKView:(MTKView *)view {
+    GDRunState *metrics=self.metrics;
     // MTKView must never obtain a second drawable while the modern driver
     // already supplied one. This delegate is only the macOS 13 path.
     if(self.modernFrameClock) return;
     if(!running || active_view!=self) return;
-    atomic_fetch_add(&frame_ticks,1);
+    atomic_fetch_add(&metrics->frame_ticks,1);
     if(!self.frameDirty || !self.window.visible || self.window.miniaturized) { [self pauseFrameClock]; return; }
     self.frameDirty=NO;
     [self renderDrawable:nil];
 }
 - (void)renderDrawable:(id<CAMetalDrawable>)supplied {
     @autoreleasepool {
+        GDRunState *metrics=self.metrics;
+        if(atomic_load(&recoveryRequested)) { [self pauseFrameClock]; return; }
         if(self.bounds.size.width<=0 || self.bounds.size.height<=0) return;
         GDFrameSlot *slot=nil;
         NSUInteger slotIndex=0;
@@ -269,7 +412,7 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         self.deferred=NO;
         uint64_t started=nanos();
         gd_go_event(1,self.bounds.size.width,self.bounds.size.height,0,0);
-        if(self.failure) { atomic_store(&slot->busy,false); return; }
+        if(self.failure || atomic_load(&recoveryRequested)) { atomic_store(&slot->busy,false); return; }
         uint64_t sceneEnd=nanos();
         id<CAMetalDrawable> drawable=supplied;
         MTLRenderPassDescriptor *pass=nil;
@@ -337,35 +480,47 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
             [copy endEncoding];
         }
         dispatch_group_enter(self.outstanding);
-        uint32_t flight=atomic_fetch_add(&in_flight,1)+1;
-        uint32_t peak=atomic_load(&max_in_flight);
-        while(flight>peak && !atomic_compare_exchange_weak(&max_in_flight,&peak,flight)) {}
-        atomic_fetch_or(&used_slots,(uint32_t)(1u<<slotIndex));
-        atomic_store(&draw_calls,batchCount); atomic_store(&instance_count,encoded);
-        atomic_store(&uploaded_bytes,encoded*sizeof(GDGPUInstance));
+        uint32_t flight=atomic_fetch_add(&metrics->in_flight,1)+1;
+        uint32_t peak=atomic_load(&metrics->max_in_flight);
+        while(flight>peak && !atomic_compare_exchange_weak(&metrics->max_in_flight,&peak,flight)) {}
+        atomic_fetch_or(&metrics->used_slots,(uint32_t)(1u<<slotIndex));
+        atomic_store(&metrics->draw_calls,batchCount); atomic_store(&metrics->instance_count,encoded);
+        atomic_store(&metrics->uploaded_bytes,encoded*sizeof(GDGPUInstance));
         uint64_t expectedGeneration=atomic_load(&generation);
-        uint64_t serial=atomic_load(&submitted_frames)+1;
+        uint64_t serial=atomic_load(&metrics->submitted_frames)+1;
         [buffer addCompletedHandler:^(id<MTLCommandBuffer> completed) {
             BOOL current=expectedGeneration==atomic_load(&generation);
             if(current && completed.status==MTLCommandBufferStatusError) {
                 NSString *message=completed.error.localizedDescription ?: @"Metal submission failed";
-                self.failure=message;
-                dispatch_async(dispatch_get_main_queue(),^{ if(running && active_view==self) gd_quit(); });
+                atomic_fetch_add(&metrics->dropped_frames,1);
+                // Device removal/access revocation must select a different GPU.
+                // Other command errors rebuild the queue/resources on a usable
+                // default GPU, with the same bounded three-recovery limit.
+                BOOL excluded=completed.error.code==MTLCommandBufferErrorDeviceRemoved || completed.error.code==MTLCommandBufferErrorBlacklisted;
+                [self requestRecovery:message excluding:excluded?self.device.registryID:0];
             } else if(current) {
                 if(readback) {
                     NSMutableData *pixels=[NSMutableData dataWithLength:(NSUInteger)readbackWidth*readbackHeight*4];
                     for(NSUInteger row=0;row<readbackHeight;row++) memcpy((unsigned char *)pixels.mutableBytes+row*readbackWidth*4,(const unsigned char *)readback.contents+row*readbackPitch,readbackWidth*4);
                     GDMetalSnapshot *snapshot=[[GDMetalSnapshot alloc] init];
                     snapshot.pixels=pixels; snapshot.width=readbackWidth; snapshot.height=readbackHeight; snapshot.stride=readbackWidth*4; snapshot.frame=serial;
-                    [snapshot_lock lock];
-                    if(!last_snapshot || last_snapshot.frame<serial) last_snapshot=snapshot;
-                    [snapshot_lock unlock];
+                    [metrics.snapshotLock lock];
+                    if(!metrics.snapshot || metrics.snapshot.frame<serial) metrics.snapshot=snapshot;
+                    [metrics.snapshotLock unlock];
                 }
-                atomic_fetch_add(&rendered_frames,1);
+                atomic_fetch_add(&metrics->rendered_frames,1);
                 double elapsed=completed.GPUEndTime-completed.GPUStartTime;
-                if(elapsed>0) atomic_store(&gpu_nanos,(uint64_t)(elapsed*1000000000));
+                if(elapsed>0) atomic_store(&metrics->gpu_nanos,(uint64_t)(elapsed*1000000000));
+                // Explicit diagnostic injection after an actual successful GPU
+                // completion. This does not falsify command status or drop counts
+                // and does not claim to physically remove hardware.
+                if(metrics->diagnostic_recovery_interval && serial%metrics->diagnostic_recovery_interval==0) {
+                    uint64_t remaining=atomic_load(&metrics->diagnostic_recovery_remaining);
+                    while(remaining && !atomic_compare_exchange_weak(&metrics->diagnostic_recovery_remaining,&remaining,remaining-1)) {}
+                    if(remaining) [self requestRecovery:@"Diagnostic recovery after real Metal GPU completion" excluding:0];
+                }
             }
-            if(current) atomic_fetch_sub(&in_flight,1);
+            if(current) atomic_fetch_sub(&metrics->in_flight,1);
             heldPages=nil; heldUploads=nil;
             atomic_store(&slot->busy,false);
             dispatch_group_leave(self.outstanding);
@@ -373,17 +528,17 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
                 if(running && active_view==self && self.deferred) { self.deferred=NO; [self requestFrame]; }
             });
         }];
-        atomic_fetch_add(&submitted_frames,1);
+        atomic_fetch_add(&metrics->submitted_frames,1);
         if(!self.modernFrameClock) [buffer presentDrawable:drawable];
         [buffer commit];
         // CAMetalDisplayLink supplied the drawable and its presentation timing.
         // Commit first, then present without an explicit time or GPU wait.
         if(self.modernFrameClock) [drawable present];
         uint64_t finished=nanos();
-        atomic_store(&cpu_nanos,finished-started);
-        atomic_store(&scene_nanos,(sceneEnd-started)+(nativeSceneEnd-acquireEnd));
-        atomic_store(&acquire_nanos,acquireEnd-sceneEnd);
-        atomic_store(&encode_nanos,finished-nativeSceneEnd);
+        atomic_store(&metrics->cpu_nanos,finished-started);
+        atomic_store(&metrics->scene_nanos,(sceneEnd-started)+(nativeSceneEnd-acquireEnd));
+        atomic_store(&metrics->acquire_nanos,acquireEnd-sceneEnd);
+        atomic_store(&metrics->encode_nanos,finished-nativeSceneEnd);
         [self publishGlyphStats];
     }
 }
@@ -393,7 +548,8 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
 - (void)metalDisplayLink:(CAMetalDisplayLink *)link needsUpdate:(CAMetalDisplayLinkUpdate *)update {
     GDView *view=self.view;
     if(!running || active_view!=view || !view) return;
-    atomic_fetch_add(&frame_ticks,1);
+    GDRunState *metrics=view.metrics;
+    atomic_fetch_add(&metrics->frame_ticks,1);
     if(!view.frameDirty || !view.window.visible || view.window.miniaturized) { [view pauseFrameClock]; return; }
     view.frameDirty=NO;
     [view renderDrawable:update.drawable];
@@ -419,50 +575,22 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
 const char *gd_run(const char *title,float width,float height,GDColor background,int custom_titlebar) {
     static char *last_error;
     free(last_error); last_error=NULL;
-    atomic_store(&rendered_frames,0);
-    atomic_store(&submitted_frames,0); atomic_store(&draw_calls,0); atomic_store(&instance_count,0);
-    atomic_store(&uploaded_bytes,0); atomic_store(&cpu_nanos,0); atomic_store(&gpu_nanos,0);
-    atomic_store(&scene_nanos,0); atomic_store(&acquire_nanos,0); atomic_store(&encode_nanos,0);
-    atomic_store(&used_slots,0); atomic_store(&in_flight,0); atomic_store(&max_in_flight,0);
-    atomic_store(&frame_clock,0); atomic_store(&frame_requests,0); atomic_store(&frame_ticks,0);
-    atomic_store(&coalesced_requests,0); atomic_store(&idle_pauses,0);
-    atomic_store(&glyph_rasterizations,0); atomic_store(&glyph_cache_hits,0); atomic_store(&glyph_cache_entries,0); atomic_store(&glyph_atlas_pages,0);
-    atomic_store(&glyph_atlas_bytes,0); atomic_store(&glyph_atlas_peak_bytes,0); atomic_store(&glyph_atlas_epochs,0); atomic_store(&glyph_uploaded_bytes,0);
     if(![NSThread isMainThread]) return "AppKit must run on the process main thread; call godesktop.Run from main";
     @autoreleasepool {
-        if(!snapshot_lock) snapshot_lock=[[NSLock alloc] init];
-        [snapshot_lock lock]; last_snapshot=nil; [snapshot_lock unlock];
+        GDRunState *metrics=[[GDRunState alloc] init];
+        NSLock *lock=state_lock(); [lock lock]; latest_metrics=metrics; [lock unlock];
+        const char *interval=getenv("GODESKTOP_TEST_METAL_RECOVERY");
+        const char *repetitions=getenv("GODESKTOP_TEST_METAL_RECOVERIES");
+        metrics->diagnostic_recovery_interval=interval?strtoull(interval,NULL,10):0;
+        atomic_store(&metrics->diagnostic_recovery_remaining,metrics->diagnostic_recovery_interval?(repetitions?strtoull(repetitions,NULL,10):1):0);
         [NSApplication sharedApplication];
         [NSApp setActivationPolicy:NSApplicationActivationPolicyRegular];
-        id<MTLDevice> device=MTLCreateSystemDefaultDevice();
+        id<MTLDevice> device=select_device(0);
         if(!device) return "No Metal device is available";
-        NSError *error=nil;
-        id<MTLLibrary> library=[device newLibraryWithSource:shader options:nil error:&error];
-        if(!library) { last_error=strdup(error.localizedDescription.UTF8String); return last_error; }
-        MTLRenderPipelineDescriptor *pipeline=[[MTLRenderPipelineDescriptor alloc] init];
-        pipeline.vertexFunction=[library newFunctionWithName:@"vertex_main"];
-        pipeline.fragmentFunction=[library newFunctionWithName:@"fragment_main"];
-        pipeline.colorAttachments[0].pixelFormat=MTLPixelFormatBGRA8Unorm;
-        pipeline.colorAttachments[0].blendingEnabled=YES;
-        pipeline.colorAttachments[0].sourceRGBBlendFactor=MTLBlendFactorOne;
-        pipeline.colorAttachments[0].destinationRGBBlendFactor=MTLBlendFactorOneMinusSourceAlpha;
-        pipeline.colorAttachments[0].sourceAlphaBlendFactor=MTLBlendFactorOne;
-        pipeline.colorAttachments[0].destinationAlphaBlendFactor=MTLBlendFactorOneMinusSourceAlpha;
-        id<MTLRenderPipelineState> state=[device newRenderPipelineStateWithDescriptor:pipeline error:&error];
-        if(!state) { last_error=strdup(error.localizedDescription.UTF8String); return last_error; }
-        GDView *view=[[GDView alloc] initWithFrame:NSMakeRect(0,0,width,height) device:device];
-        view.pipeline=state; view.queue=[device newCommandQueue];
-        if(!view.queue) return "Metal command queue allocation failed";
-        view.slots=@[[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init],[[GDFrameSlot alloc] init]];
-        view.outstanding=dispatch_group_create();
-        view.background=background;
         const char *readback=getenv("GODESKTOP_READBACK");
-        view.readback=readback && strcmp(readback,"1")==0;
-        view.framebufferOnly=!view.readback;
-        view.atlas=[[GDGlyphAtlas alloc] initWithDevice:device]; view.layouts=[NSMutableDictionary dictionary];
-        view.scene=[NSData data]; view.text=[NSData data];
-        view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
-        view.paused=YES; view.enableSetNeedsDisplay=NO; view.delegate=view;
+        NSString *failure=nil;
+        GDView *view=create_gpu_view(NSMakeRect(0,0,width,height),device,background,readback && strcmp(readback,"1")==0,metrics,&failure);
+        if(!view) { last_error=strdup(failure.UTF8String); return last_error; }
         GDDelegate *delegate=[[GDDelegate alloc] init];
         NSWindowStyleMask style=NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable;
         if(custom_titlebar) style|=NSWindowStyleMaskFullSizeContentView;
@@ -479,10 +607,11 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         atomic_fetch_add(&generation,1);
         active_view=view; running=YES;
         [window center]; [window makeKeyAndOrderFront:nil]; [window makeFirstResponder:view];
-        [NSApp activateIgnoringOtherApps:YES]; [view startFrameClock];
+        [NSApp activateIgnoringOtherApps:YES]; [view observeDevices]; [view startFrameClock];
         [NSApp run];
+        view=active_view; // A GPU recovery can replace the view in this window.
         running=NO;
-        [view stopFrameClock];
+        [view stopFrameClock]; [view stopObservingDevices];
         // Only shutdown drains the queue. Normal frames never wait for the GPU.
         if(dispatch_group_wait(view.outstanding,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))) view.failure=@"Metal shutdown did not finish within five seconds";
         [view publishGlyphStats];
@@ -513,16 +642,19 @@ void gd_quit(void) {
     uint64_t expected=atomic_load(&generation);
     dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view.window close]; });
 }
-uint64_t gd_rendered_frames(void) { return atomic_load(&rendered_frames); }
+uint64_t gd_rendered_frames(void) { @autoreleasepool { GDRunState *metrics=current_metrics(); return metrics?atomic_load(&metrics->rendered_frames):0; } }
 const char *gd_metal_snapshot(GDGPUSnapshot *result) {
+    @autoreleasepool {
+    GDRunState *metrics=current_metrics();
     memset(result,0,sizeof(*result));
-    [snapshot_lock lock]; GDMetalSnapshot *snapshot=last_snapshot; [snapshot_lock unlock];
+    [metrics.snapshotLock lock]; GDMetalSnapshot *snapshot=metrics.snapshot; [metrics.snapshotLock unlock];
     if(!snapshot) return "No completed Metal drawable readback; enable GODESKTOP_READBACK=1";
     result->width=snapshot.width; result->height=snapshot.height; result->stride=snapshot.stride;
     result->frame=snapshot.frame; result->bytes=snapshot.pixels.length;
     result->pixels=malloc(result->bytes);
     if(!result->pixels) return "Metal snapshot copy allocation failed";
     memcpy(result->pixels,snapshot.pixels.bytes,result->bytes); return NULL;
+    }
 }
 const char *gd_metal_text_reference(const char *text,size_t length,const char *font,size_t font_length,float size,float scale,uint32_t width,uint32_t height,GDGPUSnapshot *result) {
     memset(result,0,sizeof(*result));
@@ -545,21 +677,27 @@ const char *gd_metal_text_reference(const char *text,size_t length,const char *f
     CFRelease(line); CGContextRelease(context); return NULL;
 }
 GDRenderStats gd_render_stats(void) {
+    @autoreleasepool {
+    GDRunState *metrics=current_metrics();
+    if(!metrics) return (GDRenderStats){.backend=2,.frame_slots=3};
     return (GDRenderStats){
-        .backend=2,.frame_slots=3,.used_slots_mask=atomic_load(&used_slots),
-        .frame_clock=atomic_load(&frame_clock),
-        .in_flight=atomic_load(&in_flight),.max_in_flight=atomic_load(&max_in_flight),
-        .submitted=atomic_load(&submitted_frames),.completed=atomic_load(&rendered_frames),
-        .draw_calls=atomic_load(&draw_calls),.instances=atomic_load(&instance_count),
-        .uploaded_bytes=atomic_load(&uploaded_bytes),.cpu_nanos=atomic_load(&cpu_nanos),.gpu_nanos=atomic_load(&gpu_nanos),
-        .scene_nanos=atomic_load(&scene_nanos),.acquire_nanos=atomic_load(&acquire_nanos),.encode_nanos=atomic_load(&encode_nanos),
-        .frame_requests=atomic_load(&frame_requests),.frame_ticks=atomic_load(&frame_ticks),
-        .coalesced_requests=atomic_load(&coalesced_requests),.idle_pauses=atomic_load(&idle_pauses),
-        .glyph_rasterizations=atomic_load(&glyph_rasterizations),.glyph_cache_hits=atomic_load(&glyph_cache_hits),.glyph_cache_entries=atomic_load(&glyph_cache_entries),
-        .glyph_atlas_pages=atomic_load(&glyph_atlas_pages),.glyph_atlas_bytes=atomic_load(&glyph_atlas_bytes),.glyph_atlas_peak_bytes=atomic_load(&glyph_atlas_peak_bytes),
-        .glyph_atlas_epochs=atomic_load(&glyph_atlas_epochs),.glyph_uploaded_bytes=atomic_load(&glyph_uploaded_bytes)
+        .backend=2,.frame_slots=3,.used_slots_mask=atomic_load(&metrics->used_slots),
+        .frame_clock=atomic_load(&metrics->frame_clock),
+        .in_flight=atomic_load(&metrics->in_flight),.max_in_flight=atomic_load(&metrics->max_in_flight),
+        .submitted=atomic_load(&metrics->submitted_frames),.completed=atomic_load(&metrics->rendered_frames),
+        .draw_calls=atomic_load(&metrics->draw_calls),.instances=atomic_load(&metrics->instance_count),
+        .uploaded_bytes=atomic_load(&metrics->uploaded_bytes),.cpu_nanos=atomic_load(&metrics->cpu_nanos),.gpu_nanos=atomic_load(&metrics->gpu_nanos),
+        .scene_nanos=atomic_load(&metrics->scene_nanos),.acquire_nanos=atomic_load(&metrics->acquire_nanos),.encode_nanos=atomic_load(&metrics->encode_nanos),
+        .frame_requests=atomic_load(&metrics->frame_requests),.frame_ticks=atomic_load(&metrics->frame_ticks),
+        .coalesced_requests=atomic_load(&metrics->coalesced_requests),.idle_pauses=atomic_load(&metrics->idle_pauses),
+        .glyph_rasterizations=atomic_load(&metrics->glyph_rasterizations),.glyph_cache_hits=atomic_load(&metrics->glyph_cache_hits),.glyph_cache_entries=atomic_load(&metrics->glyph_cache_entries),
+        .glyph_atlas_pages=atomic_load(&metrics->glyph_atlas_pages),.glyph_atlas_bytes=atomic_load(&metrics->glyph_atlas_bytes),.glyph_atlas_peak_bytes=atomic_load(&metrics->glyph_atlas_peak_bytes),
+        .glyph_atlas_epochs=atomic_load(&metrics->glyph_atlas_epochs),.glyph_uploaded_bytes=atomic_load(&metrics->glyph_uploaded_bytes),
+        .device_recoveries=atomic_load(&metrics->device_recoveries),.dropped_frames=atomic_load(&metrics->dropped_frames)
     };
+    }
 }
+uint64_t gd_metal_window_identity(void) { return [NSThread isMainThread]?(uint64_t)active_view.window.windowNumber:0; }
 
 void gd_window_action(int action) {
     uint64_t expected=atomic_load(&generation);

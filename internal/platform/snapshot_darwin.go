@@ -14,6 +14,9 @@ import (
 	"unsafe"
 )
 
+// MetalWindowIdentity is an AppKit-window diagnostic. Call on the UI thread.
+func MetalWindowIdentity() uint64 { return uint64(C.gd_metal_window_identity()) }
+
 // MetalSnapshot reads the most recently completed actual window drawable.
 // It is diagnostic-only and requires GODESKTOP_READBACK=1 before Run.
 func MetalSnapshot() (*image.RGBA, uint64, error) {

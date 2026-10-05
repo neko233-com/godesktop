@@ -14,6 +14,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/neko233-com/godesktop/internal/platform"
@@ -148,7 +149,55 @@ func validate(output string) error {
 		return err
 	}
 	fmt.Println(string(data))
-	return nil
+	return recoveryLimit(output, commands)
+}
+
+// The diagnostic requests resource recovery after real successful submissions;
+// it does not disconnect hardware or manufacture command-buffer errors.
+func recoveryLimit(output string, commands []platform.Command) error {
+	for key, value := range map[string]string{"GODESKTOP_TEST_METAL_RECOVERY": "9", "GODESKTOP_TEST_METAL_RECOVERIES": "4"} {
+		if err := os.Setenv(key, value); err != nil {
+			return err
+		}
+	}
+	watchdog := time.AfterFunc(30*time.Second, func() { platform.Quit() })
+	err := platform.Run(platform.Options{Title: "godesktop Metal recovery limit", Width: 640, Height: 450, Background: platform.Color{A: 1}}, func(event platform.Event) {
+		if event.Kind == platform.Draw {
+			platform.Present(commands)
+			platform.Wake()
+		}
+	})
+	watchdog.Stop()
+	stats := platform.RendererStats()
+	if err == nil || !strings.Contains(err.Error(), "Metal GPU recovery limit exhausted") || stats.DeviceRecoveries != 3 || stats.Submitted < 36 || stats.Completed != stats.Submitted || stats.DroppedFrames != 0 || stats.InFlight != 0 {
+		return fmt.Errorf("Metal repeated recovery did not terminate and drain within its limit: error=%v renderer=%+v", err, stats)
+	}
+	if err := os.Unsetenv("GODESKTOP_TEST_METAL_RECOVERY"); err != nil {
+		return err
+	}
+	if err := os.Unsetenv("GODESKTOP_TEST_METAL_RECOVERIES"); err != nil {
+		return err
+	}
+	pixels, restart, err := render("restart-after-recovery-limit", commands)
+	if err != nil {
+		return err
+	}
+	if restart.Renderer.DeviceRecoveries != 0 || restart.Renderer.DroppedFrames != 0 || restart.Frame >= 36 {
+		return fmt.Errorf("old recovery callbacks or snapshot contaminated the next Run: %+v", restart)
+	}
+	if err = savePNG(filepath.Join(output, "restart-after-recovery-limit-gpu.png"), pixels); err != nil {
+		return err
+	}
+	report := struct {
+		Diagnostic bool                 `json:"diagnostic_injection_no_hardware_disconnect"`
+		Limited    platform.RenderStats `json:"limited_run"`
+		Restart    sceneReport          `json:"restart"`
+	}{true, stats, restart}
+	data, err := json.MarshalIndent(report, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(output, "recovery-limit.json"), append(data, '\n'), 0644)
 }
 
 func render(name string, commands []platform.Command) (*image.RGBA, sceneReport, error) {
