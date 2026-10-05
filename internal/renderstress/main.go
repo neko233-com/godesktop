@@ -33,6 +33,7 @@ func percentile(samples []uint64, percentile int) uint64 {
 func run() error {
 	frames := flag.Uint64("frames", 90, "minimum completed native GPU frames")
 	requireBackend := flag.String("require-backend", "metal", "required renderer; refuses a different rendering path")
+	requireClock := flag.String("require-frame-clock", "cametaldisplaylink", "required native frame clock")
 	output := flag.String("output", "", "optional JSON report filename")
 	flag.Parse()
 	if *frames < 6 || *frames > 10000 {
@@ -44,11 +45,18 @@ func run() error {
 	var sceneSamples, acquireSamples, encodeSamples []uint64
 	var previous uint64
 	var mismatch error
+	var idleStarted, idleFinished bool
+	var idleBefore, idleAfter platform.RenderStats
 	started := time.Now()
 	err := ui.Run(ui.WindowOptions{Title: "godesktop native GPU stress", Width: 1000, Height: 650}, func(cx *ui.Context) *ui.Element {
 		stats := platform.RendererStats()
 		if stats.Backend != *requireBackend {
 			mismatch = fmt.Errorf("required %s renderer, got %s", *requireBackend, stats.Backend)
+			cx.Quit()
+			return nil
+		}
+		if stats.FrameClock != *requireClock {
+			mismatch = fmt.Errorf("required %s frame clock, got %s", *requireClock, stats.FrameClock)
 			cx.Quit()
 			return nil
 		}
@@ -59,10 +67,25 @@ func run() error {
 			acquireSamples = append(acquireSamples, stats.AcquireTimeNanos)
 			encodeSamples = append(encodeSamples, stats.EncodeTimeNanos)
 		}
-		if stats.Completed >= *frames {
+		if idleFinished {
 			cx.Quit()
+		} else if stats.Completed >= *frames {
+			if !idleStarted {
+				idleStarted = true
+				go func() {
+					// Let the last frame drain and the display clock pause, then
+					// observe an idle interval before waking it through Dispatch.
+					time.Sleep(250 * time.Millisecond)
+					before := platform.RendererStats()
+					time.Sleep(150 * time.Millisecond)
+					after := platform.RendererStats()
+					cx.Dispatch(func() { idleBefore, idleAfter, idleFinished = before, after, true })
+				}()
+			}
 		} else {
-			cx.Invalidate()
+			for range 3 {
+				cx.Invalidate()
+			}
 		}
 		rows := make([]*ui.Element, 0, 32)
 		for y := 0; y < 32; y++ {
@@ -103,17 +126,25 @@ func run() error {
 	if stats.SceneTimeNanos+stats.AcquireTimeNanos+stats.EncodeTimeNanos != stats.CPUTimeNanos {
 		return fmt.Errorf("native timing phases do not add up: %+v", stats)
 	}
+	if !idleFinished || idleAfter.InFlight != 0 || idleBefore.Submitted != idleAfter.Submitted || idleBefore.FrameTicks != idleAfter.FrameTicks || idleAfter.IdlePauses == 0 {
+		return fmt.Errorf("idle clock did not stop: before=%+v after=%+v", idleBefore, idleAfter)
+	}
+	if stats.Submitted <= idleAfter.Submitted || stats.FrameRequests <= idleAfter.FrameRequests || stats.CoalescedRequests < *frames {
+		return fmt.Errorf("frame coalescing or wake after idle failed: %+v", stats)
+	}
 	report := struct {
-		Renderer  platform.RenderStats `json:"renderer"`
-		Scene     string               `json:"scene"`
-		Samples   int                  `json:"cpu_samples"`
-		CPU50     uint64               `json:"cpu_p50_nanos"`
-		CPU95     uint64               `json:"cpu_p95_nanos"`
-		Scene95   uint64               `json:"scene_p95_nanos"`
-		Acquire95 uint64               `json:"drawable_acquire_p95_nanos"`
-		Encode95  uint64               `json:"encode_p95_nanos"`
-		Elapsed   float64              `json:"elapsed_seconds"`
-	}{Renderer: stats, Scene: "2048 rounded quads + 32 shared-text commands; changing colors; native GPU", Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds()}
+		Renderer   platform.RenderStats `json:"renderer"`
+		Scene      string               `json:"scene"`
+		Samples    int                  `json:"cpu_samples"`
+		CPU50      uint64               `json:"cpu_p50_nanos"`
+		CPU95      uint64               `json:"cpu_p95_nanos"`
+		Scene95    uint64               `json:"scene_p95_nanos"`
+		Acquire95  uint64               `json:"drawable_acquire_p95_nanos"`
+		Encode95   uint64               `json:"encode_p95_nanos"`
+		Elapsed    float64              `json:"elapsed_seconds"`
+		IdleBefore platform.RenderStats `json:"idle_before"`
+		IdleAfter  platform.RenderStats `json:"idle_after"`
+	}{Renderer: stats, Scene: "2048 rounded quads + 32 shared-text commands; changing colors; native GPU", Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

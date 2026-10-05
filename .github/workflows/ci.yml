@@ -80,9 +80,9 @@ jobs:
       - name: Native render and dispatch smoke test
         shell: bash
         run: go run ./examples/counter -smoke
-      - name: Metal instancing, batching and asynchronous ownership
+      - name: Metal instancing, display pacing, idle wake and asynchronous ownership
         shell: bash
-        run: go run ./internal/renderstress -require-backend metal -output bin/metal-render-stress.json
+        run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -output bin/metal-render-stress.json
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: counter-${{ runner.os }}-${{ runner.arch }}

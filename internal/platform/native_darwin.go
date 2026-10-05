@@ -4,7 +4,7 @@ package platform
 
 /*
 #cgo CFLAGS: -x objective-c -fobjc-arc -mmacosx-version-min=13.0
-#cgo LDFLAGS: -framework AppKit -framework Metal -framework MetalKit -framework CoreText -framework CoreGraphics
+#cgo LDFLAGS: -framework AppKit -framework Metal -framework MetalKit -framework CoreText -framework CoreGraphics -framework QuartzCore
 */
 import "C"
 

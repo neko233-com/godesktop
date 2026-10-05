@@ -110,12 +110,23 @@ func RendererStats() RenderStats {
 	case 3:
 		name = "direct3d12"
 	}
+	clock := "unavailable"
+	switch s.frame_clock {
+	case 1:
+		clock = "mtkview"
+	case 2:
+		clock = "cametaldisplaylink"
+	case 3:
+		clock = "dxgi"
+	}
 	return RenderStats{
-		Backend: name, FrameSlots: uint32(s.frame_slots), UsedSlotsMask: uint32(s.used_slots_mask),
+		Backend: name, FrameClock: clock, FrameSlots: uint32(s.frame_slots), UsedSlotsMask: uint32(s.used_slots_mask),
 		InFlight: uint32(s.in_flight), MaxInFlight: uint32(s.max_in_flight),
 		Submitted: uint64(s.submitted), Completed: uint64(s.completed),
 		DrawCalls: uint64(s.draw_calls), Instances: uint64(s.instances), UploadedBytes: uint64(s.uploaded_bytes),
 		BufferWaits: uint64(s.buffer_waits), CPUTimeNanos: uint64(s.cpu_nanos), GPUTimeNanos: uint64(s.gpu_nanos),
 		SceneTimeNanos: uint64(s.scene_nanos), AcquireTimeNanos: uint64(s.acquire_nanos), EncodeTimeNanos: uint64(s.encode_nanos),
+		FrameRequests: uint64(s.frame_requests), FrameTicks: uint64(s.frame_ticks),
+		CoalescedRequests: uint64(s.coalesced_requests), IdlePauses: uint64(s.idle_pauses),
 	}
 }

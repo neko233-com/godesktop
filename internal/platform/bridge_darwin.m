@@ -3,6 +3,7 @@
 #import <AppKit/AppKit.h>
 #import <MetalKit/MetalKit.h>
 #import <CoreText/CoreText.h>
+#import <QuartzCore/QuartzCore.h>
 #include <math.h>
 #include <ctype.h>
 #include <stdlib.h>
@@ -35,6 +36,10 @@ typedef struct { NSUInteger start, count, texture; } GDBatch;
 @property(nonatomic,strong) NSArray<GDFrameSlot *> *slots;
 @property(nonatomic) NSUInteger nextSlot;
 @property(nonatomic) BOOL deferred;
+@property(nonatomic) BOOL frameDirty;
+@property(nonatomic) BOOL modernFrameClock;
+// The availability-qualified driver owns the Metal display link on macOS 14+.
+@property(nonatomic,strong) id frameClock;
 @property(nonatomic,strong) dispatch_group_t outstanding;
 @property(nonatomic,strong) NSMutableDictionary<NSString *,id<MTLTexture>> *glyphs;
 @property(nonatomic) NSUInteger glyphBytes;
@@ -42,6 +47,17 @@ typedef struct { NSUInteger start, count, texture; } GDBatch;
 @property(nonatomic,strong) NSData *text;
 @property(nonatomic) GDColor background;
 @property(atomic,copy) NSString *failure;
+- (void)requestFrame;
+- (void)pauseFrameClock;
+- (void)startFrameClock;
+- (void)stopFrameClock;
+- (void)renderDrawable:(id<CAMetalDrawable>)drawable;
+@end
+
+API_AVAILABLE(macos(14.0))
+@interface GDMetalFrameClock : NSObject <CAMetalDisplayLinkDelegate>
+@property(nonatomic,weak) GDView *view;
+@property(nonatomic,strong) CAMetalDisplayLink *link;
 @end
 
 @interface GDDelegate : NSObject <NSApplicationDelegate,NSWindowDelegate>
@@ -55,6 +71,8 @@ static _Atomic uint64_t rendered_frames;
 static _Atomic uint64_t submitted_frames, draw_calls, instance_count, uploaded_bytes, cpu_nanos, gpu_nanos;
 static _Atomic uint64_t scene_nanos, acquire_nanos, encode_nanos;
 static _Atomic uint32_t used_slots, in_flight, max_in_flight;
+static _Atomic uint32_t frame_clock;
+static _Atomic uint64_t frame_requests, frame_ticks, coalesced_requests, idle_pauses;
 
 static uint64_t nanos(void) {
     struct timespec t; clock_gettime(CLOCK_MONOTONIC,&t);
@@ -109,7 +127,56 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     }
 }
 - (void)scrollWheel:(NSEvent *)event { gd_go_event(7,0,event.scrollingDeltaY/(event.hasPreciseScrollingDeltas?12.0f:1.0f),0,0); }
-- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size { [self setNeedsDisplay:YES]; }
+- (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size { [self requestFrame]; }
+- (void)requestFrame {
+    atomic_fetch_add(&frame_requests,1);
+    if(self.frameDirty) atomic_fetch_add(&coalesced_requests,1);
+    self.frameDirty=YES;
+    if(!self.window.visible || self.window.miniaturized) return;
+    if(@available(macOS 14.0,*)) {
+        if(self.frameClock) { ((GDMetalFrameClock *)self.frameClock).link.paused=NO; return; }
+    }
+    // The macOS 13 compatibility path uses MTKView's display-synchronised loop.
+    // No timer or unpaced setNeedsDisplay chain is used on either path.
+    self.paused=NO;
+}
+- (void)pauseFrameClock {
+    if(@available(macOS 14.0,*)) {
+        if(self.frameClock) {
+            GDMetalFrameClock *clock=self.frameClock;
+            if(!clock.link.paused) { clock.link.paused=YES; atomic_fetch_add(&idle_pauses,1); }
+            return;
+        }
+    }
+    if(!self.paused) { self.paused=YES; atomic_fetch_add(&idle_pauses,1); }
+}
+- (void)startFrameClock {
+    if(@available(macOS 14.0,*)) {
+        GDMetalFrameClock *clock=[[GDMetalFrameClock alloc] init];
+        clock.view=self;
+        clock.link=[[CAMetalDisplayLink alloc] initWithMetalLayer:(CAMetalLayer *)self.layer];
+        if(!clock.link) { [self fail:@"Metal display link allocation failed"]; return; }
+        clock.link.delegate=clock;
+        clock.link.preferredFrameLatency=1.0f;
+        clock.link.preferredFrameRateRange=CAFrameRateRangeDefault;
+        clock.link.paused=YES;
+        self.frameClock=clock; self.modernFrameClock=YES;
+        self.paused=YES;
+        atomic_store(&frame_clock,2);
+        [clock.link addToRunLoop:NSRunLoop.mainRunLoop forMode:NSRunLoopCommonModes];
+    } else {
+        self.preferredFramesPerSecond=MAX(1,self.window.screen.maximumFramesPerSecond);
+        atomic_store(&frame_clock,1);
+    }
+    [self requestFrame];
+}
+- (void)stopFrameClock {
+    if(@available(macOS 14.0,*)) {
+        GDMetalFrameClock *clock=self.frameClock;
+        [clock.link invalidate]; clock.link.delegate=nil; clock.view=nil;
+    }
+    self.frameClock=nil; self.paused=YES;
+}
 - (void)fail:(NSString *)message {
     self.failure=message;
     gd_quit();
@@ -151,6 +218,16 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
     return texture;
 }
 - (void)drawInMTKView:(MTKView *)view {
+    // MTKView must never obtain a second drawable while the modern driver
+    // already supplied one. This delegate is only the macOS 13 path.
+    if(self.modernFrameClock) return;
+    if(!running || active_view!=self) return;
+    atomic_fetch_add(&frame_ticks,1);
+    if(!self.frameDirty || !self.window.visible || self.window.miniaturized) { [self pauseFrameClock]; return; }
+    self.frameDirty=NO;
+    [self renderDrawable:nil];
+}
+- (void)renderDrawable:(id<CAMetalDrawable>)supplied {
     @autoreleasepool {
         if(self.bounds.size.width<=0 || self.bounds.size.height<=0) return;
         GDFrameSlot *slot=nil;
@@ -164,7 +241,7 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
         }
         // Saturation defers the repaint. The GPU completion callback requests it
         // again; the AppKit thread never waits for an in-flight upload buffer.
-        if(!slot) { self.deferred=YES; return; }
+        if(!slot) { self.deferred=YES; self.frameDirty=YES; return; }
         self.deferred=NO;
         uint64_t started=nanos();
         gd_go_event(1,self.bounds.size.width,self.bounds.size.height,0,0);
@@ -181,16 +258,20 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
             if(!slot.instances) { atomic_store(&slot->busy,false); [self fail:@"Metal instance allocation failed"]; return; }
         }
         uint64_t sceneEnd=nanos();
-        MTLRenderPassDescriptor *pass=self.currentRenderPassDescriptor;
-        id<CAMetalDrawable> drawable=self.currentDrawable;
+        id<CAMetalDrawable> drawable=supplied;
+        MTLRenderPassDescriptor *pass=nil;
+        if(drawable) {
+            pass=[MTLRenderPassDescriptor renderPassDescriptor];
+            pass.colorAttachments[0].texture=drawable.texture;
+            pass.colorAttachments[0].loadAction=MTLLoadActionClear;
+            pass.colorAttachments[0].storeAction=MTLStoreActionStore;
+        } else {
+            pass=self.currentRenderPassDescriptor;
+            drawable=self.currentDrawable;
+        }
         uint64_t acquireEnd=nanos();
         if(!pass || !drawable) {
-            atomic_store(&slot->busy,false); self.deferred=YES;
-            __weak GDView *weak=self;
-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW,16*NSEC_PER_MSEC),dispatch_get_main_queue(),^{
-                GDView *strong=weak;
-                if(running && active_view==strong && strong.deferred && strong.window.visible && !strong.window.miniaturized) [strong setNeedsDisplay:YES];
-            });
+            atomic_store(&slot->busy,false); self.deferred=YES; self.frameDirty=YES;
             return;
         }
         GDBatch *batches=calloc(count+1,sizeof(GDBatch));
@@ -254,12 +335,15 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
             atomic_store(&slot->busy,false);
             dispatch_group_leave(self.outstanding);
             dispatch_async(dispatch_get_main_queue(),^{
-                if(running && active_view==self && self.deferred) { self.deferred=NO; [self setNeedsDisplay:YES]; }
+                if(running && active_view==self && self.deferred) { self.deferred=NO; [self requestFrame]; }
             });
         }];
-        [buffer presentDrawable:drawable];
         atomic_fetch_add(&submitted_frames,1);
+        if(!self.modernFrameClock) [buffer presentDrawable:drawable];
         [buffer commit];
+        // CAMetalDisplayLink supplied the drawable and its presentation timing.
+        // Commit first, then present without an explicit time or GPU wait.
+        if(self.modernFrameClock) [drawable present];
         uint64_t finished=nanos();
         atomic_store(&cpu_nanos,finished-started);
         atomic_store(&scene_nanos,sceneEnd-started);
@@ -269,11 +353,26 @@ static void text_size(CTLineRef line,float *width,float *height,CGFloat *descent
 }
 @end
 
+@implementation GDMetalFrameClock
+- (void)metalDisplayLink:(CAMetalDisplayLink *)link needsUpdate:(CAMetalDisplayLinkUpdate *)update {
+    GDView *view=self.view;
+    if(!running || active_view!=view || !view) return;
+    atomic_fetch_add(&frame_ticks,1);
+    if(!view.frameDirty || !view.window.visible || view.window.miniaturized) { [view pauseFrameClock]; return; }
+    view.frameDirty=NO;
+    [view renderDrawable:update.drawable];
+}
+@end
+
 @implementation GDDelegate
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return NO; }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { [self.window close]; return NSTerminateCancel; }
 - (void)windowDidResignKey:(NSNotification *)notification { gd_go_event(5,0,0,0,0); }
+- (void)windowDidDeminiaturize:(NSNotification *)notification { [active_view requestFrame]; }
+- (void)windowDidBecomeKey:(NSNotification *)notification { [active_view requestFrame]; }
+- (void)windowDidChangeBackingProperties:(NSNotification *)notification { [active_view requestFrame]; }
 - (void)windowWillClose:(NSNotification *)notification {
+    [active_view stopFrameClock];
     [NSApp stop:nil];
     // stop: sets a flag; a posted event also wakes nextEventMatchingMask:.
     NSEvent *wake=[NSEvent otherEventWithType:NSEventTypeApplicationDefined location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:0 context:nil subtype:0 data1:0 data2:0];
@@ -289,6 +388,8 @@ const char *gd_run(const char *title,float width,float height,GDColor background
     atomic_store(&uploaded_bytes,0); atomic_store(&cpu_nanos,0); atomic_store(&gpu_nanos,0);
     atomic_store(&scene_nanos,0); atomic_store(&acquire_nanos,0); atomic_store(&encode_nanos,0);
     atomic_store(&used_slots,0); atomic_store(&in_flight,0); atomic_store(&max_in_flight,0);
+    atomic_store(&frame_clock,0); atomic_store(&frame_requests,0); atomic_store(&frame_ticks,0);
+    atomic_store(&coalesced_requests,0); atomic_store(&idle_pauses,0);
     if(![NSThread isMainThread]) return "AppKit must run on the process main thread; call godesktop.Run from main";
     @autoreleasepool {
         [NSApplication sharedApplication];
@@ -322,7 +423,7 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         view.background=background;
         view.glyphs=[NSMutableDictionary dictionary]; view.scene=[NSData data]; view.text=[NSData data];
         view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
-        view.paused=YES; view.enableSetNeedsDisplay=YES; view.delegate=view;
+        view.paused=YES; view.enableSetNeedsDisplay=NO; view.delegate=view;
         GDDelegate *delegate=[[GDDelegate alloc] init];
         NSWindowStyleMask style=NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable;
         if(custom_titlebar) style|=NSWindowStyleMaskFullSizeContentView;
@@ -339,9 +440,10 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         atomic_fetch_add(&generation,1);
         active_view=view; running=YES;
         [window center]; [window makeKeyAndOrderFront:nil]; [window makeFirstResponder:view];
-        [NSApp activateIgnoringOtherApps:YES]; [view setNeedsDisplay:YES];
+        [NSApp activateIgnoringOtherApps:YES]; [view startFrameClock];
         [NSApp run];
         running=NO;
+        [view stopFrameClock];
         // Only shutdown drains the queue. Normal frames never wait for the GPU.
         if(dispatch_group_wait(view.outstanding,dispatch_time(DISPATCH_TIME_NOW,5*NSEC_PER_SEC))) view.failure=@"Metal shutdown did not finish within five seconds";
         active_view=nil;
@@ -365,7 +467,7 @@ void gd_measure(const char *text,size_t length,float size,const char *font,size_
 }
 void gd_wake(void) {
     uint64_t expected=atomic_load(&generation);
-    dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view setNeedsDisplay:YES]; });
+    dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view requestFrame]; });
 }
 void gd_quit(void) {
     uint64_t expected=atomic_load(&generation);
@@ -375,11 +477,14 @@ uint64_t gd_rendered_frames(void) { return atomic_load(&rendered_frames); }
 GDRenderStats gd_render_stats(void) {
     return (GDRenderStats){
         .backend=2,.frame_slots=3,.used_slots_mask=atomic_load(&used_slots),
+        .frame_clock=atomic_load(&frame_clock),
         .in_flight=atomic_load(&in_flight),.max_in_flight=atomic_load(&max_in_flight),
         .submitted=atomic_load(&submitted_frames),.completed=atomic_load(&rendered_frames),
         .draw_calls=atomic_load(&draw_calls),.instances=atomic_load(&instance_count),
         .uploaded_bytes=atomic_load(&uploaded_bytes),.cpu_nanos=atomic_load(&cpu_nanos),.gpu_nanos=atomic_load(&gpu_nanos),
-        .scene_nanos=atomic_load(&scene_nanos),.acquire_nanos=atomic_load(&acquire_nanos),.encode_nanos=atomic_load(&encode_nanos)
+        .scene_nanos=atomic_load(&scene_nanos),.acquire_nanos=atomic_load(&acquire_nanos),.encode_nanos=atomic_load(&encode_nanos),
+        .frame_requests=atomic_load(&frame_requests),.frame_ticks=atomic_load(&frame_ticks),
+        .coalesced_requests=atomic_load(&coalesced_requests),.idle_pauses=atomic_load(&idle_pauses)
     };
 }
 

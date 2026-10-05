@@ -8,6 +8,7 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 
 - Windows：Direct3D 12 显式队列、资源状态、fence、flip model swapchain，自定义 DXIL 着色器；DirectWrite 负责字体与字形。
 - macOS：Metal 实例化绘制、相邻批次、三个独立上传缓冲、完成回调；CoreText 负责字体与字形。
+- macOS 14+ 使用 [CAMetalDisplayLink](https://developer.apple.com/documentation/quartzcore/cametaldisplaylink) 提供的 drawable 和显示回调；合并重绘请求，空闲后暂停，Dispatch/输入重新唤醒。macOS 13 使用 MTKView 的显示同步循环，诊断明确报告该兼容路径。
 - 共享：80 字节实例 ABI、GPU 顶点生成、片元裁剪、圆角/线段距离函数、预乘 alpha 与画家顺序。
 
 着色器 API 的版本号不会单独证明性能。运行路径、异步资源所有权、字形复用、内存上限和真实 GPU 帧验证都必须有证据。
@@ -18,6 +19,7 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | --- | --- | --- |
 | Metal 实例化/合批 | 已接入默认路径 | 两种 Mac CI 的 2048 矩形 + 32 文本压力场景，draw calls <= 2，上传量 = 实例数 × 80 |
 | Metal 异步三帧资源环 | 已接入默认路径 | 三槽都被使用，最多三个在途帧，正常绘制显式 buffer waits = 0，退出时 submitted = completed |
+| Metal 显示同步调度 | 已接入 macOS 14+ 默认路径，待原生 CI 验证 | CAMetalDisplayLink 直接提供 drawable；连续请求合并；空闲期间 GPU 提交和回调计数不增加；Dispatch 能重新唤醒 |
 | GPU 诊断 | 已实现原生计数与 CPU/GPU 时间 | 原生压力报告；不能以 Go view 次数代替 GPU 完成数 |
 | Direct3D 12 着色器 | DXC 编译/校验基础已加入 | 固定编译器、源文件和实例 ABI 的可复现 DXIL；仍需实际 GPU 执行 |
 | Windows 默认 Direct3D 12 | 尚未实现 | HWND 与 swapchain 的真实绘制、fence 生命周期、缩放/设备重建、GPU 像素读回 |
@@ -39,7 +41,7 @@ powershell -File scripts/validate-shaders.ps1 -Regenerate
 Metal 的渲染压力验证：
 
 ```sh
-CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -output metal-render-stress.json
+CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -output metal-render-stress.json
 ```
 
-该报告的 CPU 时间为构建至 commit 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。
+该报告的 CPU 时间为构建至 commit/present 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。CAMetalDisplayLink 在回调前提供 drawable，所以该路径的 acquire 时间只包含渲染附件配置，不包含系统在回调前的调度耗时。报告同时记录 frame clock、请求/回调/合并/暂停计数和空闲前后快照。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。
