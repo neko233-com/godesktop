@@ -1,6 +1,6 @@
 # GPU 绘制目标与验收
 
-现代原生 GPU 管线已在 [v0.3.0](https://github.com/neko233-com/godesktop/releases/tag/v0.3.0) 发布，参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环、显示同步调度及有界资源恢复。[发布提交 3c7cd22 的五平台 CI](https://github.com/neko233-com/godesktop/actions/runs/37383466801) 全部通过。gocode 固定依赖这一公开模块版本，通过 GOWORK=off 独立构建和验证。
+现代原生 GPU 管线已在 [v0.3.1](https://github.com/neko233-com/godesktop/releases/tag/v0.3.1) 发布，参考 Zed/GPUI 的架构。Windows 默认窗口采用 Direct3D 12/DirectWrite，macOS 采用 Metal/CoreText；两者均已接入 R8 字形图集、GPU 完成后复用的三帧资源环、显示同步调度及有界资源恢复。[发布提交 7322147 的五平台 CI](https://github.com/neko233-com/godesktop/actions/runs/37385691779) 全部通过。gocode 固定依赖这一公开模块版本，通过 GOWORK=off 独立构建和验证。
 
 ## 参考与技术选择
 
@@ -28,7 +28,7 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | Windows 设备丢失恢复 | 本机硬件/WARP 及 [eb6eff0 两种 Windows CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37376434509) | 同一窗口自动重建、恢复后 92 个完成帧、1 个丢弃帧、正确 GPU 像素；另行强制完成通知竞态时序 |
 | Metal 设备移除/提交恢复 | 已实现；[e8a262d 两种 Mac CI 已通过](https://github.com/neko233-com/godesktop/actions/runs/37378878913) | 同一窗口重建、Go 状态/Dispatch 保留、恢复后 92 帧及实际 drawable；三次恢复上限与失败后重新 Run；CI 注入不声称硬件拔除 |
 | 绘制正确性与性能 | GPU 像素、字形/资源和原生 CPU 时间已验证；新增输入到完成像素测量 | 两 Mac 默认/1.5×/2× 实际 drawable；Windows 实际 swapchain/离屏 DXIL；本机 602 帧无插桩 CPU P50/P95 和 40 次 native 输入观察；不声称物理显示延迟或 GPUI 同机性能 |
-| gocode 消费新后端 | 独立模块固定依赖 v0.3.0，无本地 replace | GOWORK=off 的三轮 Windows race/原生输入与 EXE smoke；[1aa401a 的五平台 CI](https://github.com/neko233-com/gocode/actions/runs/37384451387) |
+| gocode 消费新后端 | 独立模块固定依赖 v0.3.1，无本地 replace | GOWORK=off 的三轮 Windows race/原生输入与 EXE smoke；[9bbd371 的五平台 CI](https://github.com/neko233-com/gocode/actions/runs/37386679226) |
 
 ## 预编译 Windows 着色器
 
@@ -110,6 +110,8 @@ go run -race ./internal/inputlatency -output .cache/dx12-input-latency-hardware.
 变化文本场景包含 2048 个矩形和 32 个每帧更新的标签，本机硬件/WARP 均通过 92 帧：三个槽全使用、submitted = completed、一次 draw call、空闲期间提交和时钟计数不变、Dispatch 重新唤醒。14 个字形共享一页 1 MiB R8 图集，而不是为每种字符串创建纹理。图集更新的累计上传量另外报告，不混入实例数 × 80 的实例上传断言。
 
 发布提交 3c7cd22 上重新执行 RTX 5070 Ti 无调试插桩验收：602 个提交全部完成，CPU P50/P95 为 0.881/1.390 ms，14 次光栅化、192626 次命中和 1 MiB 活动图集；40 次输入观察 P50/P95 为 16.625/17.278 ms。发布附件 `godesktop-v0.3.0-validation.zip` 保存该提交、复现命令、适配器报告、完整输入样本、GPU PNG 和 JSON；这些数值是该次本机结果。
+
+独立 gocode 的 Windows 2025 CI 后续发现 v0.3.0 关闭时可能消费旧异步 fence 通知并错误返回。v0.3.1 将同步等待与消息循环通知隔离，使用五秒总期限和真实 fence 数值判断完成；保持旧通知并阻塞后一提交的负向对照可复现原错误，硬件/WARP 修复回归与新五平台 CI 均通过。`godesktop-v0.3.1-validation.zip` 保存发布提交、复现命令及两种设备的报告和 GPU PNG。旧标签保留，推荐使用 v0.3.1。
 
 大字号场景改变字体大小，迫使活动缓存达到 16 页后淘汰；本机硬件验证产生 9 次淘汰、1339 次光栅化和 41509 次命中，页面峰值 16 MiB。旧页由在途帧保留，暂存与资源屏障保证 GPU 读取生命周期。验收上限为当前缓存 16 MiB、包含在途代数的峰值 64 MiB；同尺寸 CPU 镜像和每帧上传暂存另占内存，页面字节指标不是进程总内存。压力使用调试层/GPU 校验，不将其时间当作无插桩性能。
 
