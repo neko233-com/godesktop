@@ -21,27 +21,29 @@ import (
 )
 
 type nativeReport struct {
-	Backend            string   `json:"backend"`
-	Adapter            string   `json:"adapter"`
-	Software           bool     `json:"software"`
-	VendorID           uint32   `json:"vendor_id"`
-	DeviceID           uint32   `json:"device_id"`
-	AdapterFlags       uint32   `json:"adapter_flags"`
-	DebugLayer         bool     `json:"debug_layer"`
-	GPUValidation      bool     `json:"gpu_validation"`
-	ShaderModel        string   `json:"shader_model"`
-	FrameSlots         uint32   `json:"frame_slots"`
-	UsedSlots          uint32   `json:"used_slots_mask"`
-	MaxInFlight        uint32   `json:"max_in_flight"`
-	Submitted          uint64   `json:"submitted"`
-	Completed          uint64   `json:"completed"`
-	OwnershipDeferrals uint64   `json:"ownership_deferrals"`
-	ReadbackWaits      uint64   `json:"diagnostic_readback_waits"`
-	Instances          uint32   `json:"instances_per_frame"`
-	DrawCalls          uint32   `json:"draw_calls_per_frame"`
-	InstanceBytes      uint32   `json:"instance_bytes_per_frame"`
-	CPU                []uint64 `json:"cpu_samples_nanos"`
-	GPU                []uint64 `json:"gpu_samples_nanos"`
+	Backend               string   `json:"backend"`
+	Adapter               string   `json:"adapter"`
+	Software              bool     `json:"software"`
+	VendorID              uint32   `json:"vendor_id"`
+	DeviceID              uint32   `json:"device_id"`
+	AdapterFlags          uint32   `json:"adapter_flags"`
+	DebugLayer            bool     `json:"debug_layer"`
+	GPUValidation         bool     `json:"gpu_validation"`
+	ShaderModel           string   `json:"shader_model"`
+	FrameSlots            uint32   `json:"frame_slots"`
+	UsedSlots             uint32   `json:"used_slots_mask"`
+	MaxInFlight           uint32   `json:"max_in_flight"`
+	Submitted             uint64   `json:"submitted"`
+	Completed             uint64   `json:"completed"`
+	OwnershipDeferrals    uint64   `json:"ownership_deferrals"`
+	ReadbackWaits         uint64   `json:"diagnostic_readback_waits"`
+	StaleCompletionChecks uint32   `json:"stale_completion_checks"`
+	DiagnosticQueueHoldMS uint32   `json:"diagnostic_queue_hold_ms"`
+	Instances             uint32   `json:"instances_per_frame"`
+	DrawCalls             uint32   `json:"draw_calls_per_frame"`
+	InstanceBytes         uint32   `json:"instance_bytes_per_frame"`
+	CPU                   []uint64 `json:"cpu_samples_nanos"`
+	GPU                   []uint64 `json:"gpu_samples_nanos"`
 }
 
 func quantile(values []uint64, percent int) uint64 {
@@ -68,6 +70,9 @@ func validate(probe platform.GPUProbe, report nativeReport) (int, error) {
 	}
 	if report.FrameSlots != 3 || report.UsedSlots != 7 || report.MaxInFlight != 3 || report.OwnershipDeferrals != 1 || report.Instances != 8 || report.DrawCalls != 1 || report.InstanceBytes != 640 {
 		return 0, fmt.Errorf("GPU instance or in-flight ownership validation failed: %+v", report)
+	}
+	if report.StaleCompletionChecks != 1 || report.DiagnosticQueueHoldMS != 100 {
+		return 0, errors.New("stale asynchronous completion versus blocked synchronous fence wait was not verified")
 	}
 	if len(report.CPU) != probe.Frames || len(report.GPU) != probe.Frames || quantile(report.CPU, 95) == 0 || quantile(report.GPU, 95) == 0 {
 		return 0, errors.New("native CPU/GPU timestamps missing")
@@ -195,7 +200,7 @@ func run() error {
 		GPU50       uint64       `json:"gpu_render_p50_nanos"`
 		GPU95       uint64       `json:"gpu_render_p95_nanos"`
 		Elapsed     float64      `json:"elapsed_seconds"`
-	}{native, "Offscreen DXIL/R8 coverage and three-slot ownership; HWND and font atlas acceptance use separate native window tests", checks, quantile(native.CPU, 50), quantile(native.CPU, 95), quantile(native.GPU, 50), quantile(native.GPU, 95), time.Since(started).Seconds()}
+	}{native, "Offscreen DXIL/R8 coverage and three-slot ownership; includes a 100ms diagnostic queue gate before timed frames for stale completion regression; HWND/font atlas use separate native tests", checks, quantile(native.CPU, 50), quantile(native.CPU, 95), quantile(native.GPU, 50), quantile(native.GPU, 95), time.Since(started).Seconds()}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

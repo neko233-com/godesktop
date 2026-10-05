@@ -74,7 +74,7 @@ class Device {
     ID3D12Fence *gate=nullptr;
     ID3D12QueryHeap *queries=nullptr;
     ID3D12InfoQueue *diagnostics=nullptr;
-    HANDLE event=nullptr;
+    HANDLE event=nullptr,waitEvent=nullptr;
     UINT64 sequence=0,frequency=0;
     bool closed=false;
     bool ok(HRESULT value,const char *operation) {
@@ -159,25 +159,34 @@ public:
     Device& operator=(const Device&)=delete;
     ~Device() {
         if(gate) gate->Signal(1);
-        if(queue && fence && event && !closed) drain();
+        if(queue && fence && waitEvent && !closed) drain();
         // A completed fence is required before allocators, upload memory and
         // descriptors can be destroyed. Normal draw/submit never waits.
         drop(diagnostics); drop(queries); drop(maskUpload); drop(mask);
         drop(textures); drop(rtvs); drop(pipeline); drop(root); drop(list);
         drop(gate); drop(fence); drop(queue); drop(adapter); drop(factory); drop(device);
         if(event) CloseHandle(event);
+        if(waitEvent) CloseHandle(waitEvent);
     }
     bool wait(UINT64 value,bool readback) {
         UINT64 done=fence->GetCompletedValue();
         if(done==UINT64_MAX) return ok(device->GetDeviceRemovedReason(),"GPU device removed");
         if(done>=value) return true;
         if(readback) readbackWaits++;
-        if(!ok(fence->SetEventOnCompletion(value,event),"SetEventOnCompletion")) return false;
-        if(WaitForSingleObject(event,5000)!=WAIT_OBJECT_0) { error="GPU fence did not complete within five seconds"; return false; }
-        done=fence->GetCompletedValue();
-        if(done==UINT64_MAX) return ok(device->GetDeviceRemovedReason(),"GPU device removed");
-        if(done<value) { error="GPU fence event signalled before completion"; return false; }
-        return true;
+        // UI completion watches may still have an older notification pending.
+        // A drain/resize/readback waits on its own event and trusts the fence
+        // value, never the identity or number of event wakeups.
+        if(!ok(fence->SetEventOnCompletion(value,waitEvent),"SetEventOnCompletion")) return false;
+        const ULONGLONG deadline=GetTickCount64()+5000;
+        for(;;) {
+            done=fence->GetCompletedValue();
+            if(done==UINT64_MAX) return ok(device->GetDeviceRemovedReason(),"GPU device removed");
+            if(done>=value) return true;
+            const ULONGLONG now=GetTickCount64();
+            if(now>=deadline) { error="GPU fence did not complete within five seconds"; return false; }
+            DWORD result=WaitForSingleObject(waitEvent,static_cast<DWORD>(deadline-now));
+            if(result!=WAIT_OBJECT_0 && result!=WAIT_TIMEOUT) { error="GPU fence wait failed"; return false; }
+        }
     }
     ID3D12Device *native() const { return device; }
     ID3D12CommandQueue *commands() const { return queue; }
@@ -231,7 +240,8 @@ public:
         if(!ok(device->CreateCommandQueue(&q,IID_PPV_ARGS(&queue)),"CreateCommandQueue") || !ok(queue->GetTimestampFrequency(&frequency),"GetTimestampFrequency")) return false;
         if(!ok(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&fence)),"CreateFence")) return false;
         event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
-        if(!event) { error="CreateEventW failed"; return false; }
+        waitEvent=CreateEventW(nullptr,FALSE,FALSE,nullptr);
+        if(!event || !waitEvent) { error="CreateEventW failed"; return false; }
         if(!make_pipeline()) return false;
         if(!fixture) return true;
         D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; heap.NumDescriptors=slots;
@@ -334,7 +344,7 @@ public:
         completed++; return true;
     }
     bool drain() {
-        if(!queue || !fence || !event) return false;
+        if(!queue || !fence || !waitEvent) return false;
         if(!ok(queue->Signal(fence,++sequence),"Signal shutdown") || !wait(sequence,false)) return false;
         closed=true; return true;
     }

@@ -6,6 +6,7 @@
 #include <sstream>
 #include <cstdlib>
 #include <iomanip>
+#include <thread>
 #include "dx12_device.h"
 
 namespace {
@@ -48,6 +49,22 @@ extern "C" const char *gd_dx12_probe(uint32_t flags,uint32_t frameCount,GDGPUPro
     if(frameCount<6 || frameCount>240 || (flags&3)==3 || (flags&~15u)) return "Invalid Direct3D 12 probe options";
     gd_dx12::Device renderer;
     if(!renderer.open(flags&1,flags&2,flags&4,flags&8)) { failure=renderer.error; return failure.c_str(); }
+    // Preserve an actual older GPU completion notification while a later fence
+    // is blocked behind an independent queue gate. Shutdown/readback must wait
+    // for the requested value rather than treating the old wakeup as failure.
+    if(!renderer.watch(renderer.completion()->GetCompletedValue())) { failure=renderer.error; return failure.c_str(); }
+    ID3D12Fence *delayed=nullptr;
+    HRESULT hr=renderer.native()->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&delayed));
+    if(FAILED(hr)) return "Create stale completion queue gate failed";
+    hr=renderer.commands()->Wait(delayed,1);
+    UINT64 target=0;
+    if(FAILED(hr) || !renderer.signal(&target)) { delayed->Signal(1); gd_dx12::drop(delayed); return "Queue stale completion regression failed"; }
+    std::thread release([delayed] { Sleep(100); delayed->Signal(1); });
+    bool waited=renderer.wait(target,false);
+    UINT64 returnedFence=renderer.completion()->GetCompletedValue();
+    release.join();
+    gd_dx12::drop(delayed);
+    if(!waited || returnedFence==UINT64_MAX || returnedFence<target) { failure=renderer.error.empty()?"Stale completion bypassed the requested GPU fence":renderer.error; return failure.c_str(); }
     result->width=renderer.width; result->height=renderer.height;
     result->frames=frameCount; result->stride=renderer.width*4;
     size_t frameBytes=result->stride*result->height;
@@ -93,6 +110,7 @@ extern "C" const char *gd_dx12_probe(uint32_t flags,uint32_t frameCount,GDGPUPro
         << ",\"submitted\":" << renderer.submitted << ",\"completed\":" << renderer.completed
         << ",\"ownership_deferrals\":" << renderer.ownershipDeferrals
         << ",\"diagnostic_readback_waits\":" << renderer.readbackWaits
+        << ",\"stale_completion_checks\":1,\"diagnostic_queue_hold_ms\":100"
         << ",\"instances_per_frame\":8,\"draw_calls_per_frame\":1,\"instance_bytes_per_frame\":640"
         << ",\"cpu_samples_nanos\":" << numbers(cpuTimes) << ",\"gpu_samples_nanos\":" << numbers(gpuTimes) << '}';
     result->json=strdup(report.str().c_str());

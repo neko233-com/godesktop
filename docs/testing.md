@@ -59,6 +59,8 @@ Windows 的 `internal/renderstress -device-recovery` 在第九次提交后调用
 
 `-completion-race` 使用同一真实提交路径，在 CPU 收集前主动等待 GPU fence 完成，然后调用生产 completion watcher，要求它仍返回已经完成但尚未收集的提交事件。这样可稳定覆盖 GPU 恰好在 poll 与监听注册之间完成的时序，避免消息循环空闲时漏收最后一帧；普通压力场景继续验证零显式缓冲等待。这个单独诊断场景的同步等待不属于正常绘制路径，报告明确标记 diagnostic_completion_race。
 
+离屏 DXIL 验收还保留一次真实旧 fence 的异步通知，把后一提交阻塞在独立 queue gate 后，再执行生产同步等待。旧通知不能使关闭/缩放/读回等待提前成功或报错，目标 fence 必须真的完成。该诊断在计时帧前保持队列 100 ms，并在报告中明确标记；不计入逐帧 CPU/GPU 样本。同步等待与消息循环观察使用独立事件，并始终依据 fence 数值检查完成，在五秒总期限内处理通知。
+
 Mac CI 的 `-metal-recovery` 在真实 GPU 完成后注入资源恢复请求，要求同一 NSWindow、Go 状态/Dispatch 保留、恢复后至少 90 帧、字形图集重新建立及实际 drawable 像素。`internal/metaltest` 还请求四次恢复，验证三次上限、错误返回、队列排空和失败后重新 Run 的计数/快照隔离。报告标记诊断注入；不伪造 command-buffer status、完成数或硬件断开。eGPU 移除、权限撤销与系统 GPU 故障需另行在具备这些条件的真实设备上验证。
 
 两种 Mac 还用 `internal/metaltest -drawable-scale 1.5` / `2` 指定实际窗口 drawable 的诊断像素密度，保持正常视图坐标并核对 GPU 图像尺寸、字体与裁剪，再执行同一恢复上限和重新启动场景。这覆盖分数/整数 scale 的 GPU 坐标与字形缓存；默认场景继续使用系统自动密度。诊断不改变系统缩放或显示器硬件，真实 Retina/跨显示器迁移仍应补充。
