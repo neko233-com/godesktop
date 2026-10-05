@@ -57,6 +57,8 @@ go run ./internal/dx12test -frames 7 -debug=false -output .cache/dx12-uninstrume
 
 默认设备优先选择支持 SM6 的硬件，缺少硬件时可使用 WARP；报告明确记录 software、adapter 和 debug/GPU validation 是否可用。`-require-hardware` 拒绝 WARP，`-warp` 显式验证软件设备，`-require-debug-layer` 强制要求调试层。PNG 只包含离屏 GPU 验证场景。R8 纹理目前使用合成覆盖率数据，不能据此宣称已完成字体图集、窗口 swapchain、输入到显示延迟或 gocode 的默认 D3D12 迁移。
 
+设备报告同时保存 vendor/device ID 和原始 DXGI flags。[微软 DXGI 文档](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/d3d10-graphics-programming-guide-dxgi) 指出，主 Basic Render 适配器可能不设置 SOFTWARE 标志；`0x1414:0x008c` 仍按软件适配器识别并从硬件候选中排除。GitHub Windows runner 的 Basic Render/WARP 结果不能当作物理 GPU 性能数据；本机硬件证据来自明确要求硬件的 RTX 5070 Ti 验收。
+
 7 帧验收关闭调试层，另外覆盖不启用 GPU 校验插桩时的同一着色器管线，以及三帧批次后剩余一帧的读回路径。默认和 WARP 的 90 帧验收继续覆盖帧资源的多轮复用。
 
 该报告的 CPU 时间为构建至 commit/present 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。CAMetalDisplayLink 在回调前提供 drawable，所以该路径的 acquire 时间只包含渲染附件配置，不包含系统在回调前的调度耗时。报告同时记录 frame clock、请求/回调/合并/暂停计数和空闲前后快照。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。

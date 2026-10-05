@@ -85,6 +85,7 @@ extern "C" const char *gd_dx12_probe(uint32_t flags,uint32_t frameCount,GDGPUPro
     std::ostringstream report;
     report << "{\"backend\":\"direct3d12\",\"adapter\":" << json_string(renderer.adapterName)
         << ",\"software\":" << (renderer.software?"true":"false")
+        << ",\"vendor_id\":" << renderer.vendorID << ",\"device_id\":" << renderer.deviceID << ",\"adapter_flags\":" << renderer.adapterFlags
         << ",\"debug_layer\":" << (renderer.debugLayer?"true":"false")
         << ",\"gpu_validation\":" << (renderer.gpuValidation?"true":"false")
         << ",\"shader_model\":\"6.0\",\"frame_slots\":3,\"used_slots_mask\":" << renderer.usedSlots

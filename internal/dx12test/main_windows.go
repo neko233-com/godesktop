@@ -24,6 +24,9 @@ type nativeReport struct {
 	Backend            string   `json:"backend"`
 	Adapter            string   `json:"adapter"`
 	Software           bool     `json:"software"`
+	VendorID           uint32   `json:"vendor_id"`
+	DeviceID           uint32   `json:"device_id"`
+	AdapterFlags       uint32   `json:"adapter_flags"`
 	DebugLayer         bool     `json:"debug_layer"`
 	GPUValidation      bool     `json:"gpu_validation"`
 	ShaderModel        string   `json:"shader_model"`
@@ -59,6 +62,9 @@ func validate(probe platform.GPUProbe, report nativeReport) (int, error) {
 	}
 	if report.Backend != "direct3d12" || report.Adapter == "" || report.ShaderModel != "6.0" || report.Submitted != uint64(probe.Frames) || report.Completed != report.Submitted {
 		return 0, fmt.Errorf("invalid native submission report: %+v", report)
+	}
+	if report.VendorID == 0x1414 && report.DeviceID == 0x8c && !report.Software {
+		return 0, errors.New("Microsoft Basic Render Driver was incorrectly reported as hardware")
 	}
 	if report.FrameSlots != 3 || report.UsedSlots != 7 || report.MaxInFlight != 3 || report.OwnershipDeferrals != 1 || report.Instances != 8 || report.DrawCalls != 1 || report.InstanceBytes != 640 {
 		return 0, fmt.Errorf("GPU instance or in-flight ownership validation failed: %+v", report)

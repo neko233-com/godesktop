@@ -17,6 +17,12 @@
 
 namespace gd_dx12 {
 template<class T> void drop(T *&value) { if(value) { value->Release(); value=nullptr; } }
+inline bool software_adapter(const DXGI_ADAPTER_DESC1 &description) {
+    // DXGI's primary Basic Render adapter may have display outputs and omit
+    // SOFTWARE. Microsoft documents its stable vendor/device identity:
+    // https://learn.microsoft.com/windows/win32/direct3ddxgi/d3d10-graphics-programming-guide-dxgi
+    return (description.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)!=0 || (description.VendorId==0x1414 && description.DeviceId==0x8c);
+}
 inline D3D12_RESOURCE_DESC buffer_desc(UINT64 size) {
     D3D12_RESOURCE_DESC d{};
     d.Dimension=D3D12_RESOURCE_DIMENSION_BUFFER; d.Width=size;
@@ -88,7 +94,8 @@ class Device {
         if(FAILED(selected->CheckFeatureSupport(D3D12_FEATURE_SHADER_MODEL,&model,sizeof(model))) || model.HighestShaderModel<D3D_SHADER_MODEL_6_0) { drop(selected); return false; }
         device=selected; adapter=candidate; adapter->AddRef();
         DXGI_ADAPTER_DESC1 description{}; adapter->GetDesc1(&description);
-        software=(description.Flags&DXGI_ADAPTER_FLAG_SOFTWARE)!=0;
+        software=software_adapter(description);
+        vendorID=description.VendorId; deviceID=description.DeviceId; adapterFlags=description.Flags;
         int count=WideCharToMultiByte(CP_UTF8,0,description.Description,-1,nullptr,0,nullptr,nullptr);
         std::vector<char> name(count);
         WideCharToMultiByte(CP_UTF8,0,description.Description,-1,name.data(),count,nullptr,nullptr);
@@ -144,6 +151,7 @@ public:
     std::array<Frame,slots> frames;
     std::string error,adapterName;
     bool software=false,debugLayer=false,gpuValidation=false;
+    UINT vendorID=0,deviceID=0,adapterFlags=0;
     UINT usedSlots=0,maxInFlight=0;
     UINT64 submitted=0,completed=0,readbackWaits=0,ownershipDeferrals=0;
     Device()=default;
@@ -192,7 +200,7 @@ public:
                 if(hr==DXGI_ERROR_NOT_FOUND) break;
                 if(FAILED(hr)) { drop(preferred); return ok(hr,"Enumerate DXGI adapters"); }
                 DXGI_ADAPTER_DESC1 description{}; candidate->GetDesc1(&description);
-                bool selected=!(description.Flags&DXGI_ADAPTER_FLAG_SOFTWARE) && select(candidate);
+                bool selected=!software_adapter(description) && select(candidate);
                 drop(candidate);
                 if(selected) break;
             }
