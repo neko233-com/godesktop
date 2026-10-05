@@ -253,6 +253,18 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
 }
 - (void)startFrameClock {
     GDRunState *metrics=self.metrics;
+    const char *density=getenv("GODESKTOP_TEST_DRAWABLE_SCALE");
+    if(density) {
+        // MTKView attaches to the window after construction. Apply the explicit
+        // diagnostic size after that attachment so backing-property setup cannot
+        // replace it with the system density before the display link starts.
+        double scale=strtod(density,NULL);
+        self.autoResizeDrawable=NO;
+        CGSize size=CGSizeMake(ceil(self.bounds.size.width*scale),ceil(self.bounds.size.height*scale));
+        self.drawableSize=size;
+        CAMetalLayer *layer=(CAMetalLayer *)self.layer;
+        layer.contentsScale=scale; layer.drawableSize=size;
+    }
     if(@available(macOS 14.0,*)) {
         GDMetalFrameClock *clock=[[GDMetalFrameClock alloc] init];
         clock.view=self;
@@ -505,7 +517,7 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
                 // Device removal/access revocation must select a different GPU.
                 // Other command errors rebuild the queue/resources on a usable
                 // default GPU, with the same bounded three-recovery limit.
-                BOOL excluded=completed.error.code==MTLCommandBufferErrorDeviceRemoved || completed.error.code==MTLCommandBufferErrorBlacklisted;
+                BOOL excluded=completed.error.code==MTLCommandBufferErrorDeviceRemoved || completed.error.code==MTLCommandBufferErrorAccessRevoked;
                 [self requestRecovery:message excluding:excluded?self.device.registryID:0];
             } else if(current) {
                 if(readback) {
