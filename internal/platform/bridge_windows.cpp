@@ -34,6 +34,11 @@ float dpi(HWND window) {
     auto fn=reinterpret_cast<GetDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetDpiForWindow"));
     return fn ? static_cast<float>(fn(window)) : 96.0f;
 }
+int metric_for_dpi(int index,HWND window) {
+    using GetMetric = int(WINAPI *)(int,UINT);
+    auto fn=reinterpret_cast<GetMetric>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetSystemMetricsForDpi"));
+    return fn?fn(index,static_cast<UINT>(dpi(window))):MulDiv(GetSystemMetrics(index),static_cast<int>(dpi(window)),96);
+}
 D2D1_COLOR_F color(GDColor value) { return D2D1::ColorF(value.r,value.g,value.b,value.a); }
 D2D1_RECT_F rectangle(GDRect value) { return D2D1::RectF(value.x,value.y,value.x+value.w,value.y+value.h); }
 
@@ -136,7 +141,18 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
     if(!window) return DefWindowProcW(handle,message,wparam,lparam);
     switch(message) {
     case WM_NCCALCSIZE:
-        if(window->custom_titlebar) return 0;
+        if(window->custom_titlebar) {
+            // A maximized thick frame lies outside the visible work area.
+            // Keep those invisible borders outside our client rectangle.
+            if(IsZoomed(handle)) {
+                auto rect=wparam?&reinterpret_cast<NCCALCSIZE_PARAMS *>(lparam)->rgrc[0]:reinterpret_cast<RECT *>(lparam);
+                int padding=metric_for_dpi(SM_CXPADDEDBORDER,handle);
+                int x=metric_for_dpi(SM_CXFRAME,handle)+padding;
+                int y=metric_for_dpi(SM_CYFRAME,handle)+padding;
+                rect->left+=x; rect->right-=x; rect->top+=y; rect->bottom-=y;
+            }
+            return wparam?WVR_REDRAW:0;
+        }
         break;
     case WM_NCHITTEST:
         if(window->custom_titlebar) {
@@ -199,8 +215,11 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
             MONITORINFO monitor{sizeof(MONITORINFO)};
             if(GetMonitorInfoW(MonitorFromWindow(handle,MONITOR_DEFAULTTONEAREST),&monitor)) {
                 auto info=reinterpret_cast<MINMAXINFO *>(lparam);
-                info->ptMaxPosition={monitor.rcWork.left-monitor.rcMonitor.left,monitor.rcWork.top-monitor.rcMonitor.top};
-                info->ptMaxSize={monitor.rcWork.right-monitor.rcWork.left,monitor.rcWork.bottom-monitor.rcWork.top};
+                int padding=metric_for_dpi(SM_CXPADDEDBORDER,handle);
+                int x=metric_for_dpi(SM_CXFRAME,handle)+padding;
+                int y=metric_for_dpi(SM_CYFRAME,handle)+padding;
+                info->ptMaxPosition={monitor.rcWork.left-monitor.rcMonitor.left-x,monitor.rcWork.top-monitor.rcMonitor.top-y};
+                info->ptMaxSize={monitor.rcWork.right-monitor.rcWork.left+2*x,monitor.rcWork.bottom-monitor.rcWork.top+2*y};
                 info->ptMinTrackSize={static_cast<LONG>(640*dpi(handle)/96),static_cast<LONG>(420*dpi(handle)/96)};
                 return 0;
             }

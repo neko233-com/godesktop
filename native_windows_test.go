@@ -203,6 +203,33 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 		mustNative(t, err)
 		dipHeight := float64(height) * 96 / float64(w.DPI())
 		assertPixel(t, w, 10, int(dipHeight)-10, 0x0078d4)
+		verifyFooter := func() {
+			t.Helper()
+			_, height, err := w.ClientSize()
+			mustNative(t, err)
+			y := int(float64(height)*96/float64(w.DPI())) - 10
+			assertPixel(t, w, 10, y, 0x0078d4)
+			for i := 0; i < 3; i++ {
+				captured, err := w.Capture()
+				mustNative(t, err)
+				pixel := captured.RGBAAt(int(10*float64(w.DPI())/96), height-int(10*float64(w.DPI())/96))
+				if pixel.R != 0 || pixel.G != 0x78 || pixel.B != 0xd4 {
+					t.Fatalf("captured footer: %v", pixel)
+				}
+			}
+		}
+		verifyFooter()
+		w.Show(3) // SW_MAXIMIZE
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "frame" })
+		client, err := w.ClientBounds()
+		mustNative(t, err)
+		if client != work {
+			t.Fatalf("maximized client %+v does not match work area %+v", client, work)
+		}
+		verifyFooter()
+		w.Show(9) // SW_RESTORE
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "frame" })
+		verifyFooter()
 		mustNative(t, w.Close())
 		p.await(t, func(r testprotocol.Report) bool { return r.Event == "closed" })
 		p.exit(t)

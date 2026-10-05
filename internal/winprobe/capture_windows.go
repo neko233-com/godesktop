@@ -5,12 +5,15 @@ package winprobe
 import (
 	"fmt"
 	"image"
+	"runtime"
 	"unsafe"
 )
 
 // Capture reads only the client area of a window previously verified with Find.
 
 func (w Window) Capture() (*image.RGBA, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	width, height, err := w.ClientSize()
 	if err != nil {
 		return nil, err
@@ -28,18 +31,6 @@ func (w Window) Capture() (*image.RGBA, error) {
 		return nil, err
 	}
 	defer gdi.NewProc("DeleteDC").Call(memory)
-	bitmap, _, err := gdi.NewProc("CreateCompatibleBitmap").Call(dc, uintptr(width), uintptr(height))
-	if bitmap == 0 {
-		return nil, err
-	}
-	defer gdi.NewProc("DeleteObject").Call(bitmap)
-	old, _, _ := gdi.NewProc("SelectObject").Call(memory, bitmap)
-	ok, _, copyErr := gdi.NewProc("BitBlt").Call(memory, 0, 0, uintptr(width), uintptr(height), dc, 0, 0, 0x00cc0020)
-	// GetDIBits requires that the bitmap is no longer selected into a DC.
-	gdi.NewProc("SelectObject").Call(memory, old)
-	if ok == 0 {
-		return nil, copyErr
-	}
 	type bitmapInfo struct {
 		Size                   uint32
 		Width, Height          int32
@@ -49,11 +40,28 @@ func (w Window) Capture() (*image.RGBA, error) {
 		Used, Important        uint32
 	}
 	info := bitmapInfo{Size: 40, Width: int32(width), Height: -int32(height), Planes: 1, BitCount: 32}
-	buffer := make([]byte, width*height*4)
-	lines, _, err := gdi.NewProc("GetDIBits").Call(dc, bitmap, 0, uintptr(height), uintptr(unsafe.Pointer(&buffer[0])), uintptr(unsafe.Pointer(&info)), 0)
-	if lines != uintptr(height) {
-		return nil, fmt.Errorf("GetDIBits: %v", err)
+	var pixels unsafe.Pointer
+	bitmap, _, err := gdi.NewProc("CreateDIBSection").Call(dc, uintptr(unsafe.Pointer(&info)), 0, uintptr(unsafe.Pointer(&pixels)), 0, 0)
+	if bitmap == 0 || pixels == nil {
+		return nil, fmt.Errorf("CreateDIBSection: %v", err)
 	}
+	defer gdi.NewProc("DeleteObject").Call(bitmap)
+	old, _, err := gdi.NewProc("SelectObject").Call(memory, bitmap)
+	if old == 0 || old == ^uintptr(0) {
+		return nil, fmt.Errorf("SelectObject: %v", err)
+	}
+	defer gdi.NewProc("SelectObject").Call(memory, old)
+	ok, _, err := gdi.NewProc("BitBlt").Call(memory, 0, 0, uintptr(width), uintptr(height), dc, 0, 0, 0x00cc0020)
+	if ok == 0 {
+		return nil, fmt.Errorf("BitBlt: %v", err)
+	}
+	// Synchronize GDI before reading the section's native memory.
+	// https://learn.microsoft.com/windows/win32/api/wingdi/nf-wingdi-createdibsection
+	ok, _, err = gdi.NewProc("GdiFlush").Call()
+	if ok == 0 {
+		return nil, fmt.Errorf("GdiFlush: %v", err)
+	}
+	buffer := append([]byte(nil), unsafe.Slice((*byte)(pixels), width*height*4)...)
 	for i := 0; i < len(buffer); i += 4 {
 		buffer[i], buffer[i+2] = buffer[i+2], buffer[i]
 		buffer[i+3] = 255

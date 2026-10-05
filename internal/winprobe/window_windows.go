@@ -33,6 +33,20 @@ func (w Window) ScreenBounds() (Rect, error) {
 	return r, nil
 }
 
+// ClientBounds returns the client rectangle in physical screen coordinates.
+func (w Window) ClientBounds() (Rect, error) {
+	width, height, err := w.ClientSize()
+	if err != nil {
+		return Rect{}, err
+	}
+	point := struct{ X, Y int32 }{}
+	ok, _, err := user.NewProc("ClientToScreen").Call(uintptr(w), uintptr(unsafe.Pointer(&point)))
+	if ok == 0 {
+		return Rect{}, err
+	}
+	return Rect{point.X, point.Y, point.X + int32(width), point.Y + int32(height)}, nil
+}
+
 func Awareness() func() {
 	fn := user.NewProc("SetThreadDpiAwarenessContext")
 	old, _, _ := fn.Call(^uintptr(3)) // DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2 (-4).
