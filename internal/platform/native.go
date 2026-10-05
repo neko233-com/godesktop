@@ -82,3 +82,6 @@ func MeasureText(text string, size float32) (float32, float32) {
 
 func Wake() { C.gd_wake() }
 func Quit() { C.gd_quit() }
+
+// RenderedFrames lets the native smoke example require actual submissions.
+func RenderedFrames() uint64 { return uint64(C.gd_rendered_frames()) }

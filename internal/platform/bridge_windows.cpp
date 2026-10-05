@@ -16,6 +16,7 @@
 namespace {
 constexpr UINT wake_message = WM_APP + 1;
 std::atomic<HWND> active_window{nullptr};
+std::atomic<uint64_t> rendered_frames{0};
 
 template<class T> void release(T *&value) { if (value) { value->Release(); value=nullptr; } }
 std::wstring wide(const char *text, size_t length) {
@@ -105,6 +106,7 @@ struct Window {
         HRESULT hr=target->EndDraw();
         if(hr==D2DERR_RECREATE_TARGET) { discard_target(); InvalidateRect(handle,nullptr,FALSE); }
         else if(FAILED(hr)) fail("EndDraw",hr);
+        else rendered_frames.fetch_add(1);
     }
 };
 
@@ -158,6 +160,7 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
 extern "C" const char *gd_run(const char *title,float width,float height,GDColor background) {
     static std::string last_error;
     last_error.clear();
+    rendered_frames.store(0);
     HRESULT initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if(FAILED(initialized)) return "CoInitializeEx failed: the UI thread must use a single-threaded COM apartment";
     {
@@ -222,3 +225,4 @@ extern "C" void gd_measure(const char *text,size_t length,float size,float *widt
 }
 extern "C" void gd_wake() { if(auto handle=active_window.load()) PostMessageW(handle,wake_message,0,0); }
 extern "C" void gd_quit() { if(auto handle=active_window.load()) PostMessageW(handle,WM_CLOSE,0,0); }
+extern "C" uint64_t gd_rendered_frames() { return rendered_frames.load(); }

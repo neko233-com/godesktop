@@ -49,6 +49,7 @@ static NSString *const shader = @
 static GDView *active_view;
 static BOOL running;
 static _Atomic uint64_t generation;
+static _Atomic uint64_t rendered_frames;
 
 static NSString *string_utf8(const char *bytes,size_t length) {
     return [[NSString alloc] initWithBytes:bytes length:length encoding:NSUTF8StringEncoding] ?: @"";
@@ -185,6 +186,7 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
         // A triple-buffered submission ring is planned for animation workloads.
         [buffer waitUntilCompleted];
         if(buffer.status==MTLCommandBufferStatusError) [self fail:buffer.error.localizedDescription ?: @"Metal submission failed"];
+        else atomic_fetch_add(&rendered_frames,1);
     }
 }
 @end
@@ -193,12 +195,18 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return NO; }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { [self.window close]; return NSTerminateCancel; }
 - (void)windowDidResignKey:(NSNotification *)notification { gd_go_event(5,0,0,0,0); }
-- (void)windowWillClose:(NSNotification *)notification { [NSApp stop:nil]; }
+- (void)windowWillClose:(NSNotification *)notification {
+    [NSApp stop:nil];
+    // stop: sets a flag; a posted event also wakes nextEventMatchingMask:.
+    NSEvent *wake=[NSEvent otherEventWithType:NSEventTypeApplicationDefined location:NSZeroPoint modifierFlags:0 timestamp:0 windowNumber:0 context:nil subtype:0 data1:0 data2:0];
+    [NSApp postEvent:wake atStart:YES];
+}
 @end
 
 const char *gd_run(const char *title,float width,float height,GDColor background) {
     static char *last_error;
     free(last_error); last_error=NULL;
+    atomic_store(&rendered_frames,0);
     if(![NSThread isMainThread]) return "AppKit must run on the process main thread; call godesktop.Run from main";
     @autoreleasepool {
         [NSApplication sharedApplication];
@@ -273,3 +281,4 @@ void gd_quit(void) {
     uint64_t expected=atomic_load(&generation);
     dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view.window close]; });
 }
+uint64_t gd_rendered_frames(void) { return atomic_load(&rendered_frames); }

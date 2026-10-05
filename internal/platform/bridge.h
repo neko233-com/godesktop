@@ -23,6 +23,7 @@ void gd_present(const GDCommand *commands, size_t count, const char *text, size_
 void gd_measure(const char *text, size_t length, float font_size, float *width, float *height);
 void gd_wake(void);
 void gd_quit(void);
+uint64_t gd_rendered_frames(void);
 void gd_go_event(int kind, float x, float y, int key, int modifiers);
 
 #ifdef __cplusplus

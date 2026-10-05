@@ -6,6 +6,7 @@ import (
 	"log"
 
 	ui "github.com/neko233-com/godesktop"
+	"github.com/neko233-com/godesktop/internal/platform"
 )
 
 func main() {
@@ -44,9 +45,9 @@ func main() {
 		log.Fatal(err)
 	}
 	if *smoke {
-		if frames < 2 {
+		if frames < 2 || platform.RenderedFrames() < 2 {
 			log.Fatal("native backend exited before rendering two frames")
 		}
-		fmt.Printf("native smoke passed: %d frames, count=%d\n", frames, count)
+		fmt.Printf("native smoke passed: %d view frames, %d native submissions, count=%d\n", frames, platform.RenderedFrames(), count)
 	}
 }
