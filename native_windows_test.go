@@ -47,7 +47,7 @@ func startNative(t *testing.T, executable, coverDir, scenario string, runs int) 
 	t.Helper()
 	p := &nativeProcess{reports: make(chan testprotocol.Report, 128), done: make(chan error, 1), errors: make(chan error, 1)}
 	p.command = exec.Command(executable, "-scenario", scenario, "-runs", fmt.Sprint(runs))
-	p.command.Env = append(os.Environ(), "GOCOVERDIR="+coverDir)
+	p.command.Env = append(os.Environ(), "GOCOVERDIR="+coverDir, "GODESKTOP_READBACK=1")
 	p.command.Stderr = &p.stderr
 	var err error
 	p.input, err = p.command.StdinPipe()

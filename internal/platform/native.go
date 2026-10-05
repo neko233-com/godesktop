@@ -37,7 +37,11 @@ func Run(options Options, handler func(Event)) error {
 	defer func() { eventHandler = nil }()
 	title := C.CString(options.Title)
 	defer C.free(unsafe.Pointer(title))
-	if message := C.gd_run(title, C.float(options.Width), C.float(options.Height), color(options.Background)); message != nil {
+	var custom C.int
+	if options.CustomTitlebar {
+		custom = 1
+	}
+	if message := C.gd_run(title, C.float(options.Width), C.float(options.Height), color(options.Background), custom); message != nil {
 		return errors.New("godesktop: " + C.GoString(message))
 	}
 	return nil
@@ -58,11 +62,13 @@ func Present(commands []Command) {
 	native := unsafe.Slice((*C.GDCommand)(buffer), len(commands))
 	var blob []byte
 	for i, cmd := range commands {
-		if uint64(len(blob))+uint64(len(cmd.Text)) > uint64(^uint32(0)) {
+		if uint64(len(blob))+uint64(len(cmd.Text))+uint64(len(cmd.FontFamily)) > uint64(^uint32(0)) {
 			panic("native text buffer exceeds 4 GiB")
 		}
 		native[i] = C.GDCommand{kind: C.int(cmd.Kind), bounds: rectangle(cmd.Bounds), clip: rectangle(cmd.Clip), color: color(cmd.Color), radius: C.float(cmd.Radius), font_size: C.float(cmd.FontSize), text_offset: C.uint32_t(len(blob)), text_length: C.uint32_t(len(cmd.Text))}
 		blob = append(blob, cmd.Text...)
+		native[i].font_offset, native[i].font_length = C.uint32_t(len(blob)), C.uint32_t(len(cmd.FontFamily))
+		blob = append(blob, cmd.FontFamily...)
 	}
 	var text unsafe.Pointer
 	if len(blob) > 0 {
@@ -73,15 +79,22 @@ func Present(commands []Command) {
 }
 
 func MeasureText(text string, size float32) (float32, float32) {
+	return MeasureTextWithFont(text, size, "")
+}
+
+func MeasureTextWithFont(text string, size float32, font string) (float32, float32) {
 	bytes := C.CString(text)
 	defer C.free(unsafe.Pointer(bytes))
+	fontBytes := C.CString(font)
+	defer C.free(unsafe.Pointer(fontBytes))
 	var width, height C.float
-	C.gd_measure(bytes, C.size_t(len(text)), C.float(size), &width, &height)
+	C.gd_measure(bytes, C.size_t(len(text)), C.float(size), fontBytes, C.size_t(len(font)), &width, &height)
 	return float32(width), float32(height)
 }
 
-func Wake() { C.gd_wake() }
-func Quit() { C.gd_quit() }
+func Wake()                   { C.gd_wake() }
+func Quit()                   { C.gd_quit() }
+func WindowAction(action int) { C.gd_window_action(C.int(action)) }
 
 // RenderedFrames lets the native smoke example require actual submissions.
 func RenderedFrames() uint64 { return uint64(C.gd_rendered_frames()) }

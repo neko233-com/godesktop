@@ -9,6 +9,7 @@ import (
 type textKey struct {
 	text string
 	size float32
+	font string
 }
 type dimensions struct{ w, h float32 }
 type target struct {
@@ -17,21 +18,27 @@ type target struct {
 	click  func(*Context)
 }
 type frame struct {
-	commands  []platform.Command
-	targets   []target
-	measure   func(string, float32) (float32, float32)
-	textCache map[textKey]dimensions
-	measured  map[*Element]dimensions
-	focus     string
-	keys      map[string]bool
+	commands    []platform.Command
+	targets     []target
+	measure     func(string, float32) (float32, float32)
+	fontMeasure func(string, float32, string) (float32, float32)
+	textCache   map[textKey]dimensions
+	measured    map[*Element]dimensions
+	focus       string
+	keys        map[string]bool
 }
 
 func (f *frame) textSize(e *Element) dimensions {
-	k := textKey{e.text, e.fontSize}
+	k := textKey{e.text, e.fontSize, e.fontFamily}
 	if d, ok := f.textCache[k]; ok {
 		return d
 	}
-	w, h := f.measure(e.text, e.fontSize)
+	var w, h float32
+	if e.fontFamily != "" && f.fontMeasure != nil {
+		w, h = f.fontMeasure(e.text, e.fontSize, e.fontFamily)
+	} else {
+		w, h = f.measure(e.text, e.fontSize)
+	}
 	d := dimensions{nonnegative(w), nonnegative(h)}
 	// Bound the cache even when labels contain ever-changing state.
 	if len(f.textCache) >= 1024 {
@@ -49,7 +56,9 @@ func (f *frame) size(e *Element) dimensions {
 		return d
 	}
 	var d dimensions
-	if e.kind == textKind || e.kind == buttonKind {
+	if e.kind == iconKind {
+		d = dimensions{24, 24}
+	} else if e.kind == textKind || e.kind == buttonKind {
 		d = f.textSize(e)
 	} else {
 		count := 0
@@ -75,8 +84,9 @@ func (f *frame) size(e *Element) dimensions {
 			}
 		}
 	}
-	d.w += e.padding * 2
-	d.h += e.padding * 2
+	px, py := e.insets()
+	d.w += px * 2
+	d.h += py * 2
 	if e.width > 0 {
 		d.w = e.width
 	}
@@ -108,23 +118,31 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 		return
 	}
 	f.rectangle(bounds, clip, e.background, e.radius)
-	inner := rect{bounds.x + e.padding, bounds.y + e.padding, max(0, bounds.w-e.padding*2), max(0, bounds.h-e.padding*2)}
-	if e.kind == textKind || e.kind == buttonKind {
-		if e.kind == buttonKind && e.click != nil {
-			key := e.key
-			if key == "" {
-				key = path
-			}
-			if f.keys[key] {
-				panic(fmt.Sprintf("godesktop: duplicate button key %q", key))
-			}
-			f.keys[key] = true
-			f.targets = append(f.targets, target{key, clip, e.click})
-			if key == f.focus {
-				f.rectangle(rect{bounds.x, bounds.y, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
-				f.rectangle(rect{bounds.x, bounds.y + bounds.h - 2, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
-			}
+	if e.draggable {
+		f.commands = append(f.commands, platform.Command{Kind: platform.DragRegion, Bounds: nativeRect(bounds), Clip: nativeRect(clip)})
+	}
+	px, py := e.insets()
+	inner := rect{bounds.x + px, bounds.y + py, max(0, bounds.w-px*2), max(0, bounds.h-py*2)}
+	if e.click != nil {
+		key := e.key
+		if key == "" {
+			key = path
 		}
+		if f.keys[key] {
+			panic(fmt.Sprintf("godesktop: duplicate button key %q", key))
+		}
+		f.keys[key] = true
+		f.targets = append(f.targets, target{key, clip, e.click})
+		if key == f.focus {
+			f.rectangle(rect{bounds.x, bounds.y, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
+			f.rectangle(rect{bounds.x, bounds.y + bounds.h - 2, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
+		}
+	}
+	if e.kind == iconKind {
+		f.paintIcon(e, bounds, clip)
+		return
+	}
+	if e.kind == textKind || e.kind == buttonKind {
 		d := f.textSize(e)
 		textClip := clip.intersect(inner)
 		if e.kind == buttonKind {
@@ -138,7 +156,7 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 			color.A *= 0.45
 		}
 		if inner.w > 0 && inner.h > 0 && textClip.w > 0 && textClip.h > 0 {
-			f.commands = append(f.commands, platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text})
+			f.commands = append(f.commands, platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text, FontFamily: e.fontFamily})
 		}
 		return
 	}
@@ -154,6 +172,9 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 		length := d.h
 		if e.kind == rowKind {
 			length = d.w
+		}
+		if c.flexBasisZero && c.grow > 0 {
+			length = 0
 		}
 		total += length
 		weight += c.grow
@@ -171,6 +192,9 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 		length := d.h
 		if e.kind == rowKind {
 			length = d.w
+		}
+		if c.flexBasisZero && c.grow > 0 {
+			length = 0
 		}
 		if weight > 0 {
 			length += remaining * c.grow / weight

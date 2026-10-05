@@ -7,6 +7,7 @@ const (
 	rowKind
 	textKind
 	buttonKind
+	iconKind
 )
 
 // Element is a transient description of a view. Build a fresh tree in each view
@@ -16,6 +17,10 @@ type Element struct {
 	children                                            []*Element
 	text                                                string
 	key                                                 string
+	fontFamily, icon                                    string
+	flexBasisZero, draggable                            bool
+	separatePadding                                     bool
+	paddingX, paddingY                                  float32
 	click                                               func(*Context)
 	width, height, grow, padding, gap, radius, fontSize float32
 	background, foreground                              Color
@@ -56,13 +61,46 @@ func Button(label string, onClick func(*Context)) *Element {
 }
 
 // Key assigns a unique stable identity used for focus and pointer capture.
-func (e *Element) Key(key string) *Element    { e.key = key; return e }
+func (e *Element) Key(key string) *Element { e.key = key; return e }
+
+// FontFamily selects a platform font; an empty name uses the system UI font.
+func (e *Element) FontFamily(name string) *Element { e.fontFamily = name; return e }
+
+// Flex distributes remaining space from a zero basis, suitable for workspaces.
+func (e *Element) Flex(weight float32) *Element {
+	e.grow = nonnegative(weight)
+	e.flexBasisZero = true
+	return e
+}
+
+// OnClick makes an element focusable and clickable, using the same button semantics.
+func (e *Element) OnClick(fn func(*Context)) *Element { e.click = fn; return e }
+
+// Draggable marks an otherwise non-interactive custom titlebar region.
+func (e *Element) Draggable() *Element        { e.draggable = true; return e }
 func (e *Element) Width(px float32) *Element  { e.width = nonnegative(px); return e }
 func (e *Element) Height(px float32) *Element { e.height = nonnegative(px); return e }
 
 // Grow shares remaining space along the parent's main axis using this weight.
-func (e *Element) Grow(weight float32) *Element    { e.grow = nonnegative(weight); return e }
-func (e *Element) Padding(px float32) *Element     { e.padding = nonnegative(px); return e }
+func (e *Element) Grow(weight float32) *Element { e.grow = nonnegative(weight); return e }
+func (e *Element) Padding(px float32) *Element {
+	e.padding = nonnegative(px)
+	e.separatePadding = false
+	return e
+}
+
+// PaddingXY sets independent horizontal and vertical insets.
+func (e *Element) PaddingXY(x, y float32) *Element {
+	e.paddingX, e.paddingY = nonnegative(x), nonnegative(y)
+	e.separatePadding = true
+	return e
+}
+func (e *Element) insets() (float32, float32) {
+	if e.separatePadding {
+		return e.paddingX, e.paddingY
+	}
+	return e.padding, e.padding
+}
 func (e *Element) Gap(px float32) *Element         { e.gap = nonnegative(px); return e }
 func (e *Element) Radius(px float32) *Element      { e.radius = nonnegative(px); return e }
 func (e *Element) FontSize(px float32) *Element    { e.fontSize = max(1, nonnegative(px)); return e }

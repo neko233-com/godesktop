@@ -45,4 +45,8 @@ go run ./internal/pecheck ./bin/counter.exe
 
 CI 使用 Windows Server 2022 和 2025 的 amd64 runner 执行上述完整脚本；macOS Intel / Apple Silicon 执行三轮 race、严格 cgo、编译和原生 smoke；Ubuntu 执行核心 race、fuzz 和无 cgo 回退检查。Windows 报告和两种 EXE 都上传为 artifacts，失败时也保留已生成的报告。
 
+工作区新增测试覆盖零基准 Flex、字体缓存隔离、矢量图标、标题拖动区域和窗口按钮生命周期。扩展测试通过真实 VSIX/Node 进程检查安装路径约束、大小限制、版本排序、并发命令、输出/文档事件、未知 API 错误和死循环超时。Node.js 是扩展测试的必需工具，CI 显式安装。
+
+`gocode` 子仓库有自己的五平台 CI 和 Windows 脚本：真实窗口测试文件选择、中文/emoji 输入、保存、扩展命令、标题栏命中、窗口缩放/关闭和 PE amd64；原生 smoke 同时要求真实绘制和已安装 VSIX 命令执行。截图和构建产物保存在其 Actions artifacts。父仓库 `go test ./...` 不会自动进入独立子模块，应分别验证两个仓库。
+
 原生像素测试需要可用桌面会话。自动化通过 Win32 消息进入真实 WindowProc，不覆盖物理键鼠驱动、IME、所有字体、所有缩放比例、所有显卡或所有 Windows 客户端版本。Windows 10/11 的真实设备和多显示器测试仍应按发行版本补充；CI 的 Server 内核验证不等同于每台客户端设备验证。

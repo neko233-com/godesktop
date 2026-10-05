@@ -9,6 +9,7 @@
 - [x] Windows Win32 / Direct2D / DirectWrite 后端。
 - [x] macOS AppKit / Metal / CoreText 后端。
 - [x] 计数器示例、Go 核心测试、race 检查、原生 smoke 工作流。
+- [x] gocode 独立公开 submodule、原生编辑器工作区、基础字符编辑、本地 VSIX 命令宿主。
 
 原生后端已实现，不代表所有硬件、字体、输入法和系统版本均经过验证。CI 的成功状态以 Actions 当前结果为准。
 
@@ -18,7 +19,8 @@
 - [ ] 文本输入、选区、光标、IME、平台剪贴板。
 - [ ] 滚动容器、鼠标滚轮、焦点范围与快捷键 actions。
 - [ ] 多窗口、最小尺寸、关闭回调、系统菜单。
-- [ ] 图片、SVG、字体选择、字体回退、文本换行。
+- [x] 平台字体选择、自定义标题栏、矢量图标、Unicode/滚轮输入事件。
+- [ ] 图片、SVG、可控字体回退、文本换行。
 - [ ] Windows UI Automation 与 macOS Accessibility。
 - [ ] 系统主题、辅助功能设置和 reduced motion。
 

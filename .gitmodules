@@ -1,0 +1,3 @@
+[submodule "gocode"]
+	path = gocode
+	url = https://github.com/neko233-com/gocode.git

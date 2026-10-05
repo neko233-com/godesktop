@@ -4,10 +4,12 @@
 #import <MetalKit/MetalKit.h>
 #import <CoreText/CoreText.h>
 #include <math.h>
+#include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdatomic.h>
 #include "bridge.h"
+
 
 typedef struct {
     float position[2], local[2], size[2], radius, color[4], uv[2];
@@ -54,8 +56,9 @@ static _Atomic uint64_t rendered_frames;
 static NSString *string_utf8(const char *bytes,size_t length) {
     return [[NSString alloc] initWithBytes:bytes length:length encoding:NSUTF8StringEncoding] ?: @"";
 }
-static CTLineRef text_line(NSString *text,float size) {
-    NSDictionary *attributes=@{NSFontAttributeName:[NSFont systemFontOfSize:size],NSForegroundColorAttributeName:[NSColor whiteColor]};
+static CTLineRef text_line(NSString *text,float size,NSString *family) {
+    NSFont *font=family.length?[NSFont fontWithName:family size:size]:nil;
+    NSDictionary *attributes=@{NSFontAttributeName:font ?: [NSFont systemFontOfSize:size],NSForegroundColorAttributeName:[NSColor whiteColor]};
     NSAttributedString *attributed=[[NSAttributedString alloc] initWithString:text attributes:attributes];
     return CTLineCreateWithAttributedString((__bridge CFAttributedStringRef)attributed);
 }
@@ -77,6 +80,14 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
             .color={command->color.r,command->color.g,command->color.b,command->color.a},
             .uv={u,v},.textured=textured?1:0
         };
+        if(command->kind==3) {
+            float length=fmaxf(0.001f,hypotf(command->bounds.w,command->bounds.h));
+            float nx=command->bounds.w/length,ny=command->bounds.h/length;
+            vertex->position[0]=command->bounds.x+u*length*nx-(v-0.5f)*command->radius*ny;
+            vertex->position[1]=command->bounds.y+u*length*ny+(v-0.5f)*command->radius*nx;
+            vertex->local[0]=u*length; vertex->local[1]=v*command->radius;
+            vertex->size[0]=length; vertex->size[1]=command->radius; vertex->radius=0;
+        }
     }
 }
 
@@ -86,6 +97,11 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
 - (void)mouseDown:(NSEvent *)event {
     [self.window makeFirstResponder:self];
     NSPoint p=[self convertPoint:event.locationInWindow fromView:nil];
+    const GDCommand *commands=self.scene.bytes;
+    for(NSUInteger i=0;i<self.scene.length/sizeof(GDCommand);i++) {
+        GDRect clip=commands[i].clip;
+        if(commands[i].kind==4 && p.x>=clip.x && p.x<clip.x+clip.w && p.y>=clip.y && p.y<clip.y+clip.h) { [self.window performWindowDragWithEvent:event]; return; }
+    }
     gd_go_event(2,p.x,p.y,0,0);
 }
 - (void)mouseUp:(NSEvent *)event {
@@ -93,12 +109,21 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
     gd_go_event(3,p.x,p.y,0,0);
 }
 - (void)keyDown:(NSEvent *)event {
-    if(event.isARepeat) return;
     int key=0;
-    switch(event.keyCode) { case 48:key=9;break; case 36:case 76:key=13;break; case 49:key=32;break; case 53:key=27;break; }
-    if(key) gd_go_event(4,0,0,key,(event.modifierFlags&NSEventModifierFlagShift)?1:0);
-    else [super keyDown:event];
+    int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
+    switch(event.keyCode) { case 48:key=9;break; case 36:case 76:key=13;break; case 49:key=32;break; case 53:key=27;break; case 51:key=8;break; case 117:key=46;break; case 123:key=37;break; case 124:key=39;break; case 125:key=40;break; case 126:key=38;break; }
+    if(!key && (mods&10) && event.charactersIgnoringModifiers.length) key=toupper([event.charactersIgnoringModifiers characterAtIndex:0]);
+    if(key && !event.isARepeat) gd_go_event(4,0,0,key,mods);
+    if(!(mods&10)) {
+        NSString *text=event.characters;
+        for(NSUInteger i=0;i<text.length;i++) {
+            unsigned value=[text characterAtIndex:i];
+            if(value>=0xd800 && value<=0xdbff && i+1<text.length) { unsigned low=[text characterAtIndex:++i]; if(low<0xdc00 || low>0xdfff) continue; value=0x10000+((value-0xd800)<<10)+(low-0xdc00); }
+            if(value>=32 && value!=127 && !(value>=0xf700 && value<=0xf8ff)) gd_go_event(6,0,0,value,mods);
+        }
+    }
 }
+- (void)scrollWheel:(NSEvent *)event { gd_go_event(7,0,event.scrollingDeltaY/(event.hasPreciseScrollingDeltas?12.0f:1.0f),0,0); }
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size { [self setNeedsDisplay:YES]; }
 - (void)fail:(NSString *)message {
     self.failure=message;
@@ -107,11 +132,12 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
 - (id<MTLTexture>)glyph:(const GDCommand *)command scale:(CGFloat)scale {
     const char *bytes=(const char *)self.text.bytes+command->text_offset;
     NSString *value=string_utf8(bytes,command->text_length);
-    NSString *key=[NSString stringWithFormat:@"%g/%g/%@",command->font_size,scale,value];
+    NSString *family=string_utf8((const char *)self.text.bytes+command->font_offset,command->font_length);
+    NSString *key=[NSString stringWithFormat:@"%g/%g/%@/%@",command->font_size,scale,family,value];
     id<MTLTexture> existing=self.glyphs[key];
     if(existing) return existing;
     if(self.glyphs.count>=1024) [self.glyphs removeAllObjects];
-    CTLineRef line=text_line(value,command->font_size);
+    CTLineRef line=text_line(value,command->font_size,family);
     float width,height; CGFloat descent;
     text_size(line,&width,&height,&descent);
     NSUInteger pixelWidth=MAX(1,ceil(width*scale)),pixelHeight=MAX(1,ceil(height*scale));
@@ -166,6 +192,7 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
         CGFloat scale=drawable.texture.width/self.bounds.size.width;
         for(NSUInteger i=0;i<count;i++) {
             const GDCommand *command=&commands[i];
+            if(command->kind==4) continue;
             NSUInteger x=MAX(0,floor(command->clip.x*scale)),y=MAX(0,floor(command->clip.y*scale));
             NSUInteger right=MIN(drawable.texture.width,ceil((command->clip.x+command->clip.w)*scale));
             NSUInteger bottom=MIN(drawable.texture.height,ceil((command->clip.y+command->clip.h)*scale));
@@ -203,7 +230,7 @@ static void quad(GDVertex *vertices,const GDCommand *command,BOOL textured) {
 }
 @end
 
-const char *gd_run(const char *title,float width,float height,GDColor background) {
+const char *gd_run(const char *title,float width,float height,GDColor background,int custom_titlebar) {
     static char *last_error;
     free(last_error); last_error=NULL;
     atomic_store(&rendered_frames,0);
@@ -240,7 +267,10 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
         view.paused=YES; view.enableSetNeedsDisplay=YES; view.delegate=view;
         GDDelegate *delegate=[[GDDelegate alloc] init];
-        NSWindow *window=[[NSWindow alloc] initWithContentRect:view.frame styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable backing:NSBackingStoreBuffered defer:NO];
+        NSWindowStyleMask style=NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskMiniaturizable|NSWindowStyleMaskResizable;
+        if(custom_titlebar) style|=NSWindowStyleMaskFullSizeContentView;
+        NSWindow *window=[[NSWindow alloc] initWithContentRect:view.frame styleMask:style backing:NSBackingStoreBuffered defer:NO];
+        if(custom_titlebar) { window.titleVisibility=NSWindowTitleHidden; window.titlebarAppearsTransparent=YES; }
         window.releasedWhenClosed=NO;
         window.title=string_utf8(title,strlen(title)); window.contentView=view; window.delegate=delegate;
         delegate.window=window; NSApp.delegate=delegate;
@@ -267,8 +297,8 @@ void gd_present(const GDCommand *commands,size_t count,const char *text,size_t l
     active_view.scene=count?[NSData dataWithBytes:commands length:count*sizeof(GDCommand)]:[NSData data];
     active_view.text=length?[NSData dataWithBytes:text length:length]:[NSData data];
 }
-void gd_measure(const char *text,size_t length,float size,float *width,float *height) {
-    CTLineRef line=text_line(string_utf8(text,length),size);
+void gd_measure(const char *text,size_t length,float size,const char *font,size_t font_length,float *width,float *height) {
+    CTLineRef line=text_line(string_utf8(text,length),size,string_utf8(font,font_length));
     CGFloat descent;
     text_size(line,width,height,&descent);
     CFRelease(line);
@@ -282,3 +312,8 @@ void gd_quit(void) {
     dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view.window close]; });
 }
 uint64_t gd_rendered_frames(void) { return atomic_load(&rendered_frames); }
+
+void gd_window_action(int action) {
+    uint64_t expected=atomic_load(&generation);
+    dispatch_async(dispatch_get_main_queue(),^{ if(!running || expected!=atomic_load(&generation)) return; if(action==1) [active_view.window miniaturize:nil]; if(action==2) [active_view.window zoom:nil]; });
+}

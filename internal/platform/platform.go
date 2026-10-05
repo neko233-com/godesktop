@@ -14,11 +14,14 @@ type Command struct {
 	Color            Color
 	Radius, FontSize float32
 	Text             string
+	FontFamily       string
 }
 
 const (
 	Rectangle   = 1
 	Label       = 2
+	Line        = 3
+	DragRegion  = 4
 	Draw        = 1
 	PointerDown = 2
 	PointerUp   = 3
@@ -32,9 +35,10 @@ const (
 )
 
 type Options struct {
-	Title         string
-	Width, Height float32
-	Background    Color
+	Title          string
+	Width, Height  float32
+	Background     Color
+	CustomTitlebar bool
 }
 
 type Event struct {

@@ -13,19 +13,24 @@ import (
 
 // WindowOptions describes the initial client area, in device-independent pixels.
 type WindowOptions struct {
-	Title         string
-	Width, Height float32
-	Background    Color
+	Title          string
+	Width, Height  float32
+	Background     Color
+	CustomTitlebar bool
+	// Input can consume keyboard, character, pointer and scroll events on the UI thread.
+	Input func(*Context, InputEvent) bool
 }
 
 // Context gives a view access to the UI event loop. It is valid until Run returns.
 // Dispatch, Invalidate, and Quit are safe to call from background goroutines.
 type Context struct {
-	mu      sync.Mutex
-	pending []func()
-	closed  bool
-	wake    func()
-	quit    func()
+	mu            sync.Mutex
+	pending       []func()
+	closed        bool
+	wake          func()
+	quit          func()
+	windowAction  func(int)
+	width, height float32
 }
 
 // Dispatch schedules a state mutation on the UI thread and invalidates the view.
@@ -72,16 +77,39 @@ func (c *Context) drain() {
 	}
 }
 
+// Minimize minimizes the native window; safe to call from background goroutines.
+func (c *Context) Minimize() { c.performWindowAction(1) }
+
+// ToggleMaximize toggles native maximization (zoom on macOS).
+func (c *Context) ToggleMaximize() { c.performWindowAction(2) }
+func (c *Context) performWindowAction(action int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.closed && c.windowAction != nil {
+		c.windowAction(action)
+	}
+}
+
 type application struct {
 	context          *Context
 	view             func(*Context) *Element
 	frame            frame
 	pressed, focused string
+	input            func(*Context, InputEvent) bool
 }
 
 func (a *application) handle(event platform.Event) {
+	if a.input != nil && event.Kind != platform.Draw {
+		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers}) {
+			a.context.Invalidate()
+			return
+		}
+	}
 	switch event.Kind {
 	case platform.Draw:
+		a.context.mu.Lock()
+		a.context.width, a.context.height = event.X, event.Y
+		a.context.mu.Unlock()
 		a.context.drain()
 		a.frame.commands = a.frame.commands[:0]
 		a.frame.targets = a.frame.targets[:0]
@@ -180,11 +208,12 @@ func Run(options WindowOptions, view func(*Context) *Element) error {
 		return errors.New("godesktop: another window is already running")
 	}
 	defer running.Store(false)
-	cx := &Context{wake: platform.Wake, quit: platform.Quit}
+	cx := &Context{wake: platform.Wake, quit: platform.Quit, windowAction: platform.WindowAction}
 	defer func() { cx.mu.Lock(); cx.closed = true; cx.pending = nil; cx.mu.Unlock() }()
-	a := &application{context: cx, view: view, frame: frame{measure: platform.MeasureText, textCache: make(map[textKey]dimensions), measured: make(map[*Element]dimensions), keys: make(map[string]bool)}}
+	a := &application{context: cx, view: view, frame: frame{measure: platform.MeasureText, fontMeasure: platform.MeasureTextWithFont, textCache: make(map[textKey]dimensions), measured: make(map[*Element]dimensions), keys: make(map[string]bool)}}
 	var callbackErr error
-	err := platform.Run(platform.Options{Title: options.Title, Width: options.Width, Height: options.Height, Background: nativeColor(options.Background)}, func(e platform.Event) {
+	a.input = options.Input
+	err := platform.Run(platform.Options{Title: options.Title, Width: options.Width, Height: options.Height, Background: nativeColor(options.Background), CustomTitlebar: options.CustomTitlebar}, func(e platform.Event) {
 		if callbackErr != nil {
 			return
 		}

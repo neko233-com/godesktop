@@ -97,14 +97,35 @@ func (w Window) Resize(width, height int) error {
 
 func (w Window) Show(mode int) { user.NewProc("ShowWindow").Call(uintptr(w), uintptr(mode)) }
 
+// Raise brings the verified test window to the top without moving it.
+func (w Window) Raise() {
+	user.NewProc("SetWindowPos").Call(uintptr(w), 0, 0, 0, 0, 0, 0x1|0x2|0x10)
+	user.NewProc("SetForegroundWindow").Call(uintptr(w))
+}
+
 // Pixel reads a DIP location from the window's client DC after a paint barrier.
+
+// Pin temporarily keeps the owned test window above other applications.
+func (w Window) Pin() func() {
+	var pid uint32
+	user.NewProc("GetWindowThreadProcessId").Call(uintptr(w), uintptr(unsafe.Pointer(&pid)))
+	user.NewProc("SetWindowPos").Call(uintptr(w), ^uintptr(0), 0, 0, 0, 0, 0x1|0x2|0x10)
+	return func() {
+		var current uint32
+		user.NewProc("GetWindowThreadProcessId").Call(uintptr(w), uintptr(unsafe.Pointer(&current)))
+		if current == pid {
+			user.NewProc("SetWindowPos").Call(uintptr(w), ^uintptr(1), 0, 0, 0, 0, 0x1|0x2|0x10)
+		}
+	}
+}
+
 func (w Window) Pixel(x, y int) (uint32, error) {
+	scale := float64(w.DPI()) / 96
 	dc, _, err := user.NewProc("GetDC").Call(uintptr(w))
 	if dc == 0 {
 		return 0, fmt.Errorf("GetDC: %w", err)
 	}
 	defer user.NewProc("ReleaseDC").Call(uintptr(w), dc)
-	scale := float64(w.DPI()) / 96
 	value, _, err := gdi.NewProc("GetPixel").Call(dc, uintptr(math.Round(float64(x)*scale)), uintptr(math.Round(float64(y)*scale)))
 	if uint32(value) == 0xffffffff {
 		return 0, fmt.Errorf("GetPixel: %w", err)

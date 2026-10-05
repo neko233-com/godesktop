@@ -5,7 +5,7 @@
 
 用 **Go 1.27** 开发 Windows 和 macOS 原生桌面应用。以 [GPUI](https://github.com/zed-industries/zed/tree/main/crates/gpui) 的声明式视图、持久状态和 GPU 渲染思路为参考，目标是让 Go 开发者拥有可用于复杂桌面软件的工具链。
 
-应用逻辑、状态和布局使用 Go；小型 C ABI 桥接系统窗口、文本引擎和图形 API。没有 WebView、浏览器或 JavaScript 运行时，也不依赖 Rust。
+应用逻辑、状态和布局使用 Go；小型 C ABI 桥接系统窗口、文本引擎和图形 API。UI 不依赖 WebView、浏览器或 Rust。可选的 VSIX 扩展宿主使用独立 Node.js 进程，核心窗口不需要 Node.js。
 
 **当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。
 
@@ -95,9 +95,25 @@ go func() {
 - `Row` / `Column` 的顺序布局、尺寸、内边距、间距和按权重分配剩余空间的 `Grow`。
 - 文本、圆角背景、继承矩形裁剪、按钮、键盘焦点、指针捕获取消。
 - 按需重绘、UI 调度、批量传输命令、有界文本缓存。
+- `Flex` 零基准空间分配、独立横纵内边距、平台字体选择、矢量图标、容器点击。
+- 自定义标题栏拖动和窗口按钮；Unicode 字符、按键和滚轮输入回调。
+- 本地 VSIX 安装和 Node 扩展宿主，支持范围见 [扩展 API](docs/extensions.md)。
 - 无第三方 Go 模块依赖；不启用 cgo 时核心仍可测试，窗口启动返回明确错误。
 
 布局是基础线性布局：溢出裁剪，不实现完整 CSS flexbox、自动换行、滚动、最小/最大尺寸或自动缩小。尺寸为设备无关像素。视图每次重建元素树，应用状态由调用方持有；还没有 GPUI 的 Entity 系统。
+
+## gocode 子仓库
+
+[gocode](https://github.com/neko233-com/gocode) 是独立公开 Git 仓库，以 `godesktop/gocode` submodule 保存固定提交。它用本框架实现 VS Code Dark Modern 风格的原生工作区、文件标签、基础编辑/保存、扩展面板和命令执行。不是完整 VS Code，也没有宣称任意扩展兼容或像素完全一致。
+
+```sh
+git submodule update --init gocode
+cd gocode
+# Windows PowerShell: $env:CGO_ENABLED='1'
+CGO_ENABLED=1 go run . -workspace .
+```
+
+`gocode` 可单独 clone，其 `go.mod` 固定依赖已发布的本框架版本。开发两个仓库时，可在父目录用 `go work init . ./gocode` 建立本地工作区；不要提交 `go.work`。更新 submodule 前先在子仓库提交并推送，再在父仓库提交新的 gitlink。
 
 ## 验证与构建
 
