@@ -28,6 +28,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
       - name: Repeated race, native input, pixel, coverage, fuzz and EXE checks
         shell: powershell
         run: ./scripts/test-windows-amd64.ps1
@@ -59,6 +62,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
       - name: Test with race detector
         run: go test -race -shuffle=on -count=3 ./...
       - name: Vet
@@ -89,6 +95,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '24'
       - name: Formatting
         shell: bash
         run: |
