@@ -6,7 +6,7 @@
 
 - [x] Go 1.27 模块、公开仓库、MIT 许可证。
 - [x] Go 声明式元素、线性布局、状态调度与事件回调。
-- [x] Windows Win32 / Direct2D / DirectWrite 后端。
+- [x] Windows Win32 / Direct3D 12 / DirectWrite 后端。
 - [x] macOS AppKit / Metal / CoreText 后端。
 - [x] 计数器示例、Go 核心测试、race 检查、原生 smoke 工作流。
 - [x] gocode 独立公开 submodule、原生编辑器工作区、基础字符编辑、本地 VSIX 命令宿主。
@@ -30,7 +30,7 @@
 
 - [x] Metal 三缓冲异步提交环，移除每帧同步等待；原生压力场景检查完成计数、缓冲复用和合批。
 - [x] 统一 80 字节 GPU 实例、Metal 顶点生成、着色器裁剪与相邻纹理批次；文本缓存增加字节限制。
-- [ ] Windows Direct3D 12 显式队列、flip model swapchain、三帧 fence 和自定义 HLSL 绘制。
+- [x] Windows Direct3D 12 显式队列、flip model swapchain、三帧 fence 和自定义 HLSL 绘制。
 - [ ] 两平台共享字形图集，按 glyph/font/size/scale 缓存，避免按整行创建纹理。
 - [ ] 明确的帧调度与动画时钟、增量失效、布局缓存。
 - [ ] 虚拟列表与编辑器布局接口。

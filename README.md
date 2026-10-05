@@ -7,13 +7,13 @@
 
 应用逻辑、状态和布局使用 Go；小型 C ABI 桥接系统窗口、文本引擎和图形 API。UI 不依赖 WebView、浏览器或 Rust。可选的 VSIX 扩展宿主使用独立 Node.js 进程，核心窗口不需要 Node.js。
 
-**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)；Windows 离屏 D3D12 管线已能运行自定义 DXIL 并读回像素，默认窗口仍使用 Direct2D。
+**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)；Windows 默认窗口使用 D3D12/DXIL、DXGI flip swapchain 和 DirectWrite R8 字形图集。
 
 ## 平台
 
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
 | --- | --- | --- | --- | --- |
-| Windows 10+ | Win32 | Direct2D，系统选择硬件加速或软件回退 | DirectWrite | amd64 |
+| Windows 10+ | Win32 | Direct3D 12 / SM6，三帧 fence、DXGI 显示同步；无合适硬件时 WARP | DirectWrite，共享 R8 字形图集 | amd64 |
 | macOS 13+ | AppKit | Metal，实例化合批、三帧异步环；14+ CAMetalDisplayLink | CoreText，缓存文本纹理 | arm64 / amd64 |
 
 Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/doc/go1.27)。macOS 必须具备 Metal 设备。Linux 仅能构建和测试可移植核心；调用 `Run` 会明确返回不支持错误。
@@ -22,7 +22,7 @@ Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/d
 
 需要 Go 1.27+ 和 `CGO_ENABLED=1`。Go 1.27 已发布，见 [Go 官方公告](https://go.dev/blog/go1.27)。
 
-Windows：安装带 `gcc` / `g++` 的 64 位 MinGW-w64（例如 WinLibs 或 MSYS2 UCRT64），并将其 `bin` 目录加入 `PATH`。仅安装 Visual Studio 的 `cl.exe` 不够。原生桥接静态链接 MinGW 支持库；系统 Direct2D/DirectWrite DLL 由 Windows 提供。
+Windows：安装带 `gcc` / `g++` 的 64 位 MinGW-w64（例如 WinLibs 或 MSYS2 UCRT64），并将其 `bin` 目录加入 `PATH`。仅安装 Visual Studio 的 `cl.exe` 不够。原生桥接静态链接 MinGW 支持库，使用系统 D3D12/DXGI/DirectWrite DLL；需要支持 Shader Model 6.0 的硬件或系统 WARP，运行时不需要 DXC。
 
 ```powershell
 git clone https://github.com/neko233-com/godesktop.git
@@ -142,8 +142,10 @@ CI 在 Windows Server 2022 / 2025 上运行完整 amd64 检查，macOS arm64 / a
 
 [架构](docs/architecture.md) · [现代绘制验收](docs/rendering-modernization.md) · [路线图](docs/roadmap.md) · [贡献说明](CONTRIBUTING.md)
 
-以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。Metal 使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制不调用 `waitUntilCompleted`，提交环饱和时延后重绘。完整字形图集、Windows Direct3D 12 后端和大列表虚拟化仍需实现。
+以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。两种后端使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制遇到在途资源时延后重绘。Windows 已按字形缓存 R8 覆盖率；Metal 字形图集、设备丢失恢复和大列表虚拟化仍需实现。
 
 macOS 可运行 `CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal`，检查真实 GPU 提交、三组缓冲复用、2048 个圆角矩形和 32 个共享文本命令的合批及上传量，并输出 CPU 帧编码 P50/P95。计数来自原生渲染器；没有 GPUI 同机对比，也不把 CI 虚拟环境中的数字当作真实设备性能保证。布局 benchmark 只测 Go 核心。
+
+Windows 设置 `CGO_ENABLED=1` 后可运行 `go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas`。该测试让文字每帧变化，检查字形复用、图集字节上限、实际 GPU 完成、空闲暂停与唤醒。`-glyph-eviction` 另行验证大字形触发缓存淘汰时的资源生命周期。
 
 MIT License。GPUI 是设计参考，本项目未复制其实现代码。

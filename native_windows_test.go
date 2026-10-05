@@ -156,14 +156,23 @@ func click(t *testing.T, window winprobe.Window, x, y int) {
 
 func assertPixel(t *testing.T, window winprobe.Window, x, y int, want uint32) {
 	t.Helper()
-	mustNative(t, window.Send(0x0f, 0, 0)) // WM_PAINT is synchronous, including Direct2D EndDraw.
-	mustNative(t, window.Send(0, 0, 0))
-	got, err := window.Pixel(x, y)
-	mustNative(t, err)
-	for _, shift := range []uint{0, 8, 16} {
-		if math.Abs(float64(int(got>>shift&255)-int(want>>shift&255))) > 3 {
-			t.Fatalf("pixel (%d,%d): #%06x want #%06x (DPI %d)", x, y, got, want, window.DPI())
+	mustNative(t, window.Send(0x0f, 0, 0)) // Request one asynchronously paced GPU frame.
+	deadline := time.Now().Add(3 * time.Second)
+	var got uint32
+	var err error
+	for {
+		got, err = window.Pixel(x, y)
+		matches := err == nil
+		for _, shift := range []uint{0, 8, 16} {
+			matches = matches && math.Abs(float64(int(got>>shift&255)-int(want>>shift&255))) <= 3
 		}
+		if matches {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("GPU pixel (%d,%d): #%06x want #%06x (DPI %d); %v", x, y, got, want, window.DPI(), err)
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 }
 
@@ -184,6 +193,54 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Run("64bitPEAndSystemDependencies", func(t *testing.T) { mustNative(t, winprobe.ValidateAMD64PE(executable)) })
+	t.Run("UnicodeGlyphPixelsAndClipping", func(t *testing.T) {
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		restore := winprobe.Awareness()
+		defer restore()
+		p := startNative(t, executable, coverDir, "glyphs", 1)
+		p.await(t, func(r testprotocol.Report) bool { return r.Event == "frame" })
+		w := fixtureWindow(t, p, 0)
+		assertPixel(t, w, 500, 10, 0x102030)
+		captured, err := w.Capture()
+		mustNative(t, err)
+		scale := float64(w.DPI()) / 96
+		physical := func(dip int) int { return int(math.Round(float64(dip) * scale)) }
+		ink := func(x, y int) bool {
+			pixel := captured.RGBAAt(x, y)
+			return pixel.R > 64 && pixel.G > 64 && pixel.B > 64
+		}
+		for row := 0; row < 7; row++ {
+			count := 0
+			for y := physical(16 + row*48); y < physical(16+(row+1)*48); y++ {
+				for x := physical(16); x < physical(200); x++ {
+					if ink(x, y) {
+						count++
+						if row == 6 && x >= physical(56) {
+							t.Fatalf("glyph escaped logical clip at %d,%d", x, y)
+						}
+					}
+				}
+			}
+			if count < 10 {
+				t.Fatalf("Unicode row %d has only %d GPU ink pixels", row, count)
+			}
+		}
+		// Canonically equivalent acute accents must share shaped glyph placement.
+		for y := physical(16); y < physical(64); y++ {
+			for x := physical(16); x < physical(60); x++ {
+				if captured.RGBAAt(x, y) != captured.RGBAAt(x, y+physical(48)) {
+					t.Fatalf("decomposed/composed accent differs at %d,%d", x, y)
+				}
+			}
+		}
+		mustNative(t, w.Close())
+		closed := p.await(t, func(r testprotocol.Report) bool { return r.Event == "closed" })
+		if closed.Error != "" || closed.Renderer.Backend != "direct3d12" || closed.Renderer.GlyphRasterizations < 10 || closed.Renderer.GlyphAtlasBytes != 1024*1024 {
+			t.Fatalf("Unicode atlas shutdown: %+v", closed)
+		}
+		p.exit(t)
+	})
 	t.Run("customWindowFitsDesktopAndKeepsFooterVisible", func(t *testing.T) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()

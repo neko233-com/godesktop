@@ -4,7 +4,6 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <windowsx.h>
-#include <d2d1.h>
 #include <dwrite.h>
 #include <atomic>
 #include <map>
@@ -13,14 +12,17 @@
 #include <cstdio>
 #include <tuple>
 #include <algorithm>
+#include <mutex>
 #include "bridge.h"
-#include "gpu_scene.h"
+#include "dx12_surface.h"
 
 namespace {
 constexpr UINT wake_message = WM_APP + 1;
 constexpr UINT action_message = WM_APP + 2;
 std::atomic<HWND> active_window{nullptr};
 std::atomic<uint64_t> rendered_frames{0};
+std::mutex stats_mutex;
+GDRenderStats latest_stats{};
 
 template<class T> void release(T *&value) { if (value) { value->Release(); value=nullptr; } }
 std::wstring wide(const char *text, size_t length) {
@@ -40,27 +42,41 @@ int metric_for_dpi(int index,HWND window) {
     auto fn=reinterpret_cast<GetMetric>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetSystemMetricsForDpi"));
     return fn?fn(index,static_cast<UINT>(dpi(window))):MulDiv(GetSystemMetrics(index),static_cast<int>(dpi(window)),96);
 }
-D2D1_COLOR_F color(GDColor value) { return D2D1::ColorF(value.r,value.g,value.b,value.a); }
-D2D1_RECT_F rectangle(GDRect value) { return D2D1::RectF(value.x,value.y,value.x+value.w,value.y+value.h); }
-
 struct Window {
     HWND handle=nullptr;
-    ID2D1Factory *factory=nullptr;
     IDWriteFactory *text_factory=nullptr;
-    ID2D1HwndRenderTarget *target=nullptr;
-    ID2D1SolidColorBrush *brush=nullptr;
+    gd_dx12::Surface surface;
+    gd_dx12::GlyphAtlas atlas;
+    gd_dx12::Scene scene;
     GDColor background{};
     bool custom_titlebar=false;
     unsigned high_surrogate=0;
     bool readback=false;
+    bool dirty=true,idle=false;
     std::vector<GDCommand> commands;
     std::string text;
     std::map<std::tuple<std::string,float,std::string>,IDWriteTextLayout *> layouts;
     std::string error;
 
-    ~Window() { discard_target(); clear_text(); release(text_factory); release(factory); }
+    ~Window() { surface.finish(); clear_text(); release(text_factory); }
     void clear_text() { for(auto &item:layouts) release(item.second); layouts.clear(); }
-    void discard_target() { release(brush); release(target); }
+    void publish_stats() {
+        surface.stats.glyph_rasterizations=atlas.rasterized;
+        surface.stats.glyph_cache_hits=atlas.hits;
+        surface.stats.glyph_cache_entries=atlas.entries();
+        surface.stats.glyph_atlas_pages=atlas.accounting->pages;
+        surface.stats.glyph_atlas_bytes=atlas.accounting->pages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
+        surface.stats.glyph_atlas_peak_bytes=atlas.accounting->peakPages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
+        surface.stats.glyph_atlas_epochs=atlas.epochs;
+        std::lock_guard<std::mutex> lock(stats_mutex);
+        latest_stats=surface.stats;
+        rendered_frames.store(surface.stats.completed);
+    }
+    void request_frame() {
+        surface.stats.frame_requests++;
+        if(dirty) surface.stats.coalesced_requests++;
+        dirty=true; idle=false;
+    }
     void fail(const char *operation,HRESULT result) {
         char message[192];
         std::snprintf(message,sizeof(message),"%s failed (HRESULT 0x%08lx)",operation,static_cast<unsigned long>(result));
@@ -86,46 +102,73 @@ struct Window {
         layouts.emplace(std::move(key),result);
         return result;
     }
-    bool ensure_target() {
-        if(target) return true;
-        RECT client{}; GetClientRect(handle,&client);
-        float scale=dpi(handle);
-        auto properties=D2D1::RenderTargetProperties();
-        if(readback) {
-            properties.usage=D2D1_RENDER_TARGET_USAGE_GDI_COMPATIBLE;
-            properties.pixelFormat=D2D1::PixelFormat(DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_IGNORE);
+    bool build_scene(float scale) {
+        for(unsigned attempt=0;attempt<2;attempt++) {
+            scene.reset(atlas.white());
+            for(const auto &cmd:commands) {
+                if(cmd.kind==4 || cmd.clip.w<=0 || cmd.clip.h<=0) continue;
+                if(cmd.kind==2) {
+                    if(!cmd.text_length) continue;
+                    auto shaped=layout(text.data()+cmd.text_offset,cmd.text_length,cmd.font_size,text.data()+cmd.font_offset,cmd.font_length);
+                    if(!shaped) return false;
+                    gd_dx12::TextRenderer renderer(text_factory,atlas,scene,cmd,scale);
+                    HRESULT hr=shaped->Draw(nullptr,&renderer,cmd.bounds.x,cmd.bounds.y);
+                    if(FAILED(hr)) {
+                        if(atlas.full) break;
+                        error=atlas.error.empty()?"DirectWrite atlas drawing failed":atlas.error;
+                        return false;
+                    }
+                } else scene.append(gd_gpu_instance(&cmd));
+            }
+            if(!atlas.full) return true;
+            atlas.clear();
         }
-        properties.dpiX=properties.dpiY=scale;
-        auto hwnd_properties=D2D1::HwndRenderTargetProperties(handle,D2D1::SizeU(client.right,client.bottom),readback?D2D1_PRESENT_OPTIONS_RETAIN_CONTENTS:D2D1_PRESENT_OPTIONS_NONE);
-        HRESULT hr=factory->CreateHwndRenderTarget(properties,hwnd_properties,&target);
-        if(SUCCEEDED(hr)) hr=target->CreateSolidColorBrush(D2D1::ColorF(0,0,0,1),&brush);
-        if(FAILED(hr)) { discard_target(); fail("CreateHwndRenderTarget",hr); return false; }
-        return true;
+        error="One frame exceeds the 16 MiB / 16384 glyph atlas budget";
+        return false;
     }
-    void draw() {
+    bool draw() {
         RECT client{}; GetClientRect(handle,&client);
-        if(client.right==0 || client.bottom==0) return;
-        if(!ensure_target()) return;
+        if(client.right==0 || client.bottom==0) return true;
+        uint64_t started=gd_dx12::monotonic_nanos();
         float scale=dpi(handle)/96.0f;
         gd_go_event(1,client.right/scale,client.bottom/scale,0,0);
-        if(!error.empty()) return;
-        target->BeginDraw();
-        target->Clear(color(background));
-        for(const auto &cmd:commands) {
-            target->PushAxisAlignedClip(rectangle(cmd.clip),D2D1_ANTIALIAS_MODE_PER_PRIMITIVE);
-            brush->SetColor(color(cmd.color));
-            if(cmd.kind==1) {
-                target->FillRoundedRectangle(D2D1::RoundedRect(rectangle(cmd.bounds),cmd.radius,cmd.radius),brush);
-            } else if(cmd.kind==2 && cmd.text_length) {
-                auto shaped=layout(text.data()+cmd.text_offset,cmd.text_length,cmd.font_size,text.data()+cmd.font_offset,cmd.font_length);
-                if(shaped) target->DrawTextLayout(D2D1::Point2F(cmd.bounds.x,cmd.bounds.y),shaped,brush);
-            } else if(cmd.kind==3) target->DrawLine(D2D1::Point2F(cmd.bounds.x,cmd.bounds.y),D2D1::Point2F(cmd.bounds.x+cmd.bounds.w,cmd.bounds.y+cmd.bounds.h),brush,cmd.radius);
-            target->PopAxisAlignedClip();
+        if(!error.empty() || !build_scene(scale)) return false;
+        if(!surface.submit(scene,client.right/scale,client.bottom/scale,background,started,gd_dx12::monotonic_nanos())) { error=surface.error; return false; }
+        publish_stats(); return true;
+    }
+    bool event_loop() {
+        for(;;) {
+            MSG message{};
+            while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+                if(message.message==WM_QUIT) {
+                    bool finished=surface.finish();
+                    publish_stats();
+                    if(!finished) error=surface.error.empty()?"GPU window shutdown failed":surface.error;
+                    return finished;
+                }
+                TranslateMessage(&message); DispatchMessageW(&message);
+            }
+            if(!surface.poll()) { error=surface.error; return false; }
+            publish_stats();
+            RECT client{}; GetClientRect(handle,&client);
+            bool visible=IsWindowVisible(handle) && !IsIconic(handle) && client.right>0 && client.bottom>0;
+            if(dirty && visible) {
+                if(!surface.resize(client.right,client.bottom)) { error=surface.error; return false; }
+                if(surface.ready()) {
+                    dirty=false;
+                    if(!draw()) return false;
+                    continue;
+                }
+            }
+            if(!dirty && !idle) { idle=true; surface.stats.idle_pauses++; publish_stats(); }
+            HANDLE handles[2]{}; unsigned count=0,clockIndex=UINT_MAX;
+            if(dirty && visible) if(auto clock=surface.frameClock()) { clockIndex=count; handles[count++]=clock; }
+            if(auto completion=surface.pendingCompletion()) handles[count++]=completion;
+            if(!surface.error.empty()) { error=surface.error; return false; }
+            DWORD result=MsgWaitForMultipleObjectsEx(count,handles,INFINITE,QS_ALLINPUT,MWMO_INPUTAVAILABLE);
+            if(result==WAIT_FAILED) { error="GPU/message wait failed"; return false; }
+            if(clockIndex!=UINT_MAX && result==WAIT_OBJECT_0+clockIndex) surface.clockSignalled();
         }
-        HRESULT hr=target->EndDraw();
-        if(hr==D2DERR_RECREATE_TARGET) { discard_target(); InvalidateRect(handle,nullptr,FALSE); }
-        else if(FAILED(hr)) fail("EndDraw",hr);
-        else rendered_frames.fetch_add(1);
     }
 
 };
@@ -174,18 +217,13 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         }
         break;
     case WM_PAINT: {
-        PAINTSTRUCT paint{}; BeginPaint(handle,&paint); window->draw(); EndPaint(handle,&paint); return 0;
+        PAINTSTRUCT paint{}; BeginPaint(handle,&paint); window->request_frame(); EndPaint(handle,&paint); return 0;
     }
     case WM_ERASEBKGND: return 1;
     case WM_SIZE:
-        if(window->target) {
-            HRESULT hr=window->target->Resize(D2D1::SizeU(LOWORD(lparam),HIWORD(lparam)));
-            if(FAILED(hr)) window->discard_target();
-        }
         InvalidateRect(handle,nullptr,FALSE); return 0;
     case WM_DPICHANGED: {
         auto suggested=reinterpret_cast<RECT *>(lparam);
-        window->discard_target();
         SetWindowPos(handle,nullptr,suggested->left,suggested->top,suggested->right-suggested->left,suggested->bottom-suggested->top,SWP_NOZORDER|SWP_NOACTIVATE);
         InvalidateRect(handle,nullptr,FALSE); return 0;
     }
@@ -226,7 +264,7 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
             }
         }
         break;
-    case wake_message: InvalidateRect(handle,nullptr,FALSE); return 0;
+    case wake_message: window->request_frame(); return 0;
     case action_message:
         if(wparam==1) ShowWindow(handle,SW_MINIMIZE);
         if(wparam==2) ShowWindow(handle,IsZoomed(handle)?SW_RESTORE:SW_MAXIMIZE);
@@ -243,6 +281,7 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
     static std::string last_error;
     last_error.clear();
     rendered_frames.store(0);
+    { std::lock_guard<std::mutex> lock(stats_mutex); latest_stats={}; latest_stats.backend=3; latest_stats.frame_slots=3; latest_stats.frame_clock=3; }
     HRESULT initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
     if(FAILED(initialized)) return "CoInitializeEx failed: the UI thread must use a single-threaded COM apartment";
     {
@@ -251,9 +290,8 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
         window.custom_titlebar=custom_titlebar!=0;
         wchar_t readback_option[2]{};
         window.readback=GetEnvironmentVariableW(L"GODESKTOP_READBACK",readback_option,2)>0 && readback_option[0]==L'1';
-        HRESULT hr=D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED,&window.factory);
-        if(SUCCEEDED(hr)) hr=DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),reinterpret_cast<IUnknown **>(&window.text_factory));
-        if(FAILED(hr)) { window.fail("Initialize Direct2D/DirectWrite",hr); }
+        HRESULT hr=DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),reinterpret_cast<IUnknown **>(&window.text_factory));
+        if(FAILED(hr)) { window.fail("Initialize DirectWrite",hr); }
         else {
             using SetAwareness=BOOL(WINAPI *)(HANDLE);
             auto set_awareness=reinterpret_cast<SetAwareness>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"SetProcessDpiAwarenessContext"));
@@ -291,13 +329,22 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                 if(!handle) window.error="CreateWindowExW failed";
                 else {
                     active_window.store(handle);
-                    ShowWindow(handle,SW_SHOW); UpdateWindow(handle);
-                    if(window.readback) SetWindowPos(handle,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
-                    MSG message{};
-                    BOOL result;
-                    while((result=GetMessageW(&message,nullptr,0,0))>0) { TranslateMessage(&message); DispatchMessageW(&message); }
-                    if(result==-1) window.error="GetMessageW failed";
+                    RECT client{}; GetClientRect(handle,&client);
+                    wchar_t adapter[32]{},debug[2]{};
+                    GetEnvironmentVariableW(L"GODESKTOP_GPU_ADAPTER",adapter,32);
+                    GetEnvironmentVariableW(L"GODESKTOP_GPU_DEBUG",debug,2);
+                    if(!window.surface.open(handle,client.right,client.bottom,window.readback,wcscmp(adapter,L"hardware")==0,wcscmp(adapter,L"warp")==0,debug[0]==L'1')) window.error=window.surface.error;
+                    else {
+                        ShowWindow(handle,SW_SHOW); UpdateWindow(handle);
+                        if(window.readback) SetWindowPos(handle,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
+                        window.event_loop();
+                    }
+                    RemovePropW(handle,L"godesktop.backend");
                     if(IsWindow(handle)) DestroyWindow(handle);
+                    // An initialization/rendering error can leave the WM_QUIT
+                    // posted by our DestroyWindow after the loop has returned.
+                    MSG quit{};
+                    while(PeekMessageW(&quit,nullptr,WM_QUIT,WM_QUIT,PM_REMOVE)) {}
                 }
                 active_window.store(nullptr);
                 current=nullptr;
@@ -326,11 +373,7 @@ extern "C" void gd_wake() { if(auto handle=active_window.load()) PostMessageW(ha
 extern "C" void gd_quit() { if(auto handle=active_window.load()) PostMessageW(handle,WM_CLOSE,0,0); }
 extern "C" void gd_window_action(int action) { if(auto handle=active_window.load()) PostMessageW(handle,action_message,action,0); }
 extern "C" GDRenderStats gd_render_stats(void) {
-    GDRenderStats result{};
-    result.backend=1; result.frame_slots=1;
-    result.submitted=rendered_frames.load();
-    // Direct2D has no explicit completion fence in this legacy path. Do not
-    // report submitted work as GPU-completed work.
-    return result;
+    std::lock_guard<std::mutex> lock(stats_mutex);
+    return latest_stats;
 }
 extern "C" uint64_t gd_rendered_frames() { return rendered_frames.load(); }

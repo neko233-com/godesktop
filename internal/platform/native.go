@@ -128,5 +128,8 @@ func RendererStats() RenderStats {
 		SceneTimeNanos: uint64(s.scene_nanos), AcquireTimeNanos: uint64(s.acquire_nanos), EncodeTimeNanos: uint64(s.encode_nanos),
 		FrameRequests: uint64(s.frame_requests), FrameTicks: uint64(s.frame_ticks),
 		CoalescedRequests: uint64(s.coalesced_requests), IdlePauses: uint64(s.idle_pauses),
+		GlyphRasterizations: uint64(s.glyph_rasterizations), GlyphCacheHits: uint64(s.glyph_cache_hits), GlyphCacheEntries: uint64(s.glyph_cache_entries),
+		GlyphAtlasPages: uint64(s.glyph_atlas_pages), GlyphAtlasBytes: uint64(s.glyph_atlas_bytes), GlyphAtlasPeakBytes: uint64(s.glyph_atlas_peak_bytes),
+		GlyphAtlasEpochs: uint64(s.glyph_atlas_epochs), GlyphUploadedBytes: uint64(s.glyph_uploaded_bytes),
 	}
 }

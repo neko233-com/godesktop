@@ -16,7 +16,7 @@ powershell -ExecutionPolicy Bypass -File scripts/test-windows-amd64.ps1
 | 随机测试 | 有限矩形的交集性质；随机元素树的裁剪范围、可点击区域有效性 |
 | C ABI | C/C++ 编译时验证 float/int、矩形、颜色、命令尺寸与文本偏移一致 |
 | Windows 原生 | 独立进程创建真实 HWND；通过 Win32 消息检查点击、跨按钮/窗口外释放、失焦取消、Tab、Enter、Space、按键重复过滤、禁用按钮 |
-| Direct2D | 实际客户端像素检查不透明颜色、半透明混合和父级裁剪；Unicode/组合字符/emoji 的平台文字测量 |
+| Direct3D 12 窗口 | 从 fence 完成的 swapchain GPU copy 检查不透明颜色、半透明混合和裁剪；核对 HWND 的 D3D12 后端；中文、音标、单色 emoji、阿拉伯文可见字形与文字裁剪；分解/预组合音标像素相同 |
 | 生命周期 | 同一进程三次启动和关闭窗口；关闭后 Context 拒绝调度；窗口缩放、最小化/恢复、空视图、重复键、嵌套 Run 拒绝、视图/点击/调度 panic 的错误返回 |
 | 分发 | PE Machine=AMD64、PE32+；DLL 导入仅来自系统；普通 EXE 和 `-H=windowsgui` EXE 均完成两次原生绘制与状态调度 |
 
@@ -47,7 +47,7 @@ CI 使用 Windows Server 2022 和 2025 的 amd64 runner 执行上述完整脚本
 
 两种 Mac 架构还运行 `internal/renderstress`：持续绘制至少 90 个实际完成的 GPU 帧，检查三个上传缓冲都被使用、在途帧不超过三、正常提交没有显式缓冲等待、退出时所有提交完成。场景包含 2048 个圆角矩形和 32 个共享文本命令，要求最多两次 draw call、每实例 80 字节上传，并保存原生 CPU 编码 P50/P95。该验证证明执行了新的 Metal 实例化/异步路径，不证明全部像素正确或 GPUI 同机性能；后续 GPU 读回与共享字形图集仍需覆盖。
 
-Windows CI 使用 `scripts/validate-shaders.ps1` 检查预编译 DXIL 与 HLSL/实例 ABI 一致。固定微软 DXC 版本和下载 SHA256，避免应用构建依赖网络或运行时编译器。该步骤只是 Direct3D 12 后端的编译基础；Windows 当前默认路径仍是 Direct2D，不将此编译成功当作现代后端执行成功。
+Windows CI 使用 `scripts/validate-shaders.ps1` 检查预编译 DXIL 与 HLSL/实例 ABI 一致。固定微软 DXC 版本和下载 SHA256，避免应用构建依赖网络或运行时编译器。默认 HWND 已使用 D3D12；CI 分别验证默认适配器和 WARP 的实际窗口压力、字形复用、DXGI 节奏、空闲唤醒以及 WARP 原生输入/像素。PE 检查要求 D3D12/DXGI/DirectWrite 系统导入并拒绝 Direct2D 依赖。
 
 工作区新增测试覆盖零基准 Flex、字体缓存隔离、矢量图标、标题拖动区域和窗口按钮生命周期。扩展测试通过真实 VSIX/Node 进程检查安装路径约束、大小限制、版本排序、并发命令、输出/文档事件、未知 API 错误和死循环超时。Node.js 是扩展测试的必需工具，CI 显式安装。
 

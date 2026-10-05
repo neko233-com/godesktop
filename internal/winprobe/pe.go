@@ -23,10 +23,7 @@ func ValidateAMD64PE(path string) error {
 	if err != nil {
 		return err
 	}
-	allowed := map[string]bool{"d2d1.dll": true, "dwrite.dll": true, "kernel32.dll": true, "user32.dll": true, "gdi32.dll": true, "ole32.dll": true, "advapi32.dll": true, "shell32.dll": true, "ntdll.dll": true, "msvcrt.dll": true, "ucrtbase.dll": true}
-	// D3D12 acceptance probes share the native package. These system imports
-	// do not prove that the window's legacy Direct2D path has been replaced.
-	allowed["d3d12.dll"], allowed["dxgi.dll"] = true, true
+	allowed := map[string]bool{"d3d12.dll": true, "dxgi.dll": true, "dwrite.dll": true, "kernel32.dll": true, "user32.dll": true, "gdi32.dll": true, "ole32.dll": true, "advapi32.dll": true, "shell32.dll": true, "ntdll.dll": true, "msvcrt.dll": true, "ucrtbase.dll": true}
 	seen := make(map[string]bool)
 	for _, symbol := range symbols {
 		_, library, found := strings.Cut(symbol, ":")
@@ -39,8 +36,8 @@ func ValidateAMD64PE(path string) error {
 		}
 		seen[library] = true
 	}
-	if !seen["d2d1.dll"] || !seen["dwrite.dll"] {
-		return fmt.Errorf("native Direct2D/DirectWrite imports are missing")
+	if !seen["d3d12.dll"] || !seen["dxgi.dll"] || !seen["dwrite.dll"] {
+		return fmt.Errorf("native Direct3D 12/DXGI/DirectWrite imports are missing")
 	}
 	return nil
 }

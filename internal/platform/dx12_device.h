@@ -1,8 +1,8 @@
 #ifndef GODESKTOP_DX12_DEVICE_H
 #define GODESKTOP_DX12_DEVICE_H
 
-// Original Direct3D 12 pipeline used by GPU acceptance tests. Window swapchain
-// integration is a separate, unfinished step; this is never a Direct2D fallback.
+// Original Direct3D 12 device/pipeline shared by the window renderer and GPU
+// acceptance fixture. The fixture adds independent offscreen frame resources.
 #include <d3d12.h>
 #include <d3d12sdklayers.h>
 #include <dxgi1_6.h>
@@ -179,7 +179,20 @@ public:
         if(done<value) { error="GPU fence event signalled before completion"; return false; }
         return true;
     }
-    bool open(bool hardwareOnly,bool warpOnly,bool debug,bool requireDebug) {
+    ID3D12Device *native() const { return device; }
+    ID3D12CommandQueue *commands() const { return queue; }
+    IDXGIFactory4 *dxgi() const { return factory; }
+    ID3D12RootSignature *signature() const { return root; }
+    ID3D12PipelineState *state() const { return pipeline; }
+    ID3D12Fence *completion() const { return fence; }
+    HANDLE completionEvent() const { return event; }
+    UINT64 timestampFrequency() const { return frequency; }
+    bool signal(UINT64 *value) {
+        *value=++sequence; closed=false;
+        return ok(queue->Signal(fence,*value),"Signal submission");
+    }
+    bool watch(UINT64 value) { return ok(fence->SetEventOnCompletion(value,event),"Watch GPU completion"); }
+    bool open(bool hardwareOnly,bool warpOnly,bool debug,bool requireDebug,bool fixture=true) {
         if(debug || requireDebug) {
             ID3D12Debug *layer=nullptr;
             HRESULT hr=D3D12GetDebugInterface(IID_PPV_ARGS(&layer));
@@ -220,6 +233,7 @@ public:
         event=CreateEventW(nullptr,FALSE,FALSE,nullptr);
         if(!event) { error="CreateEventW failed"; return false; }
         if(!make_pipeline()) return false;
+        if(!fixture) return true;
         D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; heap.NumDescriptors=slots;
         if(!ok(device->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&rtvs)),"Create RTV heap")) return false;
         heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=1; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;

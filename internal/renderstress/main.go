@@ -34,10 +34,15 @@ func run() error {
 	frames := flag.Uint64("frames", 90, "minimum completed native GPU frames")
 	requireBackend := flag.String("require-backend", "metal", "required renderer; refuses a different rendering path")
 	requireClock := flag.String("require-frame-clock", "cametaldisplaylink", "required native frame clock")
+	glyphAtlas := flag.Bool("glyph-atlas", false, "vary text every frame and require bounded per-glyph reuse")
+	glyphEviction := flag.Bool("glyph-eviction", false, "vary large font sizes to exercise atlas eviction and GPU lifetime")
 	output := flag.String("output", "", "optional JSON report filename")
 	flag.Parse()
 	if *frames < 6 || *frames > 10000 {
 		return errors.New("frames must be between 6 and 10000")
+	}
+	if *glyphAtlas && *glyphEviction {
+		return errors.New("choose glyph reuse or glyph eviction validation")
 	}
 	watchdog := time.AfterFunc(30*time.Second, func() { fmt.Fprintln(os.Stderr, "GPU stress watchdog expired"); os.Exit(1) })
 	defer watchdog.Stop()
@@ -99,7 +104,15 @@ func run() error {
 			}
 			// Shared shaped text, varied clip regions and geometry interleaved with
 			// it must remain in painter order while reusing the same texture batch.
-			cells = append(cells, ui.Text("GPU").Width(50).Height(16).FontSize(12))
+			label := "GPU"
+			fontSize := float32(12)
+			if *glyphAtlas {
+				label = fmt.Sprintf("GPU %06d", stats.Submitted%1000000)
+			}
+			if *glyphEviction {
+				label, fontSize = "GPU 0123456789", float32(300+stats.Submitted%90)
+			}
+			cells = append(cells, ui.Text(label).Width(80).Height(16).FontSize(fontSize))
 			rows = append(rows, ui.Row(cells...).Height(16).Gap(1))
 		}
 		return ui.Column(rows...).Padding(20).Gap(2)
@@ -117,7 +130,7 @@ func run() error {
 	if stats.FrameSlots != 3 || stats.UsedSlotsMask != 7 || stats.MaxInFlight == 0 || stats.MaxInFlight > 3 || stats.BufferWaits != 0 {
 		return fmt.Errorf("three-slot asynchronous ownership failed: %+v", stats)
 	}
-	if stats.Instances < 2000 || stats.DrawCalls == 0 || stats.DrawCalls > 2 || stats.UploadedBytes != stats.Instances*80 {
+	if stats.Instances < 2000 || stats.DrawCalls == 0 || (!*glyphEviction && stats.DrawCalls > 2) || stats.UploadedBytes != stats.Instances*80 {
 		return fmt.Errorf("instancing/batching failed: %+v", stats)
 	}
 	if len(samples) < 3 || percentile(samples, 95) == 0 {
@@ -132,6 +145,12 @@ func run() error {
 	if stats.Submitted <= idleAfter.Submitted || stats.FrameRequests <= idleAfter.FrameRequests || stats.CoalescedRequests < *frames {
 		return fmt.Errorf("frame coalescing or wake after idle failed: %+v", stats)
 	}
+	if *glyphAtlas && (stats.GlyphRasterizations < 5 || stats.GlyphRasterizations > 14 || stats.GlyphCacheEntries != stats.GlyphRasterizations || stats.GlyphCacheHits < *frames*32*3 || stats.GlyphAtlasPages != 1 || stats.GlyphAtlasBytes != 1024*1024 || stats.GlyphAtlasPeakBytes != 1024*1024 || stats.GlyphAtlasEpochs != 0 || stats.GlyphUploadedBytes == 0 || stats.GlyphUploadedBytes > 10*1024*1024) {
+		return fmt.Errorf("changing text did not reuse a bounded glyph atlas: %+v", stats)
+	}
+	if *glyphEviction && (stats.GlyphAtlasEpochs == 0 || stats.GlyphRasterizations < *frames*10 || stats.GlyphCacheHits < *frames*32*3 || stats.GlyphCacheEntries > 16384 || stats.GlyphAtlasPages > 16 || stats.GlyphAtlasBytes > 16*1024*1024 || stats.GlyphAtlasPeakBytes > 64*1024*1024 || stats.GlyphUploadedBytes < 16*1024*1024) {
+		return fmt.Errorf("glyph eviction/resource ownership failed: %+v", stats)
+	}
 	report := struct {
 		Renderer   platform.RenderStats `json:"renderer"`
 		Scene      string               `json:"scene"`
@@ -144,7 +163,7 @@ func run() error {
 		Elapsed    float64              `json:"elapsed_seconds"`
 		IdleBefore platform.RenderStats `json:"idle_before"`
 		IdleAfter  platform.RenderStats `json:"idle_after"`
-	}{Renderer: stats, Scene: "2048 rounded quads + 32 shared-text commands; changing colors; native GPU", Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter}
+	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

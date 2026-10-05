@@ -70,6 +70,9 @@ func run(iteration int, scenario string) {
 		options.Width = 10000
 		options.Height = 10000
 	}
+	if scenario == "glyphs" {
+		options.Width, options.Height = 640, 380
+	}
 	err := ui.Run(options, func(cx *ui.Context) *ui.Element {
 		saved = cx
 		frames++
@@ -114,6 +117,14 @@ func run(iteration int, scenario string) {
 		if scenario == "custom-desktop" {
 			return ui.Column(ui.Text("Custom titlebar").Height(36).Draggable(), ui.Column().Flex(1), ui.Column().Height(22).Background(ui.RGB(0x0078d4)))
 		}
+		if scenario == "glyphs" {
+			rows := make([]*ui.Element, 0, 7)
+			for _, text := range []string{"A\u0301", "Á", "你好", "😀", "سلام", "office"} {
+				rows = append(rows, ui.Text(text).FontSize(28).Height(48).Foreground(ui.RGB(0xffffff)))
+			}
+			rows = append(rows, ui.Text("MMMMMMMM").FontSize(28).Width(40).Height(48).Foreground(ui.RGB(0xffffff)))
+			return ui.Column(rows...).Padding(16)
+		}
 		firstKey, secondKey := "primary", "secondary"
 		if scenario == "duplicate" {
 			secondKey = firstKey
@@ -146,5 +157,5 @@ func run(iteration int, scenario string) {
 	if err != nil {
 		message = err.Error()
 	}
-	emit(testprotocol.Report{Event: "closed", Run: iteration, Frame: frames, Clicks: clicks, Async: async, Error: message, Guard: guard, Closed: closed, NativeFrames: platform.RenderedFrames()})
+	emit(testprotocol.Report{Event: "closed", Run: iteration, Frame: frames, Clicks: clicks, Async: async, Error: message, Guard: guard, Closed: closed, NativeFrames: platform.RenderedFrames(), Renderer: platform.RendererStats()})
 }

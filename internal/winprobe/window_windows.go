@@ -11,7 +11,6 @@ import (
 )
 
 var user = syscall.NewLazyDLL("user32.dll")
-var gdi = syscall.NewLazyDLL("gdi32.dll")
 
 type Rect struct{ Left, Top, Right, Bottom int32 }
 type Window uintptr
@@ -134,8 +133,6 @@ func (w Window) Raise() {
 	user.NewProc("SetForegroundWindow").Call(uintptr(w))
 }
 
-// Pixel reads a DIP location from the window's client DC after a paint barrier.
-
 // Pin temporarily keeps the owned test window above other applications.
 func (w Window) Pin() func() {
 	var pid uint32
@@ -150,17 +147,5 @@ func (w Window) Pin() func() {
 	}
 }
 
-func (w Window) Pixel(x, y int) (uint32, error) {
-	scale := float64(w.DPI()) / 96
-	dc, _, err := user.NewProc("GetDC").Call(uintptr(w))
-	if dc == 0 {
-		return 0, fmt.Errorf("GetDC: %w", err)
-	}
-	defer user.NewProc("ReleaseDC").Call(uintptr(w), dc)
-	value, _, err := gdi.NewProc("GetPixel").Call(dc, uintptr(math.Round(float64(x)*scale)), uintptr(math.Round(float64(y)*scale)))
-	if uint32(value) == 0xffffffff {
-		return 0, fmt.Errorf("GetPixel: %w", err)
-	}
-	// COLORREF is 0x00bbggrr; return ordinary 0xrrggbb.
-	return uint32(value)&0xff<<16 | uint32(value)&0xff00 | uint32(value)>>16&0xff, nil
-}
+// Pixel reads a DIP location from the latest completed GPU frame.
+func (w Window) Pixel(x, y int) (uint32, error) { return w.gpuPixel(x, y) }

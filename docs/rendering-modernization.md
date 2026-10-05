@@ -1,6 +1,6 @@
 # GPU 绘制目标与验收
 
-用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。当前仍需把 Windows 默认 Direct2D 路径替换为 Direct3D 12；不能仅依据 Metal 改造、DXIL 编译或旧路径的绿灯判定整个目标完成。
+用户目标是使用现代原生绘制技术，并参考 Zed/GPUI 的架构。Windows 默认窗口已替换为 Direct3D 12，并加入 DirectWrite R8 字形图集；Metal 字形图集、设备丢失恢复、完整 GPU 正确性/性能验收及 gocode 发布依赖仍需完成。
 
 ## 参考与技术选择
 
@@ -21,9 +21,10 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 | Metal 异步三帧资源环 | 已接入默认路径 | 三槽都被使用，最多三个在途帧，正常绘制显式 buffer waits = 0，退出时 submitted = completed |
 | Metal 显示同步调度 | 已接入 macOS 14+ 默认路径，两种 Mac CI 已通过 | CAMetalDisplayLink 直接提供 drawable；连续请求合并；空闲期间 GPU 提交和回调计数不增加；Dispatch 能重新唤醒 |
 | GPU 诊断 | 已实现原生计数与 CPU/GPU 时间 | 原生压力报告；不能以 Go view 次数代替 GPU 完成数 |
-| Direct3D 12 着色器 | 可复现编译；离屏 D3D12 设备管线已加入 | RTX 5070 Ti 与 WARP 已通过 90 帧 × 16 个 GPU 像素检查；[Windows 2022/2025 CI 均通过](https://github.com/neko233-com/godesktop/actions/runs/37362077757)；仍需接入默认窗口后端 |
-| Windows 默认 Direct3D 12 | 尚未实现 | HWND 与 swapchain 的真实绘制、fence 生命周期、缩放/设备重建、GPU 像素读回 |
-| 两平台共享字形图集 | 尚未实现 | glyph/font/size/scale 缓存、复用计数、字节上限、跨帧生命周期、Unicode 像素验证 |
+| Direct3D 12 着色器 | 可复现编译；默认窗口与离屏共用设备/PSO 创建 | RTX 5070 Ti 与 WARP 已通过 90 帧 × 16 个离屏 GPU 像素检查；[此前 Windows 2022/2025 离屏 CI 均通过](https://github.com/neko233-com/godesktop/actions/runs/37362077757) |
+| Windows 默认 Direct3D 12 | 已接入 HWND flip swapchain、DXGI 显示同步、三帧 fence | 本机硬件已通过完整三轮 race/原生测试与 92 帧压力；实际 swapchain GPU 读回覆盖输入、缩放、最大化、恢复和重复启动；设备丢失自动重建仍待完成 |
+| Windows R8 字形图集 | 已接入默认 DirectWrite 文本路径 | 变化的文本 92 帧只光栅化 14 字形、29426 次命中、1 MiB 图集；中文/组合音标/emoji/阿拉伯文/裁剪的实际 GPU 像素；大字号淘汰压力和字节峰值 |
+| Metal 共享字形图集 | 尚未实现 | glyph/font/size/scale 缓存、复用计数、字节上限、跨帧生命周期、Unicode GPU 像素验证 |
 | 绘制正确性与性能 | 部分验证 | 裁剪、透明混合、圆角、线段、文本及多帧读回；真实设备 P50/P95 与输入延迟 |
 | gocode 消费新后端 | 仍依赖 v0.2.2 | 新框架版本及子模块更新后，在 Windows/两种 Mac 架构上重新验证 |
 
@@ -55,10 +56,32 @@ go run ./internal/dx12test -frames 7 -debug=false -output .cache/dx12-uninstrume
 
 该验证实际运行仓库中的预编译 DXIL，并在 fence 完成后从 GPU render target 复制 BGRA 像素。每帧检查实例步长、变化的颜色、画家顺序、透明混合、裁剪、圆角及抗锯齿、水平/对角线、R8 覆盖率纹理。第一个三帧批次通过独立 queue gate 延迟 GPU 执行，断言第四次尝试不能覆盖任何在途 allocator/上传缓冲，再释放 gate 并验证三帧各自的颜色。readback 的等待属于诊断过程；正常 submit 遇到未完成 fence 时只返回 defer。
 
-默认设备优先选择支持 SM6 的硬件，缺少硬件时可使用 WARP；报告明确记录 software、adapter 和 debug/GPU validation 是否可用。`-require-hardware` 拒绝 WARP，`-warp` 显式验证软件设备，`-require-debug-layer` 强制要求调试层。PNG 只包含离屏 GPU 验证场景。R8 纹理目前使用合成覆盖率数据，不能据此宣称已完成字体图集、窗口 swapchain、输入到显示延迟或 gocode 的默认 D3D12 迁移。
+默认设备优先选择支持 SM6 的硬件，缺少硬件时可使用 WARP；离屏报告明确记录 software、adapter 和 debug/GPU validation 是否可用。`-require-hardware` 拒绝 WARP，`-warp` 显式验证软件设备，`-require-debug-layer` 强制要求调试层。PNG 只包含离屏 GPU 验证场景；该夹具使用合成 R8 覆盖率，窗口字形图集由下述独立场景验证，gocode 的发布依赖尚未升级。
 
 设备报告同时保存 vendor/device ID 和原始 DXGI flags。[微软 DXGI 文档](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/d3d10-graphics-programming-guide-dxgi) 指出，主 Basic Render 适配器可能不设置 SOFTWARE 标志；`0x1414:0x008c` 仍按软件适配器识别并从硬件候选中排除。GitHub Windows runner 的 Basic Render/WARP 结果不能当作物理 GPU 性能数据；本机硬件证据来自明确要求硬件的 RTX 5070 Ti 验收。
 
 7 帧验收关闭调试层，另外覆盖不启用 GPU 校验插桩时的同一着色器管线，以及三帧批次后剩余一帧的读回路径。默认和 WARP 的 90 帧验收继续覆盖帧资源的多轮复用。
+
+## 默认 Windows 窗口与字体
+
+```powershell
+$env:CGO_ENABLED = '1'
+$env:GODESKTOP_GPU_DEBUG = '1'
+# 本机验收要求物理硬件；CI 默认路径允许明确的 WARP 回退
+$env:GODESKTOP_GPU_ADAPTER = 'hardware'
+go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-glyph-stress.json
+go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-eviction -output .cache/dx12-window-eviction.json
+$env:GODESKTOP_GPU_ADAPTER = 'warp'
+go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-warp.json
+go test -race -run '^TestWindowsAMD64NativeIntegration$' -count=1 .
+```
+
+所有场景走同一 HWND/D3D12 管线。DXGI frame-latency 对象与消息循环协同调度，显示就绪且该槽 fence 完成后才提交；正常帧不等待缓冲，缩放/退出才有界排空。三个帧槽各自持有 allocator、实例上传、描述符和图集上传暂存。
+
+变化文本场景包含 2048 个矩形和 32 个每帧更新的标签，本机硬件/WARP 均通过 92 帧：三个槽全使用、submitted = completed、一次 draw call、空闲期间提交和时钟计数不变、Dispatch 重新唤醒。14 个字形共享一页 1 MiB R8 图集，而不是为每种字符串创建纹理。图集更新的累计上传量另外报告，不混入实例数 × 80 的实例上传断言。
+
+大字号场景改变字体大小，迫使活动缓存达到 16 页后淘汰；本机硬件验证产生 9 次淘汰、1339 次光栅化和 41509 次命中，页面峰值 16 MiB。旧页由在途帧保留，暂存与资源屏障保证 GPU 读取生命周期。验收上限为当前缓存 16 MiB、包含在途代数的峰值 64 MiB；同尺寸 CPU 镜像和每帧上传暂存另占内存，页面字节指标不是进程总内存。压力使用调试层/GPU 校验，不将其时间当作无插桩性能。
+
+原生窗口像素测试仅在 `GODESKTOP_READBACK=1` 时启用实际 swapchain 的 GPU copy，fence 完成后通过 PID/HWND 标识与序列号映射读回。测试核对 D3D12 后端属性、颜色/透明/裁剪、中文、分解/预组合音标、单色 emoji、阿拉伯文可见字形和文字裁剪；不使用 GDI 或桌面截图替代输出。可见字形检查不等于完整双向文字或彩色字体正确性，相关回归仍需补充。
 
 该报告的 CPU 时间为构建至 commit/present 的单调时钟耗时，并分别报告视图/布局、drawable 获取及 GPU 编码的 P95，以区分计算和呈现资源等待。CAMetalDisplayLink 在回调前提供 drawable，所以该路径的 acquire 时间只包含渲染附件配置，不包含系统在回调前的调度耗时。报告同时记录 frame clock、请求/回调/合并/暂停计数和空闲前后快照。它不是线程 CPU 占用或完整输入到显示延迟；CI 数据不代表全部 Mac、Windows 设备或与 GPUI 的同机性能对比。上述剩余项目完成并分别验收后，才能认为现代绘制目标完成。

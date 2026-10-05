@@ -195,7 +195,7 @@ func run() error {
 		GPU50       uint64       `json:"gpu_render_p50_nanos"`
 		GPU95       uint64       `json:"gpu_render_p95_nanos"`
 		Elapsed     float64      `json:"elapsed_seconds"`
-	}{native, "Offscreen DXIL/R8 coverage and three-slot ownership acceptance; window backend and font atlas integration remain unfinished", checks, quantile(native.CPU, 50), quantile(native.CPU, 95), quantile(native.GPU, 50), quantile(native.GPU, 95), time.Since(started).Seconds()}
+	}{native, "Offscreen DXIL/R8 coverage and three-slot ownership; HWND and font atlas acceptance use separate native window tests", checks, quantile(native.CPU, 50), quantile(native.CPU, 95), quantile(native.GPU, 50), quantile(native.GPU, 95), time.Since(started).Seconds()}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err
