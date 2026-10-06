@@ -30,7 +30,7 @@ class CancellationTokenSource {
   dispose(){this.cancel();this.emitter.dispose();}
 }
 class Uri {
-  constructor(value){this.value=value;const u=new URL(value);this.scheme=u.protocol.slice(0,-1);this.authority=u.host;this.path=decodeURIComponent(u.pathname);this.query=u.search.slice(1);this.fragment=u.hash.slice(1);this.fsPath=this.scheme==='file'?fileURLToPath(u):this.path;}
+  constructor(value){const u=new URL(value);this.value=u.href;this.scheme=u.protocol.slice(0,-1);this.authority=u.host;this.path=decodeURIComponent(u.pathname);this.query=u.search.slice(1);this.fragment=u.hash.slice(1);this.fsPath=this.scheme==='file'?fileURLToPath(u):this.path;}
   static file(value){return new Uri(pathToFileURL(path.resolve(value)).href);}
   static parse(value){return new Uri(value);}
   static joinPath(base,...parts){const u=new URL(base.value);u.pathname=path.posix.join(u.pathname,...parts);return new Uri(u.href);}
@@ -91,7 +91,7 @@ function native(method,params){
 const events={open:new EventEmitter(),change:new EventEmitter(),close:new EventEmitter(),save:new EventEmitter(),active:new EventEmitter(),selection:new EventEmitter(),configuration:new EventEmitter(),diagnostics:new EventEmitter()};
 const documents=new Map(), editors=new Map();
 let activeEditor, clientCapabilities={}, storageRoot;
-function uriKey(uri){return process.platform==='win32'?uri.toString().toLowerCase():uri.toString();}
+function uriKey(uri){const key=uri.scheme==='file'?'file:'+path.resolve(uri.fsPath):uri.toString();return process.platform==='win32'?key.toLowerCase():key;}
 class TextDocument {
   constructor(uri,text,languageId){this.uri=uri;this.fileName=uri.fsPath;this.languageId=languageId||language(uri.fsPath);this.version=1;this.isDirty=false;this.isClosed=false;this.update(text);}
   update(text){this.text=text;this.eol=text.includes('\r\n')?2:1;this.lines=text.split(/\r\n|\n|\r/);this.lineCount=this.lines.length;}

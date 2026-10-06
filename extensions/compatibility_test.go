@@ -13,7 +13,10 @@ import (
 )
 
 func TestVSIXLiveDocumentEditsProvidersAndPersistentState(t *testing.T) {
-	workspace, storage := t.TempDir(), t.TempDir()
+	workspace, storage := filepath.Join(t.TempDir(), "SHORT~1"), t.TempDir()
+	if err := os.MkdirAll(workspace, 0755); err != nil {
+		t.Fatal(err)
+	}
 	file := filepath.Join(workspace, "main.go")
 	if err := os.WriteFile(file, []byte("disk version"), 0644); err != nil {
 		t.Fatal(err)
