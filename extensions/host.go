@@ -1,46 +1,36 @@
 package extensions
 
 import (
-	"bufio"
 	"context"
 	_ "embed"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"os/exec"
 	"path/filepath"
-	"sync"
+	"sync/atomic"
+
+	"github.com/neko233-com/godesktop/lsp"
 )
 
 //go:embed host.cjs
 var hostSource string
 
 type Event struct {
-	Type    string `json:"type"`
-	Text    string `json:"text"`
-	Path    string `json:"path"`
-	Channel string `json:"channel"`
-}
-type response struct {
-	ID     int             `json:"id"`
-	Result json.RawMessage `json:"result"`
-	Error  string          `json:"error"`
-	Event  *Event          `json:"event"`
+	Type    string          `json:"type"`
+	Text    string          `json:"text"`
+	Path    string          `json:"path"`
+	Channel string          `json:"channel"`
+	Data    json.RawMessage `json:"data,omitempty"`
 }
 
 // Host runs trusted local extension code with the user's permissions. It is not
-// a security sandbox. Events is buffered; the UI should drain it continuously.
+// a security sandbox. Drain Events continuously; edit requests use acknowledged
+// RPC handlers rather than this optional notification stream.
 type Host struct {
 	Events  chan Event
-	cmd     *exec.Cmd
-	input   io.WriteCloser
-	mu      sync.Mutex
-	next    int
-	pending map[int]chan response
-	closed  bool
+	rpc     *lsp.Client
 	done    chan struct{}
-	endErr  error
+	dropped atomic.Uint64
 }
 
 func Start(ctx context.Context, workspace string, installed []Extension) (*Host, error) {
@@ -56,114 +46,44 @@ func Start(ctx context.Context, workspace string, installed []Extension) (*Host,
 		Workspace  string      `json:"workspace"`
 		Extensions []Extension `json:"extensions"`
 	}{workspace, installed})
-	cmd := exec.CommandContext(ctx, node, "-e", hostSource, string(config))
-	input, err := cmd.StdinPipe()
+	client, err := lsp.Start(ctx, lsp.Command{Executable: node, Arguments: []string{"-e", hostSource, string(config)}, Directory: workspace})
 	if err != nil {
 		return nil, err
 	}
-	output, err := cmd.StdoutPipe()
-	if err != nil {
-		input.Close()
-		return nil, err
-	}
-	// Protocol output is isolated from extension console logging.
-	cmd.Stderr = io.Discard
-	h := &Host{Events: make(chan Event, 256), cmd: cmd, input: input, pending: make(map[int]chan response), done: make(chan struct{})}
-	if err = cmd.Start(); err != nil {
-		input.Close()
-		return nil, err
-	}
+	h := &Host{Events: make(chan Event, 256), rpc: client, done: make(chan struct{})}
 	go func() {
-		s := bufio.NewScanner(output)
-		s.Buffer(make([]byte, 4096), 4<<20)
-		for s.Scan() {
-			var r response
-			if err = json.Unmarshal(s.Bytes(), &r); err != nil {
-				break
-			}
-			if r.Event != nil {
-				select {
-				case h.Events <- *r.Event:
-				default:
-				}
+		defer close(h.done)
+		defer close(h.Events)
+		for notification := range client.Notifications() {
+			if notification.Method != "godesktop/event" {
 				continue
 			}
-			h.mu.Lock()
-			ch := h.pending[r.ID]
-			delete(h.pending, r.ID)
-			h.mu.Unlock()
-			if ch != nil {
-				ch <- r
+			var event Event
+			if json.Unmarshal(notification.Params, &event) != nil {
+				continue
+			}
+			select {
+			case h.Events <- event:
+			default:
+				h.dropped.Add(1)
 			}
 		}
-		// Kill before Wait when malformed/oversized output prevents draining.
-		if s.Err() != nil || err != nil {
-			_ = cmd.Process.Kill()
-		}
-		waitErr := cmd.Wait()
-		h.mu.Lock()
-		h.closed = true
-		h.endErr = errors.Join(err, s.Err(), waitErr)
-		for id, ch := range h.pending {
-			ch <- response{Error: "extension host exited"}
-			delete(h.pending, id)
-		}
-		h.mu.Unlock()
-		close(h.Events)
-		close(h.done)
 	}()
 	return h, nil
 }
 
-// Call uses JSON-RPC-style request IDs. Cancellation terminates an unresponsive
-// host, including synchronous loops in extension activation or command handlers.
-func (h *Host) Call(ctx context.Context, method string, params any, result any) error {
-	h.mu.Lock()
-	if h.closed {
-		h.mu.Unlock()
-		return errors.New("extension host is closed")
-	}
-	h.next++
-	id := h.next
-	ch := make(chan response, 1)
-	h.pending[id] = ch
-	data, err := json.Marshal(struct {
-		ID     int    `json:"id"`
-		Method string `json:"method"`
-		Params any    `json:"params"`
-	}{id, method, params})
-	if err == nil {
-		_, err = h.input.Write(append(data, '\n'))
-	}
-	if err != nil {
-		delete(h.pending, id)
-	}
-	h.mu.Unlock()
-	if err != nil {
-		return err
-	}
-	select {
-	case r := <-ch:
-		if r.Error != "" {
-			return fmt.Errorf("extension host: %s", r.Error)
-		}
-		if result != nil {
-			return json.Unmarshal(r.Result, result)
-		}
-		return nil
-	case <-ctx.Done():
-		_ = h.cmd.Process.Kill()
+// Register handles requests from extensions, including versioned native edits.
+// Handlers must observe cancellation and dispatch UI mutations to the UI thread.
+func (h *Host) Register(method string, handler lsp.Handler) { h.rpc.Register(method, handler) }
+func (h *Host) DroppedEvents() uint64                       { return h.dropped.Load() + h.rpc.DroppedNotifications() }
+
+// Call terminates a timed-out extension host, including synchronous JS loops.
+func (h *Host) Call(ctx context.Context, method string, params, result any) error {
+	err := h.rpc.Call(ctx, method, params, result)
+	if ctx.Err() != nil {
+		h.rpc.Close()
 		return ctx.Err()
 	}
+	return err
 }
-
-func (h *Host) Close() error {
-	h.mu.Lock()
-	if !h.closed {
-		_ = h.input.Close()
-	}
-	h.mu.Unlock()
-	_ = h.cmd.Process.Kill()
-	<-h.done
-	return nil
-}
+func (h *Host) Close() error { h.rpc.Close(); <-h.done; return nil }

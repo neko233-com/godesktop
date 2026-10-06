@@ -26,6 +26,22 @@ func TestGrowAndGap(t *testing.T) {
 	}
 }
 
+func TestStackPaintsSelectionAndCaretWithoutMovingText(t *testing.T) {
+	f := testFrame()
+	tree := Stack(Column().Width(20).Height(16).Background(RGB(0x264f78)), Text("text"), Row(Column().Width(12), Column().Width(1).Height(16).Background(RGB(0xffffff)))).Gap(100)
+	if d := f.size(tree); d != (dimensions{32, 16}) {
+		t.Fatalf("overlay measured as flowing children: %+v", d)
+	}
+	viewport := rect{5, 6, 40, 16}
+	f.layout(tree, viewport, viewport, "stack")
+	if len(f.commands) != 3 || f.commands[0].Kind != platform.Rectangle || f.commands[1].Kind != platform.Label || f.commands[2].Bounds.X != 17 {
+		t.Fatalf("overlay order/bounds %+v", f.commands)
+	}
+	if f.commands[1].Bounds.X != 5 || f.commands[1].Bounds.Y != 6 {
+		t.Fatal("caret moved the shaped text")
+	}
+}
+
 func TestOverflowClipAndHitArea(t *testing.T) {
 	f := testFrame()
 	viewport := rect{0, 0, 100, 40}

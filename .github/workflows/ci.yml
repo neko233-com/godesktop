@@ -35,6 +35,7 @@ jobs:
         shell: powershell
         env:
           GODESKTOP_GPU_DEBUG: '1'
+          GODESKTOP_CLIPBOARD_TEST: '1'
         run: ./scripts/test-windows-amd64.ps1
       - name: Verify reproducible Direct3D 12 DXIL
         shell: powershell
@@ -192,4 +193,5 @@ jobs:
         run: |
           go test -run '^$' -fuzz '^FuzzRectIntersection$' -fuzztime=5s -parallel=4 .
           go test -run '^$' -fuzz '^FuzzLayoutClipsToViewport$' -fuzztime=5s -parallel=4 .
+          go test -run '^$' -fuzz '^FuzzBufferTransactions$' -fuzztime=5s -parallel=4 ./editor
       - run: go test -run '^$' -bench . -benchmem ./...

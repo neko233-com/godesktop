@@ -67,7 +67,9 @@ func (f *frame) size(e *Element) dimensions {
 				continue
 			}
 			child := f.size(c)
-			if e.kind == rowKind {
+			if e.kind == stackKind {
+				d.w, d.h = max(d.w, child.w), max(d.h, child.h)
+			} else if e.kind == rowKind {
 				d.w += child.w
 				d.h = max(d.h, child.h)
 			} else {
@@ -76,7 +78,7 @@ func (f *frame) size(e *Element) dimensions {
 			}
 			count++
 		}
-		if count > 1 {
+		if count > 1 && e.kind != stackKind {
 			if e.kind == rowKind {
 				d.w += float32(count-1) * e.gap
 			} else {
@@ -157,6 +159,22 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 		}
 		if inner.w > 0 && inner.h > 0 && textClip.w > 0 && textClip.h > 0 {
 			f.commands = append(f.commands, platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text, FontFamily: e.fontFamily})
+		}
+		return
+	}
+	if e.kind == stackKind {
+		for i, c := range e.children {
+			if c == nil {
+				continue
+			}
+			child := inner
+			if c.width > 0 {
+				child.w = min(child.w, c.width)
+			}
+			if c.height > 0 {
+				child.h = min(child.h, c.height)
+			}
+			f.layout(c, child, clip.intersect(inner), fmt.Sprintf("%s/%d", path, i))
 		}
 		return
 	}

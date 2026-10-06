@@ -3,6 +3,8 @@
 package platform
 
 func Run(Options, func(Event)) error { return ErrUnavailable }
+func ReadClipboard() (string, error) { return "", ErrUnavailable }
+func WriteClipboard(string) error    { return ErrUnavailable }
 func Present([]Command)              {}
 func Wake()                          {}
 func Quit()                          {}

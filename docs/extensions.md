@@ -1,24 +1,32 @@
 # 本地 VSIX 与扩展宿主
 
-`extensions.Install(root, path)` 安装本地 VSIX；`extensions.List(root)` 为每个扩展选择最新的数字版本；`extensions.Start(ctx, workspace, installed)` 启动独立 Node.js 宿主。需要 Node.js 22+，CI 使用 Node.js 24。扩展以当前用户权限运行，应只安装可信扩展。
+`extensions.Install(root, path)` 安装本地 VSIX；`List(root)` 选择每个扩展的最新数字版本；`Start(ctx, workspace, installed)` 启动 Node.js 22+ 的独立宿主。扩展使用当前用户权限，宿主不是沙箱。安装器拒绝目录穿越、绝对路径、符号链接、Windows 保留名、大小写冲突和超限数据；限制为 4096 项、单文件 16 MiB、总解压量 64 MiB、manifest 256 KiB。
 
-安装器读取 `extension/` 目录，拒绝目录穿越、绝对路径、符号链接、Windows 保留名、大小写冲突、重复文件及超限数据。限制为 4096 项、每文件 16 MiB、总解压量 64 MiB、manifest 256 KiB。版本要求数字 `major.minor.patch`；已安装版本不可覆盖。
+## 实现范围
 
-## 当前 API
-
-| VS Code API | 实现范围 |
+| API | 当前能力 |
 | --- | --- |
-| `commands` | registerCommand、executeCommand、getCommands；manifest 命令自动惰性激活 |
-| 激活 | CommonJS `main`、activate/context/subscriptions、`onCommand`、`*`、onStartupFinished |
-| `window` | 信息/警告/错误消息事件、输出频道事件、状态栏事件、showTextDocument 打开事件 |
-| `workspace` | 单工作区 folders/rootPath、读取 UTF-8 文档、只读 fs readFile/stat；configuration 仅返回默认值 |
-| 基本类型 | Disposable、EventEmitter、Uri、Position、Range、Selection |
-| 扩展状态 | workspaceState/globalState 是宿主进程内 Memento，尚不跨启动持久化 |
+| 激活 | CommonJS main、activate/deactivate、subscriptions、命令惰性激活、onLanguage、onStartupFinished、* |
+| commands | registerCommand、executeCommand、getCommands |
+| 文档 | 持续存在的 TextDocument 对象、UTF-16 offsetAt/positionAt、行/范围/词读取、活动编辑器、未保存内容和版本 |
+| 编辑 | TextEditor.edit、WorkspaceEdit、文档保存、单选区；由 Go UI 版本检查和事务预检后确认结果 |
+| 事件 | 文档打开/修改/关闭/保存、活动编辑器、选区、配置和诊断 |
+| 语言 | 补全、悬停、定义提供者注册和调用；DiagnosticCollection 发布、删除、清空 |
+| window | 消息、输出频道、状态栏、showTextDocument；消息按钮选择尚未实现 |
+| workspace | 单工作区、文档、fs 读取/写入/stat/readDirectory/createDirectory/delete；配置 get/has/inspect/update 的 JSON 文件实现 |
+| 类型 | Uri、Position、Range、Selection、TextEdit、WorkspaceEdit、CompletionItem/List、Hover、MarkdownString、Location、Diagnostic、取消令牌、Disposable/EventEmitter |
+| 持久状态 | 提供 storageRoot 后，globalState/workspaceState 跨宿主启动保存；按扩展和工作区隔离 |
 
-调用 `Host.Call(ctx, "initialize", nil, &commands)` 完成启动激活；`Host.Call(ctx, "execute", map[string]any{"command": id, "args": args}, &result)` 执行命令。Go 应用持续消费 `Host.Events` 并通过 `Context.Dispatch` 更新 UI。协议使用请求 ID，扩展 console 日志走 stderr，不混入 JSON 协议。宿主处理异步并发请求；调用超时会终止整个宿主以中断同步死循环。事件缓冲为 256 条，消费者过慢时后续事件丢弃。
+## Go 应用接入
 
-## 不兼容范围
+先用 `Host.Register` 注册 `workspace/applyEdit`、`workspace/saveDocument`、`window/showTextDocument`、`window/setSelection`，处理器通过 `Context.Dispatch` 修改原生状态。初始化参数包含 `documents`、`active`、`storageRoot` 和 `clientCapabilities`；gocode 的 [接入代码](https://github.com/neko233-com/gocode/blob/main/extensions_ui.go) 提供完整示例。
 
-没有承诺完整兼容 [VS Code API](https://code.visualstudio.com/api/references/vscode-api) 或官方 [扩展宿主](https://code.visualstudio.com/api/advanced-topics/extension-host)。未知 API 明确抛错，不静默伪装成功。语言服务、LSP、调试器、终端、webview、TreeView、自定义编辑器、Web Worker 扩展、Marketplace、主题/语法贡献、远程工作区及需要完整 VS Code 工作台的扩展尚不支持。`showTextDocument` 返回基础 document 描述，编辑器选区/编辑 API 未实现；消息没有按钮选择返回值。
+`Host.Call(ctx, "syncDocument", params, nil)` 同步版本、修改状态、选区和增量 changes。打开和显式恢复发送完整 text，普通修改只发送增量事务。`execute` 执行命令，`provideCompletionItems` / `provideHover` / `provideDefinition` 调用匹配提供者。Go 预检 WorkspaceEdit 的全部文档及版本后再修改；修改确认返回新的文档状态，扩展的 Promise 不会在实际编辑前伪报成功。
 
-`gocode` 自带的 Hello Native 是实际 `require('vscode')` 扩展，通过标准 VSIX 安装路径加载，验证命令、消息、输出、状态栏和 README 打开。该样例通过不代表全部现有扩展都能运行。
+宿主复用框架 LSP 帧传输，支持双向 RPC 和异步并发调用。console 日志走 stderr。调用期限到达会终止整个宿主，以中断同步 JS 死循环。消息/输出等 Events 是有界通知，消费者需持续读取；`DroppedEvents()` 报告丢弃数量。原生编辑使用有响应 RPC，不走可丢弃的通知队列。
+
+## 兼容缺口
+
+这不是完整 [VS Code API](https://code.visualstudio.com/api/references/vscode-api) 或官方 [扩展宿主](https://code.visualstudio.com/api/advanced-topics/extension-host) 的实现。未知 API 明确抛错；尚缺调试、任务、终端、webview、TreeView、自定义编辑器、snippet/tabstop、多选区、语义 token、完整配置贡献/JSONC、文件监听、远程宿主、SecretStorage、Marketplace 等。提供者协议支持悬停/定义，但 gocode 尚未提供相应的完整交互。VSIX 依赖的第三方模块也必须包含在扩展中。
+
+官方 Copilot VSIX 尚未通过兼容验收。gocode 当前使用官方 Language Server 和 Go SDK，和“运行完整官方 VSIX”分别验收。Hello Native 与真实 VSIX fixture 覆盖原生编辑、UTF-16/CRLF、版本更新、语言提供者和跨进程持久状态；样例通过不代表所有扩展都能运行。

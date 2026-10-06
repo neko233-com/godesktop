@@ -37,6 +37,9 @@ float dpi(HWND window) {
     auto fn=reinterpret_cast<GetDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetDpiForWindow"));
     return fn ? static_cast<float>(fn(window)) : 96.0f;
 }
+int input_modifiers() {
+    return ((GetKeyState(VK_SHIFT)&0x8000)?1:0)|((GetKeyState(VK_CONTROL)&0x8000)?2:0)|((GetKeyState(VK_MENU)&0x8000)?4:0);
+}
 int metric_for_dpi(int index,HWND window) {
     using GetMetric = int(WINAPI *)(int,UINT);
     auto fn=reinterpret_cast<GetMetric>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetSystemMetricsForDpi"));
@@ -282,22 +285,25 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
     case WM_LBUTTONDOWN:
         SetFocus(handle); SetCapture(handle);
         window->ensure_input_layout();
-        gd_go_event(2,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,0); return 0;
+        gd_go_event(2,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,input_modifiers()); return 0;
     case WM_LBUTTONUP:
         window->ensure_input_layout();
-        gd_go_event(3,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,0);
+        gd_go_event(3,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,input_modifiers());
         ReleaseCapture(); return 0;
+    case WM_MOUSEMOVE:
+        if(wparam&MK_LBUTTON) { window->ensure_input_layout(); gd_go_event(8,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,input_modifiers()); }
+        return 0;
     case WM_CAPTURECHANGED: case WM_KILLFOCUS:
         gd_go_event(5,0,0,0,0); return 0;
     case WM_KEYDOWN:
-        if(!(lparam & (1LL<<30))) gd_go_event(4,0,0,static_cast<int>(wparam),((GetKeyState(VK_SHIFT)&0x8000)?1:0)|((GetKeyState(VK_CONTROL)&0x8000)?2:0)|((GetKeyState(VK_MENU)&0x8000)?4:0));
+        gd_go_event(4,0,0,static_cast<int>(wparam),input_modifiers()|((lparam&(1LL<<30))?16:0));
         return 0;
     case WM_CHAR: {
         unsigned value=static_cast<unsigned>(wparam);
         if(value>=0xd800 && value<=0xdbff) { window->high_surrogate=value; return 0; }
         if(value>=0xdc00 && value<=0xdfff) { if(!window->high_surrogate) return 0; value=0x10000+((window->high_surrogate-0xd800)<<10)+(value-0xdc00); }
         window->high_surrogate=0;
-        if(value>=32 && value!=127) gd_go_event(6,0,0,static_cast<int>(value),0);
+        if(value>=32 && value!=127) gd_go_event(6,0,0,static_cast<int>(value),input_modifiers());
         return 0;
     }
     case WM_MOUSEWHEEL:

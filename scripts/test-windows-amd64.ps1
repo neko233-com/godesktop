@@ -42,6 +42,7 @@ try {
     foreach ($taskFuzz in @('FuzzRectIntersection', 'FuzzLayoutClipsToViewport')) {
         Invoke-CheckedGo test -run '^$' -fuzz "^${taskFuzz}$" "-fuzztime=${FuzzSeconds}s" -parallel=4 .
     }
+    Invoke-CheckedGo test -run '^$' -fuzz '^FuzzBufferTransactions$' "-fuzztime=${FuzzSeconds}s" -parallel=4 ./editor
     $taskCoverageInputs = "$taskCoreDir,$taskNativeDir"
     Invoke-CheckedGo tool covdata textfmt "-i=$taskCoverageInputs" "-o=$taskReportDir/coverage.out"
     $taskCoverage = & go tool covdata percent "-i=$taskCoverageInputs"

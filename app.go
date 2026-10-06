@@ -31,6 +31,19 @@ type Context struct {
 	quit          func()
 	windowAction  func(int)
 	width, height float32
+	bounds        map[string]Bounds
+}
+
+// Bounds describes a keyed interactive element in logical client coordinates.
+type Bounds struct{ X, Y, Width, Height float32 }
+
+// ElementBounds returns the most recently laid out bounds for an interactive Key.
+// Native input refreshes layout after resize before delivering pointer events.
+func (c *Context) ElementBounds(key string) (Bounds, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	b, ok := c.bounds[key]
+	return b, ok
 }
 
 // Dispatch schedules a state mutation on the UI thread and invalidates the view.
@@ -100,7 +113,7 @@ type application struct {
 
 func (a *application) handle(event platform.Event) {
 	if a.input != nil && event.Kind != platform.Draw {
-		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers}) {
+		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers & 15, Repeat: event.Modifiers&16 != 0}) {
 			a.context.Invalidate()
 			return
 		}
@@ -119,6 +132,17 @@ func (a *application) handle(event platform.Event) {
 		root := a.view(a.context)
 		viewport := rect{0, 0, event.X, event.Y}
 		a.frame.layout(root, viewport, viewport, "root")
+		a.context.mu.Lock()
+		if a.context.bounds == nil {
+			a.context.bounds = make(map[string]Bounds)
+		} else {
+			clear(a.context.bounds)
+		}
+		for _, target := range a.frame.targets {
+			b := target.bounds
+			a.context.bounds[target.key] = Bounds{b.x, b.y, b.w, b.h}
+		}
+		a.context.mu.Unlock()
 		platform.Present(a.frame.commands)
 	case platform.PointerDown:
 		a.pressed = ""
@@ -164,6 +188,9 @@ func (a *application) handle(event platform.Event) {
 			a.focused = a.frame.targets[next].key
 			a.context.Invalidate()
 		} else if event.Key == platform.Enter || event.Key == platform.Space {
+			if event.Modifiers&16 != 0 {
+				return
+			}
 			for _, t := range a.frame.targets {
 				if t.key == a.focused {
 					t.click(a.context)

@@ -92,7 +92,23 @@ func MeasureTextWithFont(text string, size float32, font string) (float32, float
 	return float32(width), float32(height)
 }
 
-func Wake()                   { C.gd_wake() }
+func Wake() { C.gd_wake() }
+func ReadClipboard() (string, error) {
+	var text *C.char
+	if message := C.gd_read_clipboard(&text); message != nil {
+		return "", errors.New(C.GoString(message))
+	}
+	defer C.free(unsafe.Pointer(text))
+	return C.GoString(text), nil
+}
+func WriteClipboard(text string) error {
+	bytes := C.CString(text)
+	defer C.free(unsafe.Pointer(bytes))
+	if message := C.gd_write_clipboard(bytes); message != nil {
+		return errors.New(C.GoString(message))
+	}
+	return nil
+}
 func Quit()                   { C.gd_quit() }
 func WindowAction(action int) { C.gd_window_action(C.int(action)) }
 

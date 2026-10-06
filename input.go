@@ -13,6 +13,7 @@ const (
 	InputCancelled  InputKind = 5
 	Character       InputKind = 6
 	Scroll          InputKind = 7
+	PointerMoved    InputKind = 8
 	ModifierShift             = 1
 	ModifierControl           = 2
 	ModifierAlt               = 4
@@ -25,6 +26,7 @@ type InputEvent struct {
 	Kind           InputKind
 	X, Y           float32
 	Key, Modifiers int
+	Repeat         bool
 }
 
 // RenderedFrames returns successful native submissions for smoke diagnostics.

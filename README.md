@@ -9,6 +9,8 @@
 
 **当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)；Windows 默认窗口使用 D3D12/DXIL、DXGI flip swapchain 和 DirectWrite R8 字形图集。
 
+v0.4 增加版本化编辑缓冲区、原生选区/剪贴板接口、LSP 和 VSIX 编辑/语言提供者。gocode 接入官方 Copilot Language Server 与 Go SDK。API 见 [编辑与 LSP](docs/editor-and-lsp.md)，完整 VS Code 目标的当前覆盖见 [gocode 功能矩阵](https://github.com/neko233-com/gocode/blob/main/docs/vscode-parity.md)。
+
 ## 平台
 
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
@@ -43,7 +45,7 @@ CGO_ENABLED=1 go run ./examples/counter
 在已有应用中添加：
 
 ```sh
-go get github.com/neko233-com/godesktop@v0.3.1
+go get github.com/neko233-com/godesktop@v0.4.0
 ```
 
 ```go

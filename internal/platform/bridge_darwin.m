@@ -203,18 +203,22 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
         GDRect clip=commands[i].clip;
         if(commands[i].kind==4 && p.x>=clip.x && p.x<clip.x+clip.w && p.y>=clip.y && p.y<clip.y+clip.h) { [self.window performWindowDragWithEvent:event]; return; }
     }
-    gd_go_event(2,p.x,p.y,0,0);
+    gd_go_event(2,p.x,p.y,0,(event.modifierFlags&NSEventModifierFlagShift)?1:0);
 }
 - (void)mouseUp:(NSEvent *)event {
     NSPoint p=[self convertPoint:event.locationInWindow fromView:nil];
-    gd_go_event(3,p.x,p.y,0,0);
+    gd_go_event(3,p.x,p.y,0,(event.modifierFlags&NSEventModifierFlagShift)?1:0);
+}
+- (void)mouseDragged:(NSEvent *)event {
+    NSPoint p=[self convertPoint:event.locationInWindow fromView:nil];
+    gd_go_event(8,p.x,p.y,0,(event.modifierFlags&NSEventModifierFlagShift)?1:0);
 }
 - (void)keyDown:(NSEvent *)event {
     int key=0;
     int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
     switch(event.keyCode) { case 48:key=9;break; case 36:case 76:key=13;break; case 49:key=32;break; case 53:key=27;break; case 51:key=8;break; case 117:key=46;break; case 123:key=37;break; case 124:key=39;break; case 125:key=40;break; case 126:key=38;break; }
     if(!key && (mods&10) && event.charactersIgnoringModifiers.length) key=toupper([event.charactersIgnoringModifiers characterAtIndex:0]);
-    if(key && !event.isARepeat) gd_go_event(4,0,0,key,mods);
+    if(key) gd_go_event(4,0,0,key,mods|(event.isARepeat?16:0));
     if(!(mods&10)) {
         NSString *text=event.characters;
         for(NSUInteger i=0;i<text.length;i++) {

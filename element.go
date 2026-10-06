@@ -8,6 +8,7 @@ const (
 	textKind
 	buttonKind
 	iconKind
+	stackKind
 )
 
 // Element is a transient description of a view. Build a fresh tree in each view
@@ -40,6 +41,14 @@ func Column(children ...*Element) *Element {
 // Row lays out children horizontally. Nil children are ignored.
 func Row(children ...*Element) *Element {
 	e := element(rowKind)
+	e.children = children
+	return e
+}
+
+// Stack overlays children in order, painting the last child on top. Children
+// fill the available area unless they specify Width or Height.
+func Stack(children ...*Element) *Element {
+	e := element(stackKind)
 	e.children = children
 	return e
 }

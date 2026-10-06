@@ -49,6 +49,8 @@ _Static_assert(sizeof(GDRenderStats)==224 && offsetof(GDRenderStats,submitted)==
 const char *gd_run(const char *title, float width, float height, GDColor background, int custom_titlebar);
 void gd_present(const GDCommand *commands, size_t count, const char *text, size_t text_length);
 void gd_measure(const char *text, size_t length, float font_size, const char *font, size_t font_length, float *width, float *height);
+const char *gd_read_clipboard(char **text);
+const char *gd_write_clipboard(const char *text);
 void gd_wake(void);
 void gd_quit(void);
 void gd_window_action(int action);

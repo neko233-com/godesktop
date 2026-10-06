@@ -109,7 +109,7 @@ const d=await v.workspace.openTextDocument(v.Uri.joinPath(v.workspace.workspaceF
 await v.window.showTextDocument(d);const o=v.window.createOutputChannel('test');o.appendLine(d.getText());
 await c.workspaceState.update('test',42);return {name,text:d.getText(),state:c.workspaceState.get('test'),uri:d.uri.toString()};
 }));
-c.subscriptions.push(v.commands.registerCommand('test.unsupported',()=>v.languages.registerCompletionItemProvider({},{})));
+c.subscriptions.push(v.commands.registerCommand('test.unsupported',()=>v.debug.registerDebugAdapterTrackerFactory('*',{})));
 c.subscriptions.push(v.commands.registerCommand('test.loop',()=>{while(true){}}));};`
 	e, err := Install(t.TempDir(), archive(t, testManifest, map[string]string{"extension/main.cjs": script}))
 	if err != nil {

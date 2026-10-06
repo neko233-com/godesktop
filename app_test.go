@@ -36,6 +36,31 @@ func TestPointerCaptureAndKeyboardFocus(t *testing.T) {
 	}
 }
 
+func TestKeyRepeatAndElementBounds(t *testing.T) {
+	cx := &Context{wake: func() {}}
+	var input InputEvent
+	a := application{context: cx, frame: testFrame(), input: func(_ *Context, e InputEvent) bool { input = e; return false }}
+	a.view = func(*Context) *Element { return Button("action", func(*Context) {}).Key("button") }
+	a.handle(platform.Event{Kind: platform.Draw, X: 120, Y: 40})
+	if b, ok := cx.ElementBounds("button"); !ok || b != (Bounds{0, 0, 120, 40}) {
+		t.Fatalf("interactive bounds %+v %v", b, ok)
+	}
+	a.handle(platform.Event{Kind: platform.KeyDown, Key: 37, Modifiers: platform.Shift | 16})
+	if !input.Repeat || input.Modifiers != ModifierShift {
+		t.Fatalf("repeat encoding leaked into modifiers: %+v", input)
+	}
+	clicks := 0
+	a.frame.targets = []target{{"button", rect{0, 0, 120, 40}, func(*Context) { clicks++ }}}
+	a.focused = "button"
+	a.handle(platform.Event{Kind: platform.KeyDown, Key: platform.Enter, Modifiers: 16})
+	if clicks != 0 {
+		t.Fatal("held Enter repeatedly activated generic button")
+	}
+	if _, ok := cx.ElementBounds("missing"); ok {
+		t.Fatal("missing element reported bounds")
+	}
+}
+
 func TestDispatchIsConcurrentAndReentrant(t *testing.T) {
 	var wakes atomic.Int32
 	cx := &Context{wake: func() { wakes.Add(1) }}
