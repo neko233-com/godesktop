@@ -134,6 +134,8 @@ jobs:
           go run ./internal/closeguard -mode guard
           go run ./internal/closeguard -mode force
           go run ./internal/closeguard -mode panic
+      - name: Native monospace grid metrics
+        run: go run ./internal/textmetric
       - name: Metal instancing, glyph reuse, display pacing and idle wake
         shell: bash
         run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-atlas -output bin/metal-render-stress.json

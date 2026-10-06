@@ -1,5 +1,11 @@
 # Verified status
 
+Native text-grid metrics now have owned-window acceptance using existing public
+MeasureText (no API/module change). The child is developing a real ConPTY/PTY
+terminal with PowerShell/zsh input highlighting; local Windows race/native GPU
+checks passed. New cross-platform source promotion remains pending. The terminal
+contract/gaps are maintained in the child's agent docs/terminal.md.
+
 2026-10-06 framework release v0.4.0: source
 `f733ea9d6c40cad3f83cf89051f49185367bbc93`,
 [five-platform CI](https://github.com/neko233-com/godesktop/actions/runs/37440861010),
