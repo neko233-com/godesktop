@@ -86,6 +86,10 @@ func (f *frame) size(e *Element) dimensions {
 			}
 		}
 	}
+	if e.kind == imageKind {
+		w, h := e.bitmap.Size()
+		d = dimensions{float32(w), float32(h)}
+	}
 	px, py := e.insets()
 	d.w += px * 2
 	d.h += py * 2
@@ -142,6 +146,10 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 	}
 	if e.kind == iconKind {
 		f.paintIcon(e, bounds, clip)
+		return
+	}
+	if e.kind == imageKind {
+		f.paintBitmap(e, bounds, clip)
 		return
 	}
 	if e.kind == textKind || e.kind == buttonKind {

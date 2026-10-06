@@ -22,3 +22,8 @@
   replacement executable without checking publisher-controlled metadata.
 - The native workbench remains functional without Electron. Optional webview
   extension content must not become the application's UI shell.
+- Immutable Go bitmaps transfer premultiplied RGBA copies to a UI-owned native
+  128-entry / 64 MiB cache. Current-frame assets are pinned before any eviction;
+  completed GPU frames own texture/staging lifetime. Device recovery retains
+  native CPU assets and uploads to fresh device resources; Run shutdown clears
+  residency. Glyph R8 resources and bitmap RGBA accounting remain separate.

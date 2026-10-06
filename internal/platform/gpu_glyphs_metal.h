@@ -22,6 +22,8 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
 @property(nonatomic,strong) id<MTLTexture> texture;
 @property(nonatomic) NSUInteger x,y,rowHeight;
 @property(nonatomic) uint64_t version,uploaded;
+@property(nonatomic) NSUInteger width,height,channels;
+@property(nonatomic) uint64_t bitmapID;
 - (instancetype)initWithUsage:(GDAtlasUsage *)usage;
 - (BOOL)packWidth:(NSUInteger)width height:(NSUInteger)height left:(NSUInteger *)left top:(NSUInteger *)top;
 @end
@@ -32,12 +34,13 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
         self.usage=usage; self.pixels=[NSMutableData dataWithLength:GDAtlasEdge*GDAtlasEdge];
         ((unsigned char *)self.pixels.mutableBytes)[0]=255;
         self.x=1; self.y=1; self.version=1;
+        self.width=GDAtlasEdge;self.height=GDAtlasEdge;self.channels=1;
         uint64_t count=atomic_fetch_add(&usage->pages,1)+1,peak=atomic_load(&usage->peak);
         while(count>peak && !atomic_compare_exchange_weak(&usage->peak,&peak,count)) {}
     }
     return self;
 }
-- (void)dealloc { atomic_fetch_sub(&_usage->pages,1); }
+- (void)dealloc { if(_usage) atomic_fetch_sub(&_usage->pages,1); }
 - (BOOL)packWidth:(NSUInteger)width height:(NSUInteger)height left:(NSUInteger *)left top:(NSUInteger *)top {
     if(width+2>GDAtlasEdge || height+2>GDAtlasEdge) return NO;
     if(self.x+width+2>GDAtlasEdge) { self.x=1; self.y+=self.rowHeight; self.rowHeight=0; }
@@ -62,6 +65,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
 @property(nonatomic,strong) NSMutableArray<GDAtlasPage *> *pages;
 @property(nonatomic,strong) NSMutableDictionary<NSArray *,GDAtlasGlyph *> *glyphs;
 @property(nonatomic) uint64_t rasterized,hits,epochs,uploadedBytes;
+@property(nonatomic) uint64_t bitmapUploads,bitmapUploadedBytes;
 @property(nonatomic) BOOL full;
 @property(nonatomic,copy) NSString *failure;
 - (instancetype)initWithDevice:(id<MTLDevice>)device;
@@ -142,17 +146,24 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
     for(GDAtlasPage *page in pages) {
         if(page.uploaded==page.version) continue;
         if(!page.texture) {
-            MTLTextureDescriptor *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR8Unorm width:GDAtlasEdge height:GDAtlasEdge mipmapped:NO];
+            MTLTextureDescriptor *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(page.bitmapID?MTLPixelFormatRGBA8Unorm:MTLPixelFormatR8Unorm) width:page.width height:page.height mipmapped:NO];
             desc.storageMode=MTLStorageModePrivate; desc.usage=MTLTextureUsageShaderRead;
             page.texture=[self.device newTextureWithDescriptor:desc];
         }
-        id<MTLBuffer> upload=[self.device newBufferWithBytes:page.pixels.bytes length:page.pixels.length options:MTLResourceStorageModeShared|MTLResourceCPUCacheModeWriteCombined];
+        const GDImage *image=page.bitmapID?gd_image_get(page.bitmapID):NULL;
+        if(page.bitmapID && !image) {self.failure=@"Bitmap was evicted before texture upload";[blit endEncoding];return nil;}
+        NSUInteger rowBytes=page.width*page.channels,pitch=(rowBytes+255)&~(NSUInteger)255;
+        id<MTLBuffer> upload=[self.device newBufferWithLength:pitch*page.height options:MTLResourceStorageModeShared|MTLResourceCPUCacheModeWriteCombined];
         if(!page.texture || !upload) { self.failure=@"Metal glyph texture/staging allocation failed"; [blit endEncoding]; return nil; }
+        const unsigned char *pixels=image?image->pixels:page.pixels.bytes;
+        for(NSUInteger y=0;y<page.height;y++) memcpy((unsigned char *)upload.contents+y*pitch,pixels+y*rowBytes,rowBytes);
         if(!blit) blit=[buffer blitCommandEncoder];
         if(!blit) { self.failure=@"Metal glyph blit allocation failed"; return nil; }
         [uploads addObject:upload];
-        [blit copyFromBuffer:upload sourceOffset:0 sourceBytesPerRow:GDAtlasEdge sourceBytesPerImage:GDAtlasEdge*GDAtlasEdge sourceSize:MTLSizeMake(GDAtlasEdge,GDAtlasEdge,1) toTexture:page.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
-        page.uploaded=page.version; self.uploadedBytes+=GDAtlasEdge*GDAtlasEdge;
+        [blit copyFromBuffer:upload sourceOffset:0 sourceBytesPerRow:pitch sourceBytesPerImage:pitch*page.height sourceSize:MTLSizeMake(page.width,page.height,1) toTexture:page.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
+        page.uploaded=page.version;
+        if(page.bitmapID) {self.bitmapUploads++;self.bitmapUploadedBytes+=page.width*page.height*4;}
+        else self.uploadedBytes+=GDAtlasEdge*GDAtlasEdge;
     }
     [blit endEncoding]; return uploads;
 }

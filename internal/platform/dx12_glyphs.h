@@ -6,22 +6,26 @@
 #include <memory>
 #include <tuple>
 #include "dx12_device.h"
+#include "image_store.h"
 
 namespace gd_dx12 {
 struct AtlasAccounting { uint64_t pages=0,peakPages=0; };
 struct AtlasPage {
     static constexpr unsigned edge=1024;
-    std::vector<unsigned char> pixels=std::vector<unsigned char>(edge*edge,0);
+    std::vector<unsigned char> pixels;
+    unsigned width=edge,height=edge,channels=1;
+    uint64_t bitmapID=0;
     unsigned x=1,y=1,rowHeight=0;
     uint64_t version=1,uploaded=0;
     ID3D12Resource *texture=nullptr;
     bool shaderState=false;
     std::shared_ptr<AtlasAccounting> accounting;
-    explicit AtlasPage(std::shared_ptr<AtlasAccounting> usage):accounting(std::move(usage)) {
+    explicit AtlasPage(std::shared_ptr<AtlasAccounting> usage):pixels(edge*edge,0),accounting(std::move(usage)) {
         pixels[0]=255; accounting->pages++;
         accounting->peakPages=std::max(accounting->peakPages,accounting->pages);
     }
-    ~AtlasPage() { drop(texture); accounting->pages--; }
+    explicit AtlasPage(const GDImage &image):width(image.width),height(image.height),channels(4),bitmapID(image.id) {}
+    ~AtlasPage() { drop(texture); if(accounting) accounting->pages--; }
     bool pack(unsigned width,unsigned height,unsigned *left,unsigned *top) {
         if(width+2>edge || height+2>edge) return false;
         if(x+width+2>edge) { x=1; y+=rowHeight; rowHeight=0; }

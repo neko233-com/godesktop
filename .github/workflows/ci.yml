@@ -40,6 +40,18 @@ jobs:
       - name: Verify reproducible Direct3D 12 DXIL
         shell: powershell
         run: ./scripts/validate-shaders.ps1
+      - name: Native bitmap RGBA pixels, bounded reuse/eviction and device recovery
+        shell: powershell
+        env:
+          CGO_ENABLED: '1'
+          GOEXPERIMENT: cgocheck2
+          GOAMD64: v1
+          GODESKTOP_GPU_DEBUG: '1'
+        run: |
+          go run ./internal/bitmaptest -output .cache/bitmap-native
+          if ($LASTEXITCODE -ne 0) { throw 'GPU bitmap pixels/residency failed.' }
+          go run ./internal/bitmaptest -recovery -output .cache/bitmap-recovery
+          if ($LASTEXITCODE -ne 0) { throw 'GPU bitmap device recovery failed.' }
       - name: Direct3D 12 DXIL pixels and fenced three-slot ownership
         shell: powershell
         env:
@@ -86,6 +98,8 @@ jobs:
           name: windows-amd64-${{ matrix.os }}
           path: |
             .cache/windows-validation/
+            .cache/bitmap-native/
+            .cache/bitmap-recovery/
             bin/counter*.exe
             testdata/fuzz/
             .cache/dx12-default/
@@ -148,6 +162,11 @@ jobs:
       - name: Metal resources, window identity and Go state after recovery
         shell: bash
         run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -metal-recovery -output bin/metal-recovery.json
+      - name: Actual Metal bitmap pixels, bounded residency and view recovery
+        shell: bash
+        run: |
+          go run ./internal/bitmaptest -output bin/bitmap-native
+          go run ./internal/bitmaptest -recovery -output bin/bitmap-recovery
       - name: Actual Metal drawable pixels at fractional and double density
         shell: bash
         run: |
@@ -165,6 +184,8 @@ jobs:
             bin/metal-pixels-150/
             bin/metal-pixels-200/
             bin/metal-recovery.json*
+            bin/bitmap-native/
+            bin/bitmap-recovery/
           if-no-files-found: warn
 
   core:

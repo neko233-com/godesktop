@@ -14,6 +14,7 @@
 #include <algorithm>
 #include <mutex>
 #include "bridge.h"
+#include "image_store.h"
 #include "dx12_surface.h"
 
 namespace {
@@ -52,6 +53,7 @@ struct Window {
     std::unique_ptr<gd_dx12::Surface> surface=std::make_unique<gd_dx12::Surface>();
     gd_dx12::GlyphAtlas atlas;
     gd_dx12::Scene scene;
+    std::map<uint64_t,std::shared_ptr<gd_dx12::AtlasPage>> bitmaps;
     GDColor background{};
     bool custom_titlebar=false;
     unsigned high_surrogate=0;
@@ -78,6 +80,7 @@ struct Window {
         surface->stats.glyph_atlas_bytes=atlas.accounting->pages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
         surface->stats.glyph_atlas_peak_bytes=atlas.accounting->peakPages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
         surface->stats.glyph_atlas_epochs=atlas.epochs;
+        surface->stats.bitmap_cache_entries=gd_image_entries();surface->stats.bitmap_cache_bytes=gd_image_bytes;
         std::lock_guard<std::mutex> lock(stats_mutex);
         latest_stats=surface->stats;
         rendered_frames.store(surface->stats.completed);
@@ -98,7 +101,7 @@ struct Window {
         // submission. Account for abandoned work separately from GPU completion.
         saved.dropped_frames=saved.submitted-saved.completed;
         saved.in_flight=0; saved.device_recoveries++;
-        scene=gd_dx12::Scene{}; atlas.clear();
+        scene=gd_dx12::Scene{}; atlas.clear();bitmaps.clear();
         surface.reset(); // Releases the old swapchain and all device resources.
         surface=std::make_unique<gd_dx12::Surface>();
         surface->stats=saved;
@@ -133,6 +136,7 @@ struct Window {
         return result;
     }
     bool build_scene(float scale) {
+        for(auto i=bitmaps.begin();i!=bitmaps.end();) {if(!gd_image_get(i->first)) i=bitmaps.erase(i);else ++i;}
         for(unsigned attempt=0;attempt<2;attempt++) {
             scene.reset(atlas.white());
             for(const auto &cmd:commands) {
@@ -148,6 +152,12 @@ struct Window {
                         error=atlas.error.empty()?"DirectWrite atlas drawing failed":atlas.error;
                         return false;
                     }
+                } else if(cmd.kind==5) {
+                    const GDImage *image=gd_image_get(cmd.image_id);
+                    if(!image) {error="Bitmap scene references a missing image";return false;}
+                    auto &page=bitmaps[cmd.image_id];
+                    if(!page) page=std::make_shared<gd_dx12::AtlasPage>(*image);
+                    scene.append(gd_gpu_instance(&cmd),page);
                 } else scene.append(gd_gpu_instance(&cmd));
             }
             if(!atlas.full) return true;
@@ -421,6 +431,7 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
         last_error=window.error;
     }
     CoUninitialize();
+    gd_images_clear();
     return last_error.empty()?nullptr:last_error.c_str();
 }
 

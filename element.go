@@ -9,6 +9,7 @@ const (
 	buttonKind
 	iconKind
 	stackKind
+	imageKind
 )
 
 // Element is a transient description of a view. Build a fresh tree in each view
@@ -25,6 +26,7 @@ type Element struct {
 	click                                               func(*Context)
 	width, height, grow, padding, gap, radius, fontSize float32
 	background, foreground                              Color
+	bitmap                                              *Bitmap
 }
 
 func element(kind elementKind) *Element {

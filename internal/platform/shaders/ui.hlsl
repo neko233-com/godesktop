@@ -10,7 +10,7 @@ struct Instance {
 };
 
 StructuredBuffer<Instance> instances : register(t0);
-Texture2D<float> glyphs : register(t1);
+Texture2D<float4> glyphs : register(t1);
 SamplerState glyphSampler : register(s0);
 cbuffer Frame : register(b0) { float2 viewport; float2 framePadding; };
 
@@ -57,8 +57,12 @@ Out vertex_main(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_Instance
 float4 fragment_main(Out input) : SV_Target {
     if (any(input.pixelPosition<input.clip.xy) || any(input.pixelPosition>=input.clip.xy+input.clip.zw)) discard;
     float alpha;
+    if (input.kind == 5) {
+        float4 rgba = glyphs.Sample(glyphSampler,input.uv);
+        return float4(rgba.rgb*input.color.rgb*input.color.a,rgba.a*input.color.a);
+    }
     if (input.kind == 2) {
-        alpha = glyphs.Sample(glyphSampler,input.uv)*input.color.a;
+        alpha = glyphs.Sample(glyphSampler,input.uv).r*input.color.a;
     } else {
         float2 q = abs(input.local-input.size*0.5)-(input.size*0.5-input.radius);
         float distance = length(max(q,0.0))+min(max(q.x,q.y),0.0)-input.radius;

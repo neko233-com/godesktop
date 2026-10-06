@@ -41,4 +41,8 @@ type RenderStats struct {
 	GlyphUploadedBytes  uint64 `json:"glyph_uploaded_bytes"`
 	DeviceRecoveries    uint64 `json:"device_recoveries"`
 	DroppedFrames       uint64 `json:"dropped_frames"`
+	BitmapCacheEntries  uint64 `json:"bitmap_cache_entries"`
+	BitmapCacheBytes    uint64 `json:"bitmap_cache_bytes"`
+	BitmapUploads       uint64 `json:"bitmap_uploads"`
+	BitmapUploadedBytes uint64 `json:"bitmap_uploaded_bytes"`
 }

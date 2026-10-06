@@ -13,6 +13,7 @@
 #include <time.h>
 #include "bridge.h"
 #include "gpu_scene.h"
+#include "image_store.h"
 #include "gpu_shader_metal.h"
 #include "gpu_glyphs_metal.h"
 
@@ -47,6 +48,7 @@
     _Atomic uint64_t glyph_rasterizations,glyph_cache_hits,glyph_cache_entries,glyph_atlas_pages;
     _Atomic uint64_t glyph_atlas_bytes,glyph_atlas_peak_bytes,glyph_atlas_epochs,glyph_uploaded_bytes;
     _Atomic uint64_t device_recoveries,dropped_frames,diagnostic_recovery_remaining;
+    _Atomic uint64_t bitmap_cache_entries,bitmap_cache_bytes,bitmap_uploads,bitmap_uploaded_bytes;
     uint64_t diagnostic_recovery_interval;
 }
 @property(nonatomic,strong) NSLock *snapshotLock;
@@ -64,6 +66,7 @@
         atomic_init(&glyph_rasterizations,0); atomic_init(&glyph_cache_hits,0); atomic_init(&glyph_cache_entries,0); atomic_init(&glyph_atlas_pages,0);
         atomic_init(&glyph_atlas_bytes,0); atomic_init(&glyph_atlas_peak_bytes,0); atomic_init(&glyph_atlas_epochs,0); atomic_init(&glyph_uploaded_bytes,0);
         atomic_init(&device_recoveries,0); atomic_init(&dropped_frames,0); atomic_init(&diagnostic_recovery_remaining,0);
+        atomic_init(&bitmap_cache_entries,0);atomic_init(&bitmap_cache_bytes,0);atomic_init(&bitmap_uploads,0);atomic_init(&bitmap_uploaded_bytes,0);
         self.snapshotLock=[[NSLock alloc] init];
     }
     return self;
@@ -93,6 +96,7 @@ static GDRunState *current_metrics(void) {
 @property(nonatomic,strong) id frameClock;
 @property(nonatomic,strong) dispatch_group_t outstanding;
 @property(nonatomic,strong) GDGlyphAtlas *atlas;
+@property(nonatomic,strong) NSMutableDictionary<NSNumber *,GDAtlasPage *> *bitmaps;
 @property(nonatomic,strong) NSMutableDictionary<NSArray *,id> *layouts;
 @property(nonatomic,strong) NSData *scene;
 @property(nonatomic,strong) NSData *text;
@@ -179,6 +183,7 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     view.readback=readback; view.framebufferOnly=!readback;
     view.atlas=[[GDGlyphAtlas alloc] initWithDevice:device]; view.layouts=[NSMutableDictionary dictionary];
     view.scene=[NSData data]; view.text=[NSData data];
+    view.bitmaps=[NSMutableDictionary dictionary];
     view.colorPixelFormat=MTLPixelFormatBGRA8Unorm;
     const char *density=getenv("GODESKTOP_TEST_DRAWABLE_SCALE");
     if(density) {
@@ -339,7 +344,7 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     // Release every old device-dependent resource before constructing the new
     // queue. Completed frames remain completed; failed submissions are counted
     // separately by their completion handlers.
-    [previous clear]; self.atlas=nil; self.slots=nil; self.pipeline=nil; self.queue=nil;
+    [previous clear]; self.atlas=nil; self.bitmaps=nil;self.slots=nil; self.pipeline=nil; self.queue=nil;
     self.delegate=nil; [self releaseDrawables]; self.device=nil;
     id<MTLDevice> device=select_device(registryID);
     if(!device) { [self fail:@"No usable alternate Metal device after GPU removal"]; return; }
@@ -350,6 +355,7 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     replacement.atlas.usage=previous.usage;
     replacement.atlas.rasterized=previous.rasterized; replacement.atlas.hits=previous.hits;
     replacement.atlas.epochs=previous.epochs; replacement.atlas.uploadedBytes=previous.uploadedBytes;
+    replacement.atlas.bitmapUploads=previous.bitmapUploads;replacement.atlas.bitmapUploadedBytes=previous.bitmapUploadedBytes;
     // Keep the Run generation stable: already queued Go Dispatch/Quit/window
     // actions must target this same window after its view is replaced. Old view
     // completion/UI callbacks check identity and cannot affect the replacement.
@@ -371,6 +377,7 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     return (__bridge CTLineRef)self.layouts[key];
 }
 - (GDGlyphScene *)buildGlyphScene:(CGFloat)scale {
+    for(NSNumber *key in self.bitmaps.allKeys) if(!gd_image_get(key.unsignedLongLongValue)) [self.bitmaps removeObjectForKey:key];
     for(NSUInteger attempt=0;attempt<2;attempt++) {
         GDGlyphScene *scene=[[GDGlyphScene alloc] initWithWhite:[self.atlas white]];
         const GDCommand *commands=self.scene.bytes;
@@ -383,6 +390,16 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
                 CTLineRef line=[self layout:command];
                 if(!line) return nil;
                 success=[scene appendLine:line command:command atlas:self.atlas scale:scale];
+            } else if(command->kind==5) {
+                const GDImage *image=gd_image_get(command->image_id);
+                if(!image) {[self fail:@"Bitmap scene references a missing image"];return nil;}
+                NSNumber *key=@(command->image_id);
+                GDAtlasPage *page=self.bitmaps[key];
+                if(!page) {
+                    page=[[GDAtlasPage alloc] init];page.width=image->width;page.height=image->height;page.channels=4;page.bitmapID=image->id;page.version=1;
+                    self.bitmaps[key]=page;
+                }
+                success=[scene append:gd_gpu_instance(command) page:page];
             } else success=[scene append:gd_gpu_instance(command) page:nil];
             if(!success) {
                 if(self.atlas.full) break;
@@ -405,6 +422,8 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     atomic_store(&metrics->glyph_atlas_bytes,pages*GDAtlasEdge*GDAtlasEdge);
     atomic_store(&metrics->glyph_atlas_peak_bytes,atomic_load(&atlas.usage->peak)*GDAtlasEdge*GDAtlasEdge);
     atomic_store(&metrics->glyph_atlas_epochs,atlas.epochs); atomic_store(&metrics->glyph_uploaded_bytes,atlas.uploadedBytes);
+    atomic_store(&metrics->bitmap_cache_entries,gd_image_entries());atomic_store(&metrics->bitmap_cache_bytes,gd_image_bytes);
+    atomic_store(&metrics->bitmap_uploads,atlas.bitmapUploads);atomic_store(&metrics->bitmap_uploaded_bytes,atlas.bitmapUploadedBytes);
 }
 - (void)drawInMTKView:(MTKView *)view {
     GDRunState *metrics=self.metrics;
@@ -647,6 +666,7 @@ const char *gd_run(const char *title,float width,float height,GDColor background
         NSApp.delegate=nil; view.delegate=nil;
         if(view.failure) last_error=strdup(view.failure.UTF8String);
     }
+    gd_images_clear();
     return last_error;
 }
 
@@ -725,7 +745,9 @@ GDRenderStats gd_render_stats(void) {
         .glyph_rasterizations=atomic_load(&metrics->glyph_rasterizations),.glyph_cache_hits=atomic_load(&metrics->glyph_cache_hits),.glyph_cache_entries=atomic_load(&metrics->glyph_cache_entries),
         .glyph_atlas_pages=atomic_load(&metrics->glyph_atlas_pages),.glyph_atlas_bytes=atomic_load(&metrics->glyph_atlas_bytes),.glyph_atlas_peak_bytes=atomic_load(&metrics->glyph_atlas_peak_bytes),
         .glyph_atlas_epochs=atomic_load(&metrics->glyph_atlas_epochs),.glyph_uploaded_bytes=atomic_load(&metrics->glyph_uploaded_bytes),
-        .device_recoveries=atomic_load(&metrics->device_recoveries),.dropped_frames=atomic_load(&metrics->dropped_frames)
+        .device_recoveries=atomic_load(&metrics->device_recoveries),.dropped_frames=atomic_load(&metrics->dropped_frames),
+        .bitmap_cache_entries=atomic_load(&metrics->bitmap_cache_entries),.bitmap_cache_bytes=atomic_load(&metrics->bitmap_cache_bytes),
+        .bitmap_uploads=atomic_load(&metrics->bitmap_uploads),.bitmap_uploaded_bytes=atomic_load(&metrics->bitmap_uploaded_bytes)
     };
     }
 }

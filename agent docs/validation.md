@@ -20,3 +20,9 @@
 Workflow changes: scripts/validate-github-actions.ps1 (actionlint/ShellCheck),
 appropriate Go checks and git diff --check. Paid Copilot requests use isolated
 synthetic workspaces; ordinary CI performs real process handshake without prompts.
+
+Native bitmap acceptance captures only the owned HWND/Metal drawable. Verify
+premultiplied alpha, real parent clipping, odd-row RGBA uploads, 128 simultaneous
+distinct texture pixels and pinned residency, count/byte eviction, actual upload
+counts, device recovery and two successive Run lifecycles. CPU residency is
+bounded; fence-held in-flight GPU resources are accounted for separately.

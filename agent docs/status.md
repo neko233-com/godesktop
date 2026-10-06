@@ -1,5 +1,15 @@
 # Verified status
 
+2026-10-07 next framework milestone: immutable Bitmap/Image API and native
+D3D12/Metal RGBA texture caching are implemented. Local Windows strict-cgo race,
+fuzz, native input/PE/GUI and workflow/DXIL checks passed (merged root coverage
+96.8% before the final offscreen branch). New native bitmap checks passed real
+alpha/crop pixels, 128 simultaneous distinct textures, frame pinning, bounded
+count/byte eviction, reupload and repeated Run cleanup. Normal uploads=152;
+actual device-removal recovery uploads=153 with one recovery/dropped frame;
+second Run uploads exactly once. Owned reuse/grid PNGs were visually inspected.
+No macOS or public-version success is claimed until exact-source CI passes.
+
 2026-10-07 gocode v0.10.0 promotion: immutable application/package source
 `0a86cec6e6a56aa439c1474c4bfc82a047ce5122` passed all five jobs in
 [CI 37527105167](https://github.com/neko233-com/gocode/actions/runs/37527105167),

@@ -17,6 +17,7 @@ typedef struct {
     float radius, font_size;
     uint32_t text_offset, text_length;
     uint32_t font_offset, font_length;
+    uint64_t image_id;
 } GDCommand;
 
 // Counters describe real native encoding/submission, independently of Go view
@@ -31,23 +32,27 @@ typedef struct {
     uint64_t glyph_rasterizations, glyph_cache_hits, glyph_cache_entries, glyph_atlas_pages;
     uint64_t glyph_atlas_bytes, glyph_atlas_peak_bytes, glyph_atlas_epochs, glyph_uploaded_bytes;
     uint64_t device_recoveries, dropped_frames;
+    uint64_t bitmap_cache_entries,bitmap_cache_bytes,bitmap_uploads,bitmap_uploaded_bytes;
 } GDRenderStats;
 
 // Both languages must agree on the fixed, pointer-free scene ABI.
 #ifdef __cplusplus
 static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
-static_assert(sizeof(GDCommand) == 76 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68, "GD command ABI layout changed");
-static_assert(sizeof(GDRenderStats)==224 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
+static_assert(sizeof(GDCommand) == 88 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68 && offsetof(GDCommand,image_id)==80, "GD command ABI layout changed");
+static_assert(sizeof(GDRenderStats)==256 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #else
 _Static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 _Static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
-_Static_assert(sizeof(GDCommand) == 76 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68, "GD command ABI layout changed");
-_Static_assert(sizeof(GDRenderStats)==224 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
+_Static_assert(sizeof(GDCommand) == 88 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68 && offsetof(GDCommand,image_id)==80, "GD command ABI layout changed");
+_Static_assert(sizeof(GDRenderStats)==256 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #endif
 
 const char *gd_run(const char *title, float width, float height, GDColor background, int custom_titlebar);
 void gd_present(const GDCommand *commands, size_t count, const char *text, size_t text_length);
+const char *gd_images_begin(const uint64_t *ids,size_t count);
+int gd_image_has(uint64_t id);
+const char *gd_image_put(uint64_t id,uint32_t width,uint32_t height,const unsigned char *pixels,size_t bytes);
 void gd_measure(const char *text, size_t length, float font_size, const char *font, size_t font_length, float *width, float *height);
 float gd_text_advance(const char *text, size_t length, float font_size, const char *font, size_t font_length);
 const char *gd_read_clipboard(char **text);

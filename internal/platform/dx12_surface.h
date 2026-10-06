@@ -83,7 +83,7 @@ class Surface {
     }
     bool upload_page(WindowFrame &frame,const std::shared_ptr<AtlasPage> &page) {
         if(page->uploaded==page->version) return true;
-        auto desc=texture_desc(AtlasPage::edge,AtlasPage::edge,DXGI_FORMAT_R8_UNORM,D3D12_RESOURCE_FLAG_NONE);
+        auto desc=texture_desc(page->width,page->height,page->bitmapID?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R8_UNORM,D3D12_RESOURCE_FLAG_NONE);
         if(!page->texture && !resource(desc,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST,&page->texture)) return false;
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{}; UINT64 bytes=0;
         engine.native()->GetCopyableFootprints(&desc,0,1,0,&footprint,nullptr,nullptr,&bytes);
@@ -92,7 +92,11 @@ class Surface {
         frame.uploads.push_back(upload);
         void *mapped=nullptr; D3D12_RANGE read{0,0};
         if(!ok(upload->Map(0,&read,&mapped),"Map glyph staging")) return false;
-        for(UINT y=0;y<AtlasPage::edge;y++) std::memcpy(static_cast<unsigned char *>(mapped)+footprint.Offset+y*footprint.Footprint.RowPitch,page->pixels.data()+y*AtlasPage::edge,AtlasPage::edge);
+        const GDImage *image=page->bitmapID?gd_image_get(page->bitmapID):nullptr;
+        if(page->bitmapID && !image) {upload->Unmap(0,nullptr);error="Bitmap was evicted before texture upload";return false;}
+        const unsigned char *pixels=image?image->pixels:page->pixels.data();
+        UINT rowBytes=page->width*page->channels;
+        for(UINT y=0;y<page->height;y++) std::memcpy(static_cast<unsigned char *>(mapped)+footprint.Offset+y*footprint.Footprint.RowPitch,pixels+y*rowBytes,rowBytes);
         upload->Unmap(0,nullptr);
         if(page->shaderState) { auto b=barrier(page->texture,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,D3D12_RESOURCE_STATE_COPY_DEST); list->ResourceBarrier(1,&b); }
         D3D12_TEXTURE_COPY_LOCATION dest{}; dest.pResource=page->texture; dest.Type=D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
@@ -100,7 +104,8 @@ class Surface {
         list->CopyTextureRegion(&dest,0,0,0,&source,nullptr);
         auto b=barrier(page->texture,D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); list->ResourceBarrier(1,&b);
         page->shaderState=true; page->uploaded=page->version;
-        stats.glyph_uploaded_bytes+=AtlasPage::edge*AtlasPage::edge;
+        if(!page->bitmapID) stats.glyph_uploaded_bytes+=AtlasPage::edge*AtlasPage::edge;
+        else {stats.bitmap_uploads++;stats.bitmap_uploaded_bytes+=uint64_t(page->width)*page->height*4;}
         return true;
     }
 public:
@@ -135,7 +140,7 @@ public:
         if(!latency) { error="DXGI frame latency object is unavailable"; return false; }
         D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; heap.NumDescriptors=3;
         if(!ok(engine.native()->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&rtvs)),"Create window RTV descriptors")) return false;
-        heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=GlyphAtlas::maxPages; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=GlyphAtlas::maxPages+GDImageLimit; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         for(auto &frame:frames) {
             if(!ok(engine.native()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&frame.allocator)),"Create window command allocator") || !ok(engine.native()->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&frame.descriptors)),"Create frame glyph descriptors")) return false;
         }
@@ -211,7 +216,7 @@ public:
         unsigned index=swapchain->GetCurrentBackBufferIndex();
         auto &frame=frames[index];
         if(!latencyReady || engine.completion()->GetCompletedValue()<frame.fence) { error="D3D12 frame submitted before DXGI/fence readiness"; return false; }
-        if(scene.pages.size()>GlyphAtlas::maxPages || scene.instances.size()>16*1024*1024/sizeof(GDGPUInstance)) { error="Window scene exceeds GPU resource budget"; return false; }
+        if(scene.pages.size()>GlyphAtlas::maxPages+GDImageLimit || scene.instances.size()>16*1024*1024/sizeof(GDGPUInstance)) { error="Window scene exceeds GPU resource budget"; return false; }
         frame.retire();
         UINT64 needed=std::max<size_t>(1,scene.instances.size())*sizeof(GDGPUInstance);
         if(needed>frame.capacity) {
@@ -230,7 +235,7 @@ public:
         UINT descriptorSize=engine.native()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         for(const auto &page:frame.pages) {
             if(!upload_page(frame,page)) return false;
-            D3D12_SHADER_RESOURCE_VIEW_DESC srv{}; srv.Format=DXGI_FORMAT_R8_UNORM; srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
+            D3D12_SHADER_RESOURCE_VIEW_DESC srv{}; srv.Format=page->bitmapID?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R8_UNORM; srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
             srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; srv.Texture2D.MipLevels=1;
             engine.native()->CreateShaderResourceView(page->texture,&srv,descriptor); descriptor.ptr+=descriptorSize;
         }

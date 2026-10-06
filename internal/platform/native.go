@@ -60,6 +60,43 @@ func Run(options Options, handler func(Event)) error {
 // Present transfers one pointer-free command array and one UTF-8 blob per frame.
 // The native backend copies both buffers synchronously and retains no Go memory.
 func Present(commands []Command) {
+	ids := make([]uint64, 0)
+	images := make(map[uint64]*Bitmap)
+	var imageBytes uint64
+	for _, cmd := range commands {
+		if cmd.Bitmap == nil {
+			continue
+		}
+		b := cmd.Bitmap
+		if _, ok := images[b.ID]; ok {
+			continue
+		}
+		if b.ID == 0 || b.Width <= 0 || b.Height <= 0 || b.Width > MaxBitmapEdge || b.Height > MaxBitmapEdge || uint64(b.Width)*uint64(b.Height)*4 != uint64(len(b.Pixels)) {
+			panic("invalid bitmap scene asset")
+		}
+		imageBytes += uint64(len(b.Pixels))
+		if len(ids) >= MaxFrameBitmaps || imageBytes > MaxBitmapBytes {
+			panic("bitmap frame exceeds 128 images / 64 MiB")
+		}
+		images[b.ID] = b
+		ids = append(ids, b.ID)
+	}
+	var required *C.uint64_t
+	if len(ids) > 0 {
+		required = (*C.uint64_t)(unsafe.Pointer(&ids[0]))
+	}
+	if err := C.gd_images_begin(required, C.size_t(len(ids))); err != nil {
+		panic(C.GoString(err))
+	}
+	for _, id := range ids {
+		if C.gd_image_has(C.uint64_t(id)) != 0 {
+			continue
+		}
+		b := images[id]
+		if err := C.gd_image_put(C.uint64_t(id), C.uint32_t(b.Width), C.uint32_t(b.Height), (*C.uchar)(unsafe.Pointer(&b.Pixels[0])), C.size_t(len(b.Pixels))); err != nil {
+			panic(C.GoString(err))
+		}
+	}
 	if len(commands) == 0 {
 		C.gd_present(nil, 0, nil, 0)
 		return
@@ -76,6 +113,9 @@ func Present(commands []Command) {
 			panic("native text buffer exceeds 4 GiB")
 		}
 		native[i] = C.GDCommand{kind: C.int(cmd.Kind), bounds: rectangle(cmd.Bounds), clip: rectangle(cmd.Clip), color: color(cmd.Color), radius: C.float(cmd.Radius), font_size: C.float(cmd.FontSize), text_offset: C.uint32_t(len(blob)), text_length: C.uint32_t(len(cmd.Text))}
+		if cmd.Bitmap != nil {
+			native[i].image_id = C.uint64_t(cmd.Bitmap.ID)
+		}
 		blob = append(blob, cmd.Text...)
 		native[i].font_offset, native[i].font_length = C.uint32_t(len(blob)), C.uint32_t(len(cmd.FontFamily))
 		blob = append(blob, cmd.FontFamily...)
@@ -165,5 +205,6 @@ func RendererStats() RenderStats {
 		GlyphAtlasPages: uint64(s.glyph_atlas_pages), GlyphAtlasBytes: uint64(s.glyph_atlas_bytes), GlyphAtlasPeakBytes: uint64(s.glyph_atlas_peak_bytes),
 		GlyphAtlasEpochs: uint64(s.glyph_atlas_epochs), GlyphUploadedBytes: uint64(s.glyph_uploaded_bytes),
 		DeviceRecoveries: uint64(s.device_recoveries), DroppedFrames: uint64(s.dropped_frames),
+		BitmapCacheEntries: uint64(s.bitmap_cache_entries), BitmapCacheBytes: uint64(s.bitmap_cache_bytes), BitmapUploads: uint64(s.bitmap_uploads), BitmapUploadedBytes: uint64(s.bitmap_uploaded_bytes),
 	}
 }
