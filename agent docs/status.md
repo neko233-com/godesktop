@@ -6,7 +6,8 @@ Framework v0.5.2 is published at immutable source
 CoreText typographic bounds for monospace grids; MeasureText retains label layout
 semantics. Real native trailing-space/monospace checks gate this public module.
 The child independently pins v0.5.2 with GOWORK=off and has published its real
-ConPTY/PTY terminal with PowerShell/zsh input highlighting as v0.7.0. Promotion
+ConPTY/PTY terminal with PowerShell/zsh input highlighting as v0.7.0 and independent
+language-server recovery as v0.8.1. Promotion
 and installed evidence follow below; terminal contracts/gaps are in its harness.
 
 Initial metrics source 3abf0a6 failed both Mac CI jobs in run 37487621956:
@@ -171,3 +172,38 @@ GiB native browsing, gopls/Copilot and Mac bundle packages. Child evidence commi
 retains these exact verified code/metadata commits; the parent gitlink advances
 to it. Evidence-only commits skip redundant native CI, preserving source gates.
 The production/full-parity goal remains active.
+
+2026-10-07 language recovery promotion: gocode v0.8.1 immutable application source
+`9a498ab4ae866419a1a8e1c08eb49b15a3be9db5` passed all five jobs in
+`37509901232`; publication `37511249130` reused its tested Windows MSI/ZIP and Mac
+Intel/ARM packages. Generic servers now restart independently with four bounded
+backoff retries, replay current unsaved snapshots, cancel old work and guard
+session/document identity. Queues/requests/events/diagnostic text have explicit
+bounds; palette Restart Language Servers resets the crash budget. Real stdio
+crash/manual repair/initialize cancellation and actual native gopls recovery
+tests passed. A stopped-after-crash negative control failed the regression gate.
+
+Earlier v0.8.0 source b767b83 passed logical/native CI but its downloaded Win2022
+final capture still showed the prior greet()/Output frame. It remains a prerelease,
+with no artifact/tag replacement. v0.8.1 waits for actual owned GPU completed-token
+and Problems glyph ink before saving that exact passing capture. The corrected
+Windows 2022 source-CI capture and final installed gopls/Settings captures were
+visually inspected. Same-source CI 37508299422 passed four jobs but Win2025's
+official Copilot initialize hit 20 seconds; unchanged source then passed all five
+in 37509901232, including the handshake, final pixels, GiB browsing and MSI gates.
+
+Generated metadata `5b3a7f309610d5ed095fb38c4e7d8361b6b93392` changes only the
+seven known channel/hash/install files; local Python hash/input-policy checks
+passed. Real signed public automatic ghfast.top, separate direct GitHub and manual
+ghfast.top full ZIP downloads passed SHA256. Released-byte native large-file,
+four close modes, VSIX save, terminal and recovered gopls passed; owned-root
+rollback then actually rendered v0.4.0/source cfcd3513 with shared extensions.
+The user's stable v0.5.1 launcher separately applied v0.8.1 via direct GitHub.
+Current payload/source is 0.8.1/9a498ab; MSI/launcher baseline remains 0.5.1.
+Installed real recovered gopls/final pixels, highlighted terminal, GUI/icons/
+Settings/source preservation, version/update metadata, shortcuts/icon files/PATH
+passed. Auto=true/mode=auto is retained. Copilot authenticated/LSP/SDK=true,
+networkPromptSent=false; no new AI prompt was sent. Child documentation-only
+evidence `9970c5bd07dfad08fec045d1d9e13cc03743c9ac` preserves verified code and
+metadata; the parent gitlink advances to it. Full production/VS Code/official
+Copilot VSIX parity and broader language/process supervision remain unfinished.
