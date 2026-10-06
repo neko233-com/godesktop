@@ -3,6 +3,7 @@
 package editor
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"slices"
@@ -49,6 +50,7 @@ type Snapshot struct {
 	EOL       string
 	Selection Selection
 	lines     []string
+	identity  *bufferIdentity
 }
 
 func (s Snapshot) Text() string   { return strings.Join(s.lines, s.EOL) }
@@ -68,6 +70,7 @@ type history struct {
 	beforeEOL, afterEOL           string
 }
 type Buffer struct {
+	identity                              *bufferIdentity
 	lines                                 []string
 	eol                                   string
 	version                               int
@@ -80,6 +83,8 @@ type Buffer struct {
 const MaxHistoryBytes = 16 << 20
 const MaxHistoryEntries = 2048
 
+type bufferIdentity struct{ token byte }
+
 func New(text string) (*Buffer, error) {
 	if !utf8.ValidString(text) || strings.ContainsRune(text, 0) {
 		return nil, errors.New("document must contain valid UTF-8 text without NUL")
@@ -88,7 +93,7 @@ func New(text string) (*Buffer, error) {
 	if strings.Contains(text, "\r\n") {
 		eol = "\r\n"
 	}
-	return &Buffer{lines: strings.Split(normalize(text), "\n"), eol: eol, version: 1}, nil
+	return &Buffer{identity: &bufferIdentity{}, lines: strings.Split(normalize(text), "\n"), eol: eol, version: 1}, nil
 }
 func normalize(s string) string {
 	return strings.ReplaceAll(strings.ReplaceAll(s, "\r\n", "\n"), "\r", "\n")
@@ -147,7 +152,9 @@ func (b *Buffer) Text() string         { return strings.Join(b.lines, b.eol) }
 func (b *Buffer) Dirty() bool          { return b.revision != b.savedRevision }
 func (b *Buffer) MarkSaved()           { b.savedRevision = b.revision }
 func (b *Buffer) Selection() Selection { return b.selection }
-func (b *Buffer) Snapshot() Snapshot   { return Snapshot{b.version, b.eol, b.selection, b.lines} }
+func (b *Buffer) Snapshot() Snapshot {
+	return Snapshot{b.version, b.eol, b.selection, b.lines, b.identity}
+}
 func (b *Buffer) SetSelection(s Selection) error {
 	if _, err := b.validate(s.Anchor); err != nil {
 		return err
@@ -256,12 +263,24 @@ func (b *Buffer) splice(r Range, text string) {
 // the old document; overlapping ranges are rejected. Returned changes are in
 // descending order and can be sent directly as incremental LSP changes.
 func (b *Buffer) Apply(edits []Edit, selection *Selection) (ChangeEvent, error) {
+	return b.apply(context.Background(), edits, selection, nil)
+}
+
+// A cancellable application is private: only a worker-owned candidate may be
+// discarded after cancellation. Public Apply never partially cancels a buffer.
+func (b *Buffer) apply(ctx context.Context, edits []Edit, selection *Selection, captured *history) (ChangeEvent, error) {
+	if err := ctx.Err(); err != nil {
+		return ChangeEvent{}, err
+	}
 	if len(edits) == 0 {
 		return ChangeEvent{Version: b.version}, nil
 	}
 	edits = slices.Clone(edits)
 	sort.SliceStable(edits, func(i, j int) bool { return less(edits[i].Range.Start, edits[j].Range.Start) })
 	for i, e := range edits {
+		if err := ctx.Err(); err != nil {
+			return ChangeEvent{}, err
+		}
 		if !utf8.ValidString(e.Text) || strings.ContainsRune(e.Text, 0) {
 			return ChangeEvent{}, errors.New("edit must contain valid UTF-8 text without NUL")
 		}
@@ -298,6 +317,9 @@ func (b *Buffer) Apply(edits []Edit, selection *Selection) (ChangeEvent, error) 
 	changes := make([]Change, 0, len(edits))
 	addedUnits := 0
 	for i := len(edits) - 1; i >= 0; i-- {
+		if err := ctx.Err(); err != nil {
+			return ChangeEvent{}, err
+		}
 		e := edits[i]
 		text := strings.ReplaceAll(normalize(e.Text), "\n", b.eol)
 		old, _ := b.RangeText(e.Range)
@@ -320,6 +342,9 @@ func (b *Buffer) Apply(edits []Edit, selection *Selection) (ChangeEvent, error) 
 	inserted, _ := b.RangeText(Range{start, b.PositionAt(startOffset + units(removed) + addedUnits)})
 	b.nextRevision++
 	item := history{start, removed, inserted, before, after, b.revision, b.nextRevision, b.eol, b.eol}
+	if captured != nil {
+		*captured = item
+	}
 	b.revision = b.nextRevision
 	b.record(item)
 	b.version++

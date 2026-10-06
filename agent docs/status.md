@@ -1,5 +1,17 @@
 # Verified status
 
+2026-10-07 prepared transaction candidate: Snapshot.Prepare computes private
+UTF-16/EOL/selection/undo/protocol state on a cancellable worker. UI CanCommit
+checks identity/version/selection; CommitPrepared adopts text without scanning
+the source and retains earlier history/save points. Empty/unowned/stale plans,
+overlap/NUL/surrogate errors and same-version replacement buffers are rejected.
+Three-repeat race oracle/history/worker tests pass. Actual 8 MiB source commit
+allocates 64 new Go bytes locally; preparation races with newer live edits and
+cannot commit afterward. Full local strict-cgo/race/vet/native/fuzz/PE/GUI gates
+pass; merged root coverage is 96.7%. Public/cross-platform application evidence
+is pending.
+This is a foundation for actual native workspace replace, which is still open.
+
 2026-10-07 gocode v0.13.0 search promotion: immutable source/package
 `d4a869e24c9acc2d93cd9aefb17f9303064423b2` passed all five jobs in
 [CI 37547147426](https://github.com/neko233-com/gocode/actions/runs/37547147426),

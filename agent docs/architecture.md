@@ -5,6 +5,9 @@
 - Windows uses Win32, D3D12/DXIL/DirectWrite; macOS uses AppKit/Metal/CoreText.
   Fence/completion ownership governs three-slot buffers and glyph resources.
 - The editable document API uses UTF-16 protocol positions with UTF-8 storage.
+  Immutable snapshots prepare cancellable transactions on workers. UI bulk edits
+  preflight original buffer identity/version/selection before adopting prepared
+  lines; saved revision and existing bounded undo/redo history are retained.
   File-backed large-document browsing must avoid loading/duplicating the full file.
   Buffer.Reload adopts a saved disk revision with monotonic versions, immutable
   snapshots and bounded undo history, including LF/CRLF transitions. The caller

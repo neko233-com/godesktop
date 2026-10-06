@@ -20,6 +20,13 @@ change, err := buffer.Apply([]editor.Edit{{
 
 ## 原生编辑支持
 
+`Snapshot.Prepare(ctx, edits, selection)` 在后台准备不可变事务和预览，最多 8192
+项编辑，取消时丢弃私有候选文本。`Buffer.CanCommit(plan)` 仅检查文档身份、版本和
+选区；UI 先检查整个跨文档批次，再调用 `CommitPrepared`。同文本／版本的新 Buffer
+仍是不同文档；期间编辑或移动光标会使旧计划失效。提交不重建完整文本，保留原 Buffer
+身份、递增版本、保存点和撤销／重做历史。返回的协议变更独立复制，预览快照保持不可变。
+源文件大小、整批内存与后台任务数量上限由应用设置。磁盘保存仍是独立的后台步骤。
+
 `Stack` 按绘制顺序叠加元素，光标和选区不会挤开文本。`MeasureText` 使用平台整形引擎测量文本；`Context.ElementBounds(key)` 返回上一轮有效布局中交互元素的 DIP 边界。输入携带修饰键和独立 Repeat 标记；重复按键用于编辑，普通按钮不会因长按 Enter 连续执行。
 
 `TextAdvance(text, size, font)` 返回不含布局留白或像素取整的原生文字步进，适合终端等等宽网格和光标定位。macOS `MeasureText` 包含标签留白，不能用它的单字符宽度乘列数。两者均在 UI 线程调用，字体/字号应与绘制一致；没有原生后端时仅使用模型估算值。
