@@ -28,7 +28,8 @@
 - [ ] 滚动容器、鼠标滚轮、焦点范围与快捷键 actions。
 - [ ] 多窗口、最小尺寸、关闭回调、系统菜单。
 - [x] 平台字体选择、自定义标题栏、矢量图标、Unicode/滚轮输入事件。
-- [ ] 图片、SVG、可控字体回退、文本换行。
+- [x] 不可变 RGBA 图片、原生 GPU 纹理复用、有界驻留、裁切与设备恢复（v0.6.0）。
+- [ ] SVG、可控字体回退、文本换行。
 - [ ] Windows UI Automation 与 macOS Accessibility。
 - [ ] 系统主题、辅助功能设置和 reduced motion。
 

@@ -1,6 +1,6 @@
 # Verified status
 
-2026-10-07 next framework milestone: immutable Bitmap/Image API and native
+2026-10-07 framework v0.6.0 milestone: immutable Bitmap/Image API and native
 D3D12/Metal RGBA texture caching are implemented. Local Windows strict-cgo race,
 fuzz, native input/PE/GUI and workflow/DXIL checks passed (merged root coverage
 96.8% before the final offscreen branch). New native bitmap checks passed real
@@ -8,7 +8,29 @@ alpha/crop pixels, 128 simultaneous distinct textures, frame pinning, bounded
 count/byte eviction, reupload and repeated Run cleanup. Normal uploads=152;
 actual device-removal recovery uploads=153 with one recovery/dropped frame;
 second Run uploads exactly once. Owned reuse/grid PNGs were visually inspected.
-No macOS or public-version success is claimed until exact-source CI passes.
+Immutable source 3bf3e4dfd1b4a221eb61018f201295b1ce3404f7 passed all five jobs in
+[CI 37532765849](https://github.com/neko233-com/godesktop/actions/runs/37532765849)
+and was published as v0.6.0. Windows 2022/2025, Mac Intel/ARM and Ubuntu all pass;
+Mac reports match normal/recovery 152/153 uploads, one recovery and one second-Run
+upload. Downloaded Mac ARM reuse/recovery and Intel 128-image PNGs were visually
+inspected. Public testing/metalprobe exposes owned completed-drawable readback.
+Initial c27a91d CI 37532594163 was superseded/cancelled for that public probe;
+only final 3bf3e4d is the promoted source.
+
+Child v0.11.0/source 05439efb84156feeb14b1d45f76631bd1d0673cc passed all five jobs
+in 37534367695, with independent public v0.6.0 and actual Windows GPU-logo/caption/
+tab checks plus Mac normal/1.5/2 drawable captures. Publication 37535500899 reused
+tested packages. Metadata b6c7af4 changes seven known channel files and passed
+local policy/public-byte gates; actual automatic/direct/manual ZIP SHA256 and
+released-native checks plus original v0.4.0 GUI rollback passed. The user's
+v0.10.0 updater selected 0.11.0/source 05439ef via direct GitHub. Stable baseline
+is still 0.5.1. Installed GUI/icons/Settings/visual/tab/opener/VSIX/save/gopls/
+watch/terminal/close and ConPTY checks passed; Auto=true/mode=auto is preserved.
+Official Copilot authenticated/LSP/SDK=true, networkPromptSent=false. Downloaded
+Windows 2022, Mac ARM 150%/closed 200% and Intel 200%, then actual installed README/
+Settings pixels were visually inspected. Source references, viewport/DPI, explicit
+scope gaps and no-prompt SDK-first route are maintained in the child harness.
+Full production/VS Code/official Copilot VSIX parity remains active.
 
 2026-10-07 gocode v0.10.0 promotion: immutable application/package source
 `0a86cec6e6a56aa439c1474c4bfc82a047ce5122` passed all five jobs in
