@@ -1,14 +1,22 @@
 # Verified status
 
-In development: saved disk reloads now preserve buffer identity, monotonic UTF-16
+Framework v0.5.3 is published at immutable source
+`d22bf93187911a2fd829c993a6b096338e9a1b64`, with all five jobs green in CI
+`37513434533`. Saved disk reloads preserve buffer identity, monotonic UTF-16
 protocol versions, prior undo transactions and EOL transitions. Targeted repeated
 Windows race tests passed for invalid input, surrogate selection clamping, saved
 undo/redo revisions, snapshot immutability and history budgets. The full framework
-platform gates and public module promotion are pending. Local full Windows amd64
+platform gates and public module promotion passed. Local full Windows amd64
 strict-cgo/race/native/PE/fuzz validation passed (Repeat=1, FuzzSeconds=3), reports
 `.cache/windows-validation/2e2d4f8115224d3d80a0aea19d3122be`; combined root native
-coverage is 96.5%. gocode's external file
-watch/reload/conflict integration is being implemented separately.
+coverage is 96.5%. gocode v0.9.0/source
+`abadd6d0d53109f7445a41ee92652ada1491d7ff` independently pins this public module,
+passed all five jobs in `37518877841` and publication `37520177277`. Open editable
+files now have bounded parent-directory watches/reconciliation, clean versioned
+reload, dirty conflict confirmation and explicit hash-checked overwrite. Windows
+uses deletion-sharing reads and modern native rename with bounded retry/revalidation.
+The parent pins documentation-only child evidence
+`ba93e3d884020bc7ded564ce0933d38eb82ab7e6`, retaining exact verified code/metadata.
 
 Framework v0.5.2 is published at immutable source
 `ff69721c1a807d8be044786597bf33033f55d966`, all five jobs green in CI
@@ -217,3 +225,37 @@ networkPromptSent=false; no new AI prompt was sent. Child documentation-only
 evidence `9970c5bd07dfad08fec045d1d9e13cc03743c9ac` preserves verified code and
 metadata; the parent gitlink advances to it. Full production/VS Code/official
 Copilot VSIX parity and broader language/process supervision remain unfinished.
+
+2026-10-07 editable-file promotion: child v0.9.0/source abadd6d passed all five
+jobs in 37518877841, including native VSIX/gopls external reload, language recovery,
+Windows 2025 GiB/MSI and Mac packages. Publication 37520177277 reused those exact
+tested artifacts. Windows 2022 source-CI conflict/dialog/final owned-GPU captures
+and installed final reload/Settings captures were visually inspected.
+
+Original child 6001f54 failed Windows 2022 actual-gopls/atomic rename with Access
+denied (37515729600), while the other four jobs passed. It was not published.
+Deletion sharing alone still failed a held-descriptor legacy rename test. The
+corrected FileRenameInfoEx/POSIX path retains old descriptors, respects other read
+sharing conflicts and retries with hash verification/cancellation. Long Unicode
+path, external writes during retry, readonly files and ten repeated races passed.
+An exact-size native filename buffer exposed missing NUL storage and was corrected.
+Source 0ad8fec's standalone BSD root notice then failed actual archive extraction
+(also Mac ARM in superseded 37518524702). Appending the notice to existing
+LICENSE.txt preserved old-updater layout; final source abadd6d passed all gates.
+
+Generated metadata 626671a changes only seven known channel/checksum/install files
+and passed local two Python tests. Signed public v0.9.0 automatic direct GitHub,
+separate direct full download and manual ghfast.top full bytes passed SHA256;
+released-byte native large browsing/four close/VSIX/terminal/recovered-gopls/
+file-watch/gopls passed. The owned root then actually rendered the original
+v0.4.0/source cfcd3513 after rollback with shared extensions.
+
+The user's existing stable launcher updated via actual -update/direct GitHub to
+selected 0.9.0/source abadd6d. MSI/launcher baseline stays 0.5.1. Installed version/
+metadata, ConPTY, file watch, gopls recovery, highlighted terminal, save, GUI/icon/
+Settings/source preservation, shortcuts/icon files and normalized PATH passed.
+Auto=true/mode=auto remains; Settings shows Up to date (0.9.0). Copilot official
+SDK/LSP handshake is authenticated, networkPromptSent=false. The final child
+evidence ba93e3d updates documentation only; the gitlink advances to it. Full
+production/VS Code/official Copilot VSIX parity remains active, including recursive
+workspace watch, async ordinary open/traversal, huge-browser reindex and diff/merge.
