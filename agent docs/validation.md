@@ -7,6 +7,9 @@
 3. macOS Intel/ARM builds native code and verifies real Metal/AppKit submissions,
    pixels, resource lifetime and same-window recovery.
 4. gocode verifies the published module with GOWORK=off and its own native window.
+   Delayed opener/scan acceptance holds worker latency, then uses real file bytes,
+   actual Node VSIX and owned Windows typing/resize/Cancel/tab messages/GPU rows.
+   A passed Windows gate does not override a real Mac synchronization failure.
 5. Large-file benchmarks report actual size, index/cache memory, first view,
    random/tail seeks and responsiveness. Do not substitute tiny fixture claims.
 6. Installer/update tests operate on an owned disposable install root, then verify

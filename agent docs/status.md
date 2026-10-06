@@ -1,5 +1,39 @@
 # Verified status
 
+2026-10-07 gocode v0.10.0 promotion: immutable application/package source
+`0a86cec6e6a56aa439c1474c4bfc82a047ce5122` passed all five jobs in
+[CI 37527105167](https://github.com/neko233-com/gocode/actions/runs/37527105167),
+including Windows 2022/2025 amd64, Mac Intel/ARM, actual GiB browsing/MSI lifecycle
+and native VSIX/gopls/reload/terminal checks. [Publication 37528232380](https://github.com/neko233-com/gocode/actions/runs/37528232380)
+reused these tested packages. godesktop v0.5.3 remains the public dependency;
+the core implementation/tag is unchanged. Native opening and batched Explorer
+traversal now run on bounded workers, preserving dirty documents, cancelled/closed
+identity and newer focus. VSIX/Problems/definition navigation awaits real targets.
+Node commands/providers wait for prior document/focus acknowledgement.
+
+Initial source a335ff0 CI 37525452237 passed Windows/Ubuntu and new Mac opener
+acceptance, but both real Mac VSIX editor gates failed with no active document.
+This exposed the missing Node FIFO receipt barrier. That source was not published;
+the corrected source passed both Mac gates. Earlier local fixed-coordinate mouse
+tests also required actual final-position source-row pixels after async startup.
+Exact-source Windows 2022 pending/read-completed owned-GPU PNGs were inspected.
+
+Metadata `ba8555174b53d9e1119b615d3ebdb1d130ad327d` changes only seven known
+channel/hash/install files; two Python policy tests passed. No extra metadata
+full-platform CI is claimed. Actual signed automatic/direct/manual-ghfast ZIP
+bytes, released native opener/four-close/VSIX/large/terminal/gopls/reload checks
+and true v0.4.0/source cfcd3513 GUI rollback passed with shared extensions.
+The user's real old -update command separately applied v0.10.0 via direct GitHub.
+Selected payload/source is 0.10.0/0a86cec; stable MSI/launcher baseline stays 0.5.1.
+Installed native checks, icon/shortcut files, normalized PATH and Settings/source
+preservation passed. The inspected installed captures show the awaited README,
+original dirty tab, automatic=true/automatic route, Up to date (0.10.0), gopls ready.
+Copilot authenticated/LSP/SDK=true, networkPromptSent=false; no new AI prompt.
+The parent pins documentation-only child evidence
+`2dda7f1a0a71499a2570956c2eadedc0f8be1631`, retaining exact verified code/metadata.
+Full production/VS Code/official Copilot VSIX parity remains active; root setup
+still precedes ui.Run, Explorer is capped and recursive live-tree behavior is pending.
+
 Framework v0.5.3 is published at immutable source
 `d22bf93187911a2fd829c993a6b096338e9a1b64`, with all five jobs green in CI
 `37513434533`. Saved disk reloads preserve buffer identity, monotonic UTF-16

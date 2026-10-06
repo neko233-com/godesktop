@@ -13,6 +13,10 @@
   Critical native edits use acknowledged RPC rather than droppable notifications.
 - gocode consumes published framework versions, remains a public independent
   repository, and is pinned by a reproducible parent gitlink.
+- Its native startup opens documents and scans Explorer on bounded workers,
+  transferring private buffers/indexes to the UI once. Navigation/closed-path
+  tickets preserve newer focus and unsaved identity. Commands/providers await
+  acknowledged Node document notifications; initialization alone is insufficient.
 - Installation, updates, sidecars and user settings must have separate lifecycles.
   An update must preserve workspaces/settings and never silently trust a mirror's
   replacement executable without checking publisher-controlled metadata.
