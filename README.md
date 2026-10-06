@@ -11,6 +11,12 @@
 
 v0.4 增加版本化编辑缓冲区、原生选区/剪贴板接口、LSP 和 VSIX 编辑/语言提供者。gocode 接入官方 Copilot Language Server 与 Go SDK。API 见 [编辑与 LSP](docs/editor-and-lsp.md)，完整 VS Code 目标的当前覆盖见 [gocode 功能矩阵](https://github.com/neko233-com/gocode/blob/main/docs/vscode-parity.md)。
 
+gocode 的安装与更新通过独立的 [发布入口](https://github.com/neko233-com/gocode/releases)
+提供 Windows x64 MSI／ZIP 和 macOS Intel／ARM 包，并维护免费 CLI、winget manifest、
+Scoop bucket 和 Homebrew cask。原生更新页支持自动路由、GitHub 直连和手动镜像；
+更新验证发布签名、哈希和程序来源后选择下次启动版本。验证证据与未实现功能见
+[gocode 工程记录](https://github.com/neko233-com/gocode/blob/main/agent%20docs/status.md)。
+
 ## 平台
 
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
@@ -90,6 +96,12 @@ go func() {
 ```
 
 `Dispatch` 线程安全并自动请求重绘；关闭后返回 `false`。`Invalidate` 和 `Quit` 也可以从后台调用。不要在 UI 回调中做阻塞 I/O。`Context` 不能跨越两次 `Run` 复用。
+
+`WindowOptions.CloseRequested` 在 UI 线程处理系统关闭、Alt+F4 和 macOS 退出菜单；
+返回 `false` 可保留窗口并显示未保存文档的确认界面。自定义标题栏关闭按钮应调用
+`cx.RequestClose()`。确认保存／丢弃后才调用 `cx.Quit()`；它是明确的强制退出路径，
+也用于异常恢复。该 API 的 Windows 原生拒绝／确认、强制退出及关闭回调 panic
+均有真实进程验证；macOS 在 CI 运行同一原生流程。
 
 ## 当前功能
 

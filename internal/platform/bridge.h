@@ -78,6 +78,7 @@ const char *gd_metal_snapshot(GDGPUSnapshot *result);
 uint64_t gd_metal_window_identity(void);
 const char *gd_metal_text_reference(const char *text,size_t length,const char *font,size_t font_length,float size,float scale,uint32_t width,uint32_t height,GDGPUSnapshot *result);
 void gd_go_event(int kind, float x, float y, int key, int modifiers);
+int gd_go_should_close(void);
 
 #ifdef __cplusplus
 }

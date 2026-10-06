@@ -19,6 +19,10 @@ type WindowOptions struct {
 	CustomTitlebar bool
 	// Input can consume keyboard, character, pointer and scroll events on the UI thread.
 	Input func(*Context, InputEvent) bool
+	// CloseRequested runs on the UI thread for an OS/custom-titlebar close.
+	// Return false to keep the window open, for example while confirming unsaved
+	// documents. Quit explicitly bypasses this guard after the app has decided.
+	CloseRequested func(*Context) bool
 }
 
 // Context gives a view access to the UI event loop. It is valid until Run returns.
@@ -71,7 +75,8 @@ func (c *Context) Invalidate() {
 	}
 }
 
-// Quit requests application shutdown.
+// Quit explicitly shuts down the application, bypassing CloseRequested.
+// Custom titlebar close buttons should use RequestClose instead.
 func (c *Context) Quit() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -79,6 +84,10 @@ func (c *Context) Quit() {
 		c.quit()
 	}
 }
+
+// RequestClose follows the same guard as Alt+F4/the window close button and the
+// macOS application quit menu. It is safe from background goroutines.
+func (c *Context) RequestClose() { c.performWindowAction(3) }
 
 func (c *Context) drain() {
 	c.mu.Lock()
@@ -240,7 +249,25 @@ func Run(options WindowOptions, view func(*Context) *Element) error {
 	a := &application{context: cx, view: view, frame: frame{measure: platform.MeasureText, fontMeasure: platform.MeasureTextWithFont, textCache: make(map[textKey]dimensions), measured: make(map[*Element]dimensions), keys: make(map[string]bool)}}
 	var callbackErr error
 	a.input = options.Input
-	err := platform.Run(platform.Options{Title: options.Title, Width: options.Width, Height: options.Height, Background: nativeColor(options.Background), CustomTitlebar: options.CustomTitlebar}, func(e platform.Event) {
+	nativeOptions := platform.Options{Title: options.Title, Width: options.Width, Height: options.Height, Background: nativeColor(options.Background), CustomTitlebar: options.CustomTitlebar}
+	nativeOptions.CloseRequested = func() (allow bool) {
+		if callbackErr != nil {
+			return true
+		}
+		defer func() {
+			if p := recover(); p != nil {
+				callbackErr = fmt.Errorf("godesktop: close callback panicked: %v", p)
+				platform.Quit()
+				allow = false
+			}
+		}()
+		if options.CloseRequested == nil || options.CloseRequested(cx) {
+			return true
+		}
+		cx.Invalidate()
+		return false
+	}
+	err := platform.Run(nativeOptions, func(e platform.Event) {
 		if callbackErr != nil {
 			return
 		}

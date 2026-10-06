@@ -39,6 +39,7 @@ type Options struct {
 	Width, Height  float32
 	Background     Color
 	CustomTitlebar bool
+	CloseRequested func() bool
 }
 
 type Event struct {

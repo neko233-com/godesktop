@@ -129,6 +129,11 @@ jobs:
       - name: Native render and dispatch smoke test
         shell: bash
         run: go run ./examples/counter -smoke
+      - name: Native deferred close, explicit shutdown and panic recovery
+        run: |
+          go run ./internal/closeguard -mode guard
+          go run ./internal/closeguard -mode force
+          go run ./internal/closeguard -mode panic
       - name: Metal instancing, glyph reuse, display pacing and idle wake
         shell: bash
         run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-atlas -output bin/metal-render-stress.json

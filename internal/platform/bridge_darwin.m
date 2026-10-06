@@ -583,7 +583,8 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
 
 @implementation GDDelegate
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return NO; }
-- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { [self.window close]; return NSTerminateCancel; }
+- (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { [self.window performClose:nil]; return NSTerminateCancel; }
+- (BOOL)windowShouldClose:(NSWindow *)sender { return gd_go_should_close()!=0; }
 - (void)windowDidResignKey:(NSNotification *)notification { gd_go_event(5,0,0,0,0); }
 - (void)windowDidDeminiaturize:(NSNotification *)notification { [active_view requestFrame]; }
 - (void)windowDidBecomeKey:(NSNotification *)notification { [active_view requestFrame]; }
@@ -726,5 +727,5 @@ uint64_t gd_metal_window_identity(void) { return [NSThread isMainThread]?(uint64
 
 void gd_window_action(int action) {
     uint64_t expected=atomic_load(&generation);
-    dispatch_async(dispatch_get_main_queue(),^{ if(!running || expected!=atomic_load(&generation)) return; if(action==1) [active_view.window miniaturize:nil]; if(action==2) [active_view.window zoom:nil]; });
+    dispatch_async(dispatch_get_main_queue(),^{ if(!running || expected!=atomic_load(&generation)) return; if(action==1) [active_view.window miniaturize:nil]; if(action==2) [active_view.window zoom:nil]; if(action==3) [active_view.window performClose:nil]; });
 }

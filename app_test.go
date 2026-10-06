@@ -36,6 +36,30 @@ func TestPointerCaptureAndKeyboardFocus(t *testing.T) {
 	}
 }
 
+func TestCloseRequestAndExplicitQuitRemainSeparate(t *testing.T) {
+	actions, quits := 0, 0
+	cx := &Context{windowAction: func(action int) {
+		if action != 3 {
+			t.Fatal(action)
+		}
+		actions++
+	}, quit: func() { quits++ }}
+	cx.RequestClose()
+	if actions != 1 || quits != 0 {
+		t.Fatal("request bypassed application close guard")
+	}
+	cx.Quit()
+	if actions != 1 || quits != 1 {
+		t.Fatal("explicit shutdown did not use force path")
+	}
+	cx.closed = true
+	cx.RequestClose()
+	cx.Quit()
+	if actions != 1 || quits != 1 {
+		t.Fatal("closed context affected another run")
+	}
+}
+
 func TestKeyRepeatAndElementBounds(t *testing.T) {
 	cx := &Context{wake: func() {}}
 	var input InputEvent

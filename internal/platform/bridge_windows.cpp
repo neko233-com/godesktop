@@ -111,7 +111,7 @@ struct Window {
         char message[192];
         std::snprintf(message,sizeof(message),"%s failed (HRESULT 0x%08lx)",operation,static_cast<unsigned long>(result));
         error=message;
-        if(handle) PostMessageW(handle,WM_CLOSE,0,0);
+        if(handle) PostMessageW(handle,action_message,4,0);
     }
     IDWriteTextLayout *layout(const char *value,size_t length,float size,const char *font,size_t font_length) {
         std::string family=font_length?std::string(font,font_length):"Segoe UI";
@@ -328,8 +328,10 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
     case action_message:
         if(wparam==1) ShowWindow(handle,SW_MINIMIZE);
         if(wparam==2) ShowWindow(handle,IsZoomed(handle)?SW_RESTORE:SW_MAXIMIZE);
+        if(wparam==3) SendMessageW(handle,WM_CLOSE,0,0);
+        if(wparam==4) DestroyWindow(handle);
         return 0;
-    case WM_CLOSE: DestroyWindow(handle); return 0;
+    case WM_CLOSE: if(gd_go_should_close()) DestroyWindow(handle); return 0;
     case WM_DESTROY:
         active_window.store(nullptr); PostQuitMessage(0); return 0;
     }
@@ -436,7 +438,7 @@ extern "C" void gd_measure(const char *text,size_t length,float size,const char 
     }
 }
 extern "C" void gd_wake() { if(auto handle=active_window.load()) PostMessageW(handle,wake_message,0,0); }
-extern "C" void gd_quit() { if(auto handle=active_window.load()) PostMessageW(handle,WM_CLOSE,0,0); }
+extern "C" void gd_quit() { if(auto handle=active_window.load()) PostMessageW(handle,action_message,4,0); }
 extern "C" void gd_window_action(int action) { if(auto handle=active_window.load()) PostMessageW(handle,action_message,action,0); }
 extern "C" GDRenderStats gd_render_stats(void) {
     std::lock_guard<std::mutex> lock(stats_mutex);

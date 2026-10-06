@@ -15,6 +15,15 @@ import (
 )
 
 var eventHandler func(Event)
+var closeHandler func() bool
+
+//export gd_go_should_close
+func gd_go_should_close() C.int {
+	if closeHandler == nil || closeHandler() {
+		return 1
+	}
+	return 0
+}
 
 //export gd_go_event
 func gd_go_event(kind C.int, x, y C.float, key, modifiers C.int) {
@@ -34,7 +43,8 @@ func Run(options Options, handler func(Event)) error {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	eventHandler = handler
-	defer func() { eventHandler = nil }()
+	closeHandler = options.CloseRequested
+	defer func() { eventHandler = nil; closeHandler = nil }()
 	title := C.CString(options.Title)
 	defer C.free(unsafe.Pointer(title))
 	var custom C.int
