@@ -1,5 +1,15 @@
 # Verified status
 
+In development: saved disk reloads now preserve buffer identity, monotonic UTF-16
+protocol versions, prior undo transactions and EOL transitions. Targeted repeated
+Windows race tests passed for invalid input, surrogate selection clamping, saved
+undo/redo revisions, snapshot immutability and history budgets. The full framework
+platform gates and public module promotion are pending. Local full Windows amd64
+strict-cgo/race/native/PE/fuzz validation passed (Repeat=1, FuzzSeconds=3), reports
+`.cache/windows-validation/2e2d4f8115224d3d80a0aea19d3122be`; combined root native
+coverage is 96.5%. gocode's external file
+watch/reload/conflict integration is being implemented separately.
+
 Framework v0.5.2 is published at immutable source
 `ff69721c1a807d8be044786597bf33033f55d966`, all five jobs green in CI
 `37488721747`. TextAdvance exposes DirectWrite's native advance and unrounded

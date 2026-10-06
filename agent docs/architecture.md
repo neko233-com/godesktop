@@ -6,6 +6,9 @@
   Fence/completion ownership governs three-slot buffers and glyph resources.
 - The editable document API uses UTF-16 protocol positions with UTF-8 storage.
   File-backed large-document browsing must avoid loading/duplicating the full file.
+  Buffer.Reload adopts a saved disk revision with monotonic versions, immutable
+  snapshots and bounded undo history, including LF/CRLF transitions. The caller
+  decides whether local edits may be discarded; reloading does not authorize it.
 - LSP and VSIX transports are bounded, cancellable and independently terminated.
   Critical native edits use acknowledged RPC rather than droppable notifications.
 - gocode consumes published framework versions, remains a public independent

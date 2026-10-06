@@ -65,6 +65,7 @@ type history struct {
 	removed, inserted             string
 	before, after                 Selection
 	beforeRevision, afterRevision uint64
+	beforeEOL, afterEOL           string
 }
 type Buffer struct {
 	lines                                 []string
@@ -318,10 +319,16 @@ func (b *Buffer) Apply(edits []Edit, selection *Selection) (ChangeEvent, error) 
 	startOffset, _ := b.OffsetAt(start)
 	inserted, _ := b.RangeText(Range{start, b.PositionAt(startOffset + units(removed) + addedUnits)})
 	b.nextRevision++
-	item := history{start, removed, inserted, before, after, b.revision, b.nextRevision}
+	item := history{start, removed, inserted, before, after, b.revision, b.nextRevision, b.eol, b.eol}
 	b.revision = b.nextRevision
+	b.record(item)
+	b.version++
+	return ChangeEvent{b.version, changes}, nil
+}
+
+func (b *Buffer) record(item history) {
 	b.redo = nil
-	cost := len(removed) + len(inserted)
+	cost := len(item.removed) + len(item.inserted)
 	if cost > MaxHistoryBytes {
 		b.undo = nil
 		b.historyBytes = 0
@@ -334,8 +341,45 @@ func (b *Buffer) Apply(edits []Edit, selection *Selection) (ChangeEvent, error) 
 			b.undo = b.undo[1:]
 		}
 	}
+}
+
+// Reload adopts a disk snapshot as the saved revision without replacing the
+// buffer identity or resetting its protocol version. It is one bounded undo
+// transaction, including EOL changes; undo restores the prior unsaved state and
+// redo returns to this saved revision. Callers must decide whether discarding
+// local edits is authorized before invoking Reload.
+func (b *Buffer) Reload(text string) (ChangeEvent, error) {
+	next, err := New(text)
+	if err != nil {
+		return ChangeEvent{}, err
+	}
+	old := b.Text()
+	text = next.Text()
+	if old == text {
+		b.MarkSaved()
+		return ChangeEvent{Version: b.version}, nil
+	}
+	r := Range{Position{}, Position{len(b.lines) - 1, units(b.lines[len(b.lines)-1])}}
+	before, oldEOL := b.selection, b.eol
+	b.lines, b.eol = next.lines, next.eol
+	clamp := func(p Position) Position {
+		line := max(0, min(p.Line, len(b.lines)-1))
+		column := max(0, min(p.Character, units(b.lines[line])))
+		for column > 0 {
+			if _, err := byteColumn(b.lines[line], column); err == nil {
+				break
+			}
+			column--
+		}
+		return Position{line, column}
+	}
+	b.selection = Selection{clamp(before.Anchor), clamp(before.Active)}
+	b.nextRevision++
+	b.record(history{Position{}, old, text, before, b.selection, b.revision, b.nextRevision, oldEOL, b.eol})
+	b.revision = b.nextRevision
+	b.MarkSaved()
 	b.version++
-	return ChangeEvent{b.version, changes}, nil
+	return ChangeEvent{b.version, []Change{{r, units(old), text}}}, nil
 }
 func (b *Buffer) ReplaceSelection(text string) (ChangeEvent, error) {
 	r := b.selection.Range()
@@ -352,6 +396,7 @@ func (b *Buffer) Undo() (ChangeEvent, bool) {
 	b.historyBytes -= len(item.removed) + len(item.inserted)
 	r := Range{item.start, endOf(item.start, item.inserted)}
 	b.splice(r, item.removed)
+	b.eol = item.beforeEOL
 	b.selection = item.before
 	b.revision = item.beforeRevision
 	b.version++
@@ -367,6 +412,7 @@ func (b *Buffer) Redo() (ChangeEvent, bool) {
 	b.redo = b.redo[:len(b.redo)-1]
 	r := Range{item.start, endOf(item.start, item.removed)}
 	b.splice(r, item.inserted)
+	b.eol = item.afterEOL
 	b.selection = item.after
 	b.revision = item.afterRevision
 	b.version++
