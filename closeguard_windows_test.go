@@ -49,6 +49,11 @@ func TestNativeOSCloseDefersAndConfirms(t *testing.T) {
 		window, err = winprobe.Find("godesktop close guard", uint32(command.Process.Pid))
 		return err == nil
 	})
+	window.Raise()
+	unpin := window.Pin()
+	defer unpin()
+	// HWND creation precedes its first focusable/rendered element tree.
+	poll(func() bool { return strings.Contains(output.String(), "close guard frame ready") })
 	mustNative(t, window.Close())
 	poll(func() bool { return strings.Contains(output.String(), "close request 1 allow=false") })
 	if _, _, err := window.ClientSize(); err != nil {

@@ -102,7 +102,7 @@ class TextDocument {
   getText(r){if(!r)return this.text;r=this.validateRange(r);return this.text.slice(this.offsetAt(r.start),this.offsetAt(r.end));}
   lineAt(value){const i=value instanceof Position?value.line:value;if(i<0||i>=this.lineCount)throw new Error('Invalid line number');const text=this.lines[i];return {lineNumber:i,text,range:new Range(i,0,i,text.length),rangeIncludingLineBreak:i+1<this.lineCount?new Range(i,0,i+1,0):new Range(i,0,i,text.length),firstNonWhitespaceCharacterIndex:text.search(/\S/)<0?text.length:text.search(/\S/),isEmptyOrWhitespace:!text.trim()};}
   getWordRangeAtPosition(p,regexp=/\w+/g){const line=this.lines[p.line];if(line===undefined)return undefined;const re=new RegExp(regexp.source,regexp.flags.includes('g')?regexp.flags:regexp.flags+'g');for(const match of line.matchAll(re)){if(!match[0].length)break;if(match.index<=p.character && p.character<=match.index+match[0].length)return new Range(p.line,match.index,p.line,match.index+match[0].length);}return undefined;}
-  async save(){const result=await native('workspace/saveDocument',{path:this.fileName,version:this.version});if(result.document)syncDocument(result.document,'save');return result.saved===true;}
+  async save(){const result=await native('workspace/saveDocument',{path:this.fileName,version:this.version});if(result.document)syncDocument(result.document,result.saved===true?'save':'ack');return result.saved===true;}
 }
 function language(file){return ({'.go':'go','.js':'javascript','.cjs':'javascript','.ts':'typescript','.json':'json','.md':'markdown','.py':'python','.rs':'rust'})[path.extname(file)]||'plaintext';}
 function document(value){
@@ -134,7 +134,11 @@ function syncDocument(value,kind,changes=[]){
   const editor=editorFor(doc);if(value.selection)editor._selection=new Selection(position(value.selection.anchor),position(value.selection.active));
   if(fresh)events.open.fire(doc);
   if(changed)events.change.fire({document:doc,contentChanges,reason:value.reason});
-  if(kind==='save')events.save.fire(doc);
+  // Native save notifications can race the awaited RPC acknowledgement. A save
+  // identity makes both paths update state while firing each event exactly once.
+  if(kind==='save' && (value.saveId===undefined || value.saveId>(doc.lastSaveId??-1))){
+    doc.lastSaveId=value.saveId;events.save.fire(doc);
+  }
   if(kind==='focus'){activeEditor=editor;events.active.fire(editor);}
   if(kind==='selection')events.selection.fire({textEditor:editor,selections:editor.selections,kind:1});
 }

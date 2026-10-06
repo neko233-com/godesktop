@@ -21,6 +21,8 @@
 
 先用 `Host.Register` 注册 `workspace/applyEdit`、`workspace/saveDocument`、`window/showTextDocument`、`window/setSelection`，处理器通过 `Context.Dispatch` 修改原生状态。初始化参数包含 `documents`、`active`、`storageRoot` 和 `clientCapabilities`；gocode 的 [接入代码](https://github.com/neko233-com/gocode/blob/main/extensions_ui.go) 提供完整示例。
 
+保存处理器应后台写入冻结快照，完成后回到 UI 线程确认版本。返回当前 `document` 和 `saved`；仅匹配已写入版本时返回 `saved: true`。每次成功保存为文档提供递增的 `saveId`，并在保存通知与 RPC 响应中使用同一个值，扩展宿主据此只触发一次 `onDidSaveTextDocument`。失败或保存期间的新编辑只更新状态，不触发成功事件。
+
 `Host.Call(ctx, "syncDocument", params, nil)` 同步版本、修改状态、选区和增量 changes。打开和显式恢复发送完整 text，普通修改只发送增量事务。`execute` 执行命令，`provideCompletionItems` / `provideHover` / `provideDefinition` 调用匹配提供者。Go 预检 WorkspaceEdit 的全部文档及版本后再修改；修改确认返回新的文档状态，扩展的 Promise 不会在实际编辑前伪报成功。
 
 宿主复用框架 LSP 帧传输，支持双向 RPC 和异步并发调用。console 日志走 stderr。调用期限到达会终止整个宿主，以中断同步 JS 死循环。消息/输出等 Events 是有界通知，消费者需持续读取；`DroppedEvents()` 报告丢弃数量。原生编辑使用有响应 RPC，不走可丢弃的通知队列。

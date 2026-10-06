@@ -68,3 +68,22 @@ managed official Copilot SDK/LSP handshake is authenticated (no prompt), and
 managed gopls v0.23.0 passed real installed native language acceptance. Root full
 Windows race/native/fuzz/PE suite for the close guard passed with combined root
 coverage 96.8%; Mac CI is pending.
+
+Framework v0.5.0 at `eff4097c302ed52db98b144352b183ce058120ac` is now
+published, with all five CI jobs green in run `37464670639`, including macOS
+Intel/ARM close rejection, force and panic paths. The parent gitlink retains the
+verified child metadata/evidence source `232dcfc5b14a1acf57518836fdbdd08a7367b434`.
+
+Next bridge revision fixes save event semantics: a rejected native save updates
+the current document state without reporting a successful save; accepted saves
+use a per-document saveId to deduplicate RPC acknowledgements and notifications.
+Real Node-host race tests cover success, duplicate delivery, newer unsaved state
+and the next accepted save. gocode's new close/async-save source has not yet been
+promoted; its first CI exposed hard-coded discard coordinates on smaller Windows
+runner windows. The installed app remains the verified v0.5.1 editor release.
+
+Local full Windows amd64/GOAMD64=v1 strict-cgo validation passed after making
+the OS-close harness wait for rendered frames before sending focus keys. HWND
+creation alone can precede the first focusable tree. Three repeated actual
+OS-close tests passed; core coverage remains 96.8% with native coverage merge,
+plus race, fuzz, PE/GUI smoke. Bridge tests also reject older duplicate saveIds.

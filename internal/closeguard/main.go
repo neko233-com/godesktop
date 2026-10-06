@@ -15,6 +15,7 @@ func main() {
 	mode := flag.String("mode", "guard", "guard, force, panic or os")
 	flag.Parse()
 	requests, allow, started, finished := 0, false, false, false
+	ready := false
 	done := make(chan struct{})
 	watchdog := time.AfterFunc(10*time.Second, func() { fmt.Fprintln(os.Stderr, "close guard timed out"); os.Exit(2) })
 	defer watchdog.Stop()
@@ -40,6 +41,10 @@ func main() {
 					}
 				}
 			}()
+		}
+		if !ready && cx.RenderedFrames() >= 2 {
+			ready = true
+			fmt.Println("close guard frame ready")
 		}
 		if *mode != "os" && requests == 0 && cx.RenderedFrames() >= 2 && !finished {
 			finished = true

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -115,6 +116,70 @@ func TestVSIXLiveDocumentEditsProvidersAndPersistentState(t *testing.T) {
 		}
 		h.Close()
 		cancel()
+	}
+}
+
+func TestVSIXSaveAcknowledgementDeduplicatesAndRejectsStaleSnapshot(t *testing.T) {
+	workspace := t.TempDir()
+	file := filepath.Join(workspace, "main.go")
+	if err := os.WriteFile(file, []byte("disk"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	script := `const v=require('vscode');exports.activate=c=>{
+ let saves=0;c.subscriptions.push(v.workspace.onDidSaveTextDocument(()=>saves++));
+ c.subscriptions.push(v.commands.registerCommand('test.hello',async()=>{
+  const d=v.window.activeTextEditor.document,saved=await d.save();
+  return {saved,saves,dirty:d.isDirty,text:d.getText(),version:d.version};
+ }));
+ c.subscriptions.push(v.commands.registerCommand('test.snapshot',()=>({saves})));};`
+	e, err := Install(t.TempDir(), archive(t, testManifest, map[string]string{"extension/main.cjs": script}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := Start(ctx, workspace, []Extension{e})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	var reject atomic.Bool
+	state := func(version int, dirty bool, text string, id int) map[string]any {
+		return map[string]any{"path": file, "version": version, "dirty": dirty, "text": text, "languageId": "go", "saveId": id}
+	}
+	h.Register("workspace/saveDocument", func(_ context.Context, raw json.RawMessage) (any, error) {
+		if reject.Load() {
+			return map[string]any{"saved": false, "document": state(3, true, "newer edit", 1)}, nil
+		}
+		return map[string]any{"saved": true, "document": state(2, false, "saved snapshot", 1)}, nil
+	})
+	initial := state(2, true, "saved snapshot", 0)
+	if err := h.Call(ctx, "initialize", map[string]any{"documents": []any{initial}, "active": initial}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var result struct {
+		Saved, Dirty   bool
+		Saves, Version int
+		Text           string
+	}
+	if err := h.Call(ctx, "execute", map[string]string{"command": "test.hello"}, &result); err != nil || !result.Saved || result.Dirty || result.Saves != 1 {
+		t.Fatal("save acknowledgement", result, err)
+	}
+	if err := h.Call(ctx, "syncDocument", map[string]any{"kind": "save", "document": state(2, false, "saved snapshot", 1)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	reject.Store(true)
+	if err := h.Call(ctx, "execute", map[string]string{"command": "test.hello"}, &result); err != nil || result.Saved || !result.Dirty || result.Saves != 1 || result.Version != 3 || result.Text != "newer edit" {
+		t.Fatal("duplicate/rejected save fired a success event", result, err)
+	}
+	if err := h.Call(ctx, "syncDocument", map[string]any{"kind": "save", "document": state(3, false, "newer edit", 2)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Call(ctx, "syncDocument", map[string]any{"kind": "save", "document": state(3, false, "newer edit", 1)}, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Call(ctx, "execute", map[string]string{"command": "test.snapshot"}, &result); err != nil || result.Saves != 2 {
+		t.Fatal("next native save event missing", result, err)
 	}
 }
 
