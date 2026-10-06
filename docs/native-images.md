@@ -43,3 +43,9 @@ immutable source copies, odd row strides, static reuse, 128 simultaneous distinc
 textures, pinned-frame cache eviction, count/byte limits, reupload and two `Run`
 lifecycles. `-recovery` adds real Windows device removal or completion-triggered
 Mac view recovery. Reports and PNGs are uploaded by the applicable native CI jobs.
+
+Independent macOS applications can use `testing/metalprobe.Snapshot()` after
+enabling `GODESKTOP_READBACK=1`. It copies only this process's latest completed
+Metal drawable and submission number; it does not capture the desktop or require
+screen-recording permission. Windows acceptance uses `testing/winprobe` with the
+application's PID and title.
