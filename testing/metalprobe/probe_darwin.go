@@ -32,6 +32,12 @@ func Pointer(pressed bool, x, y float32, modifiers int) error {
 	return platform.MetalTestPointer(pressed, x, y, modifiers)
 }
 
+// Drag constructs an owned left-mouse-dragged NSEvent. Call after Pointer(true)
+// on the UI thread; the probe never posts input to other applications.
+func Drag(x, y float32, modifiers int) error {
+	return platform.MetalTestDrag(x, y, modifiers)
+}
+
 // Key constructs an owned NSEvent for common public key codes (Tab/PageUp/Down,
 // arrows, ASCII and modifiers). It exercises keyUp/flagsChanged as well as press.
 // Call on the UI thread with readback enabled; no global input is posted.

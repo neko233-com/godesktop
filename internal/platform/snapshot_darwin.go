@@ -52,6 +52,13 @@ func MetalTestKey(key, modifiers int, pressed bool) error {
 	return nil
 }
 
+func MetalTestDrag(x, y float32, modifiers int) error {
+	if err := C.gd_metal_test_pointer(2, C.float(x), C.float(y), C.int(modifiers)); err != nil {
+		return errors.New(C.GoString(err))
+	}
+	return nil
+}
+
 // MetalSnapshot reads the most recently completed actual window drawable.
 // It is diagnostic-only and requires GODESKTOP_READBACK=1 before Run.
 func MetalSnapshot() (*image.RGBA, uint64, error) {

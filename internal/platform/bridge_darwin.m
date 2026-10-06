@@ -779,8 +779,8 @@ const char *gd_metal_test_wheel(int dx,int dy,float x,float y,int modifiers,int 
     NSPoint base=[active_view convertPoint:NSMakePoint(x,y) toView:nil];
     NSPoint screen=[active_view.window convertPointToScreen:base];
     CGEventSetLocation(raw,CGPointMake(screen.x,NSMaxY(NSScreen.screens.firstObject.frame)-screen.y));
-    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMouse,active_view.window.windowNumber);
-    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMouseThatCanHandleThisEvent,active_view.window.windowNumber);
+    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMousePointer,active_view.window.windowNumber);
+    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent,active_view.window.windowNumber);
     CGEventFlags flags=0;
     if(modifiers&1) flags|=kCGEventFlagMaskShift;if(modifiers&2) flags|=kCGEventFlagMaskControl;
     if(modifiers&4) flags|=kCGEventFlagMaskAlternate;if(modifiers&8) flags|=kCGEventFlagMaskCommand;
@@ -797,9 +797,10 @@ const char *gd_metal_test_pointer(int pressed,float x,float y,int modifiers) {
     NSEventModifierFlags flags=0;
     if(modifiers&1) flags|=NSEventModifierFlagShift;if(modifiers&2) flags|=NSEventModifierFlagControl;
     if(modifiers&4) flags|=NSEventModifierFlagOption;if(modifiers&8) flags|=NSEventModifierFlagCommand;
-    NSEvent *event=[NSEvent mouseEventWithType:(pressed?NSEventTypeLeftMouseDown:NSEventTypeLeftMouseUp) location:p modifierFlags:flags timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:active_view.window.windowNumber context:nil eventNumber:1 clickCount:1 pressure:(pressed?1.0:0.0)];
+    NSEventType type=pressed==2?NSEventTypeLeftMouseDragged:(pressed?NSEventTypeLeftMouseDown:NSEventTypeLeftMouseUp);
+    NSEvent *event=[NSEvent mouseEventWithType:type location:p modifierFlags:flags timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:active_view.window.windowNumber context:nil eventNumber:1 clickCount:1 pressure:(pressed?1.0:0.0)];
     if(!event) return "Cannot construct native pointer event";
-    if(pressed) [active_view mouseDown:event];else [active_view mouseUp:event];
+    if(pressed==2) [active_view mouseDragged:event];else if(pressed) [active_view mouseDown:event];else [active_view mouseUp:event];
     return NULL;
 }
 
