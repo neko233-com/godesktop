@@ -87,3 +87,36 @@ the OS-close harness wait for rendered frames before sending focus keys. HWND
 creation alone can precede the first focusable tree. Three repeated actual
 OS-close tests passed; core coverage remains 96.8% with native coverage merge,
 plus race, fuzz, PE/GUI smoke. Bridge tests also reject older duplicate saveIds.
+
+Framework v0.5.1 is published at immutable source
+`fd5ee95f0fd5df73e8076971abb282d616bd7725`, with all five jobs green in CI
+`37471310727`. gocode independently pins that public module with GOWORK=off.
+
+gocode v0.6.0 is published at application source
+`242a1a917b189ded070ac00c7ac75f8eba9b6296`, all five jobs green in CI
+`37474545017`, publication `37475908095`. Generated free-channel metadata
+`2ff7885cd40be9b5a4a94e29d51598d760674f18` also passed all five jobs in
+manual CI `37476959355`. Child evidence commit
+`83f804ce101f8efc7fa2972f8029efcf73c9dcfa` changes documentation only and
+retains that verified code/metadata; the parent gitlink advances to it. Its
+evidence-only commit skips redundant native CI; release source gates were kept.
+
+Real public signed ZIP/native checks exercised automatic accelerated update,
+all close modes, VSIX save and large-file rendering, then rolled the owned root
+back to the original v0.4.0 source and actually rendered its GUI. A shared builtin
+VSIX upgrade first broke old-release startup; a real old/new/old negative control
+prevented promotion. Versioned hidden builtin roots now preserve old shared stores
+and actual rollback startup passed. A separate direct body download timed out;
+automatic and manual gh-proxy signed SHA256 checks passed without weakening
+integrity. Do not describe direct range-probe reachability as full download success.
+
+User installation now selects v0.6.0/source 242a1a9 through the real v0.5.1
+stable launcher at `C:\Users\14170\AppData\Local\Programs\gocode`, with auto
+updates=true/mode=auto. Shortcuts/PATH remain verified. Installed owned-GPU GUI/
+icon/settings, close save, actual VSIX Document.save/CRLF/undo/redo/completion and
+real gopls native acceptance passed. Installed official Copilot LSP/SDK reports
+authenticated=true/lspInitialized=true/sdkConnected=true/networkPromptSent=false.
+The inspected native Settings capture reports Up to date (0.6.0), automatic route
+and gopls ready. See the child's agent docs for exact evidence and remaining
+editor/services/distribution/full VS Code and official Copilot VSIX gaps. The
+overall production/parity objective remains active.
