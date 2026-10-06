@@ -34,3 +34,13 @@ owned partially offscreen fixture. Mac probes construct owned native NSEvents;
 normal/1.5/2 density PNG/JSON artifacts prove native handler and drawable behavior,
 not every physical device. Unit/fuzz gates cover both axes, padding, clamping,
 passive geometry/focus separation and stale geometry removal.
+
+Native workspace search acceptance uses owned actual query typing, toggle/result
+clicks and completed GPU highlighting. Verify unsaved overlays, Unicode UTF-16
+selection, disk-stale rejection and real file-backed tail navigation without
+source writes. Actual Windows 2025 GiB scan/native results are distinct from the
+16 MiB console/GUI and Mac normal/1.5/2 fixtures. Use standard regexp/Git oracles
+and fuzz/held-receipt cancellation/identity tests; record I/O, allocation, race
+mode and hardware/run scope with timings. Public released bytes and the user's
+installed GUI must pass before claiming promotion. Exact v0.13.0 evidence is in
+the child search.md/status.md; PCRE2/workspace replace/full parity remain open.

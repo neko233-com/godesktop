@@ -22,6 +22,11 @@
   replacement executable without checking publisher-controlled metadata.
 - The native workbench remains functional without Electron. Optional webview
   extension content must not become the application's UI shell.
+- gocode content search owns one cancellable worker/latest request and publishes
+  immutable editor snapshots. Streaming chunks/regex candidates, bounded ignore
+  traversal and virtual visible rows avoid whole large-file or result-tree copies.
+  Navigation verifies matched bytes/UTF-16 coordinates, document version/instance,
+  focus and query generation before native selection or file-backed byte movement.
 - Immutable Go bitmaps transfer premultiplied RGBA copies to a UI-owned native
   128-entry / 64 MiB cache. Current-frame assets are pinned before any eviction;
   completed GPU frames own texture/staging lifetime. Device recovery retains

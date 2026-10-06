@@ -17,6 +17,12 @@ Scoop bucket 和 Homebrew cask。原生更新页支持自动路由、GitHub 直�
 更新验证发布签名、哈希和程序来源后选择下次启动版本。验证证据与未实现功能见
 [gocode 工程记录](https://github.com/neko233-com/gocode/blob/main/agent%20docs/status.md)。
 
+gocode v0.13.0 增加原生流式全文搜索：未保存快照、Unicode 大小写／整词、Go 正则、
+包含／排除和 Git 忽略、分组结果及核验后的 UTF-16／大文件跳转。Windows amd64
+真实 1 GiB、Mac Intel／ARM 三种像素密度、发行字节与本机安装均已验收。
+工作区替换和完整 VS Code 搜索兼容仍需实现，边界见
+[搜索契约](https://github.com/neko233-com/gocode/blob/main/agent%20docs/search.md)。
+
 ## 平台
 
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |

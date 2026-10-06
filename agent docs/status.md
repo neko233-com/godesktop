@@ -1,5 +1,36 @@
 # Verified status
 
+2026-10-07 gocode v0.13.0 search promotion: immutable source/package
+`d4a869e24c9acc2d93cd9aefb17f9303064423b2` passed all five jobs in
+[CI 37547147426](https://github.com/neko233-com/gocode/actions/runs/37547147426),
+independently using public godesktop v0.7.0 with GOWORK=off. Native content search
+covers unsaved snapshots, Unicode folding, case/word/Go regex, ignore/include/
+exclude, grouped virtual rows and verified UTF-16/file-backed navigation. Actual
+Windows 2025 1,073,741,824-byte single-line race scan reported 16.8320796 s /
+811,736 new Go allocation bytes, distinct from the local 1.53 s / 360,624-byte run.
+Native actual GiB tail navigation preserves source hashes. Mac Intel/ARM normal/
+1.5/2 native event/drawable gates pass; character diagnostics keep punctuation
+separate from virtual-key codes. Windows 100% results/GiB, ARM 150% Unicode and
+Intel 200% large-navigation PNGs were visually inspected. Existing five-platform
+tabs/VSIX/editor/opener/watch/recovered-LSP/terminal/MSI/package gates stay green.
+
+[Publication 37548090734](https://github.com/neko233-com/gocode/actions/runs/37548090734)
+reuses the exact tested packages; tag v0.13.0 is verified at d4a869e. Metadata
+c708e34 changes seven known files and passes Python policy tests. CI ZIP/MSI bodies
+match published digests. Actual signed automatic/direct/manual ghfast.top ZIP
+integrity, released native search/existing gates and original v0.4.0 native GUI
+rollback with shared extensions pass. The user's real v0.12.0 updater selected
+0.13.0/source d4a869e; stable MSI/launcher baseline remains 0.5.1. Installed
+GUI/icons/Settings, search/tabs/captions, highlighted ConPTY and update checks
+pass. Actual 1920×1230 / 150% selected-Unicode/Settings PNGs were visually reviewed;
+Settings reports Up to date (0.13.0), auto route and gopls ready. Auto=true/mode=auto,
+both mirrors, desktop/nested Start Menu stable launcher targets and normalized
+user PATH are preserved. Copilot authenticated/LSP/SDK=true; no AI prompt was sent.
+Public child gitlink advances to evidence ae0770bd0f50dcbb8ec8c5ebdf38889edab23156.
+Full production/GPUI/VS Code/official Copilot VSIX parity remains active; workspace
+replace and other documented gaps remain open. See child search.md/status.md for
+precise bounds, package hashes and scope. No new framework version is required.
+
 2026-10-07 framework v0.7.0 milestone: native Viewport/ScrollOffset, passive keyed
 geometry, positioned horizontal/vertical wheel and key-release events are added.
 Windows actual viewport pixels, clipped translated click, wheel coordinates/
