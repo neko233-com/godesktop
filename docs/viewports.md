@@ -40,7 +40,10 @@ with AppKit's horizontal direction normalized to the public contract.
 `internal/viewporttest` checks real GPU red/green/blue clipping, positioned wheel
 deltas/modifiers, removal of offscreen hit targets and clicking translated content.
 Windows constructs owned HWND messages at a partly negative screen position.
-Mac testing/metalprobe constructs owned native NSEvent wheel/pointer events with
-readback enabled; it never posts global input or moves the user's pointer. Its
+Mac testing/metalprobe constructs native CG/NSEvent wheel events. Unposted
+CGEvents have no AppKit window attachment; the probe resolves actual Quartz
+screen coordinates through its owned NSWindow/NSView and enters scrollWheel's
+shared native delivery method. Pointer/drag/key probes construct owned-window
+NSEvents. With readback enabled, they never post global input or move the user's pointer. Their
 diagnostic functions require the UI thread. Mac normal/1.5/2 drawable tests retain
 PNG/JSON evidence in native CI. These probes do not prove every physical trackpad.

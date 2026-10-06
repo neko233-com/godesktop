@@ -1,16 +1,41 @@
 # Verified status
 
-2026-10-07 next framework milestone: native Viewport/ScrollOffset, passive keyed
+2026-10-07 framework v0.7.0 milestone: native Viewport/ScrollOffset, passive keyed
 geometry, positioned horizontal/vertical wheel and key-release events are added.
 Windows actual viewport pixels, clipped translated click, wheel coordinates/
 modifiers at a negative physical screen origin and native Control release pass.
 The final full strict-cgo/race/native/fuzz/PE suite passed (root coverage 96.7%).
 The initial full check correctly rejected changed duplicate-key wording in its
 existing panic gate. That assertion now uses the generalized element-key
-contract, retaining actual panic/close checks. New Mac owned NSEvent/drawable
-normal/1.5/2 gates are wired; no Mac or new public-version success is claimed yet.
-gocode tab overflow/virtualization/identity/MRU/routing work remains a candidate
-using an ignored local modfile. Published/installed versions remain 0.6.0/0.11.0.
+contract, retaining actual panic/close checks. Mac owned native-event/drawable
+normal/1.5/2 gates now pass.
+The first two candidate runs exposed Mac diagnostic constant names and the fact
+that unposted CGEvents lack an AppKit window attachment. The final 5e7789b bridge
+uses actual Quartz-to-owned-window/view conversion and the shared native wheel
+delivery method. Mac Intel/ARM now pass their complete native/glyph/bitmap/
+viewport/recovery suites in 37540201901; normal/1.5/2 reports contain delta X=3,
+pointer (30,30), Shift, translated green click and Control release. ARM 200% and
+Intel 150% scrolled GPU PNGs were visually inspected. All five jobs in
+[CI 37540201901](https://github.com/neko233-com/godesktop/actions/runs/37540201901)
+passed Windows 2022/2025 amd64, Mac Intel/ARM and Ubuntu. Immutable tag v0.7.0
+is verified at 5e7789bca48f69ddd144d2e391f3bee225f60286 and published.
+gocode v0.12.0/source def207c289953b51fe87ab33d28a69e1b7dab3ab independently
+consumes public v0.7.0 with GOWORK=off. All five jobs in CI 37541346744 pass native
+40-tab clipping/wheel/drag/identity/ordered/MRU/release gates, existing VSIX,
+opener/file-watch/recovered-gopls/terminal checks and Windows 2025 actual GiB/MSI
+lifecycle. Mac normal/1.5/2 captures pass; source Windows 100%, ARM 150% stable
+release and Intel 200% second-MRU PNGs were visually inspected. Publication
+37542564399 reused tested packages. Metadata c9a4244 changes seven known channel
+files and passes Python policy gates. Real automatic/direct/manual ghfast.top ZIP
+integrity, released native gates and original v0.4.0 GUI rollback pass.
+
+The user's v0.11.0 updater selected 0.12.0/source def207c via direct GitHub. Stable
+baseline remains 0.5.1. Actual installed GUI/icons/Settings/source preservation,
+40-tab/caption/ConPTY/update checks pass; 1920×1230 / 150% Settings/last-tab PNGs
+were visually inspected. Auto=true/mode=auto, both mirrors, shortcuts and user
+PATH remain valid. Official Copilot authenticated/LSP/SDK=true with no prompt.
+The public child gitlink advances to evidence 3f9347b6e623069c3587a0cfdaa96d29c1f99519.
+Full GPUI/VS Code/official Copilot VSIX production parity remains active.
 
 2026-10-07 framework v0.6.0 milestone: immutable Bitmap/Image API and native
 D3D12/Metal RGBA texture caching are implemented. Local Windows strict-cgo race,
