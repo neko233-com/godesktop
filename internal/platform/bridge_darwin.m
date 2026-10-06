@@ -654,6 +654,12 @@ void gd_present(const GDCommand *commands,size_t count,const char *text,size_t l
     active_view.scene=count?[NSData dataWithBytes:commands length:count*sizeof(GDCommand)]:[NSData data];
     active_view.text=length?[NSData dataWithBytes:text length:length]:[NSData data];
 }
+float gd_text_advance(const char *text,size_t length,float size,const char *font,size_t font_length) {
+    CTLineRef line=text_line(string_utf8(text,length),size,string_utf8(font,font_length));
+    double advance=CTLineGetTypographicBounds(line,NULL,NULL,NULL);
+    CFRelease(line);
+    return (float)advance;
+}
 void gd_measure(const char *text,size_t length,float size,const char *font,size_t font_length,float *width,float *height) {
     CTLineRef line=text_line(string_utf8(text,length),size,string_utf8(font,font_length));
     CGFloat descent;

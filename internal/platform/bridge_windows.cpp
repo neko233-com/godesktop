@@ -437,6 +437,10 @@ extern "C" void gd_measure(const char *text,size_t length,float size,const char 
         if(SUCCEEDED(layout->GetMetrics(&metrics))) { *width=metrics.widthIncludingTrailingWhitespace; *height=metrics.height; }
     }
 }
+extern "C" float gd_text_advance(const char *text,size_t length,float size,const char *font,size_t font_length) {
+    float width,height; gd_measure(text,length,size,font,font_length,&width,&height);
+    return width;
+}
 extern "C" void gd_wake() { if(auto handle=active_window.load()) PostMessageW(handle,wake_message,0,0); }
 extern "C" void gd_quit() { if(auto handle=active_window.load()) PostMessageW(handle,action_message,4,0); }
 extern "C" void gd_window_action(int action) { if(auto handle=active_window.load()) PostMessageW(handle,action_message,action,0); }

@@ -22,8 +22,14 @@ func main() {
 	defer watchdog.Stop()
 	err := ui.Run(ui.WindowOptions{Title: "godesktop native text metrics", Width: 420, Height: 140}, func(cx *ui.Context) *ui.Element {
 		if cellWidth == 0 {
-			cellWidth, cellHeight = ui.MeasureText("M", 14, font)
-			runWidth, _ := ui.MeasureText("MMMM", 14, font)
+			cellWidth = ui.TextAdvance("M", 14, font)
+			_, cellHeight = ui.MeasureText("M", 14, font)
+			runWidth := ui.TextAdvance("MMMM", 14, font)
+			spaceWidth := ui.TextAdvance("    ", 14, font)
+			if math.Abs(float64(spaceWidth-runWidth)) > .1 {
+				failure = "native advance lost trailing spaces"
+				cx.Quit()
+			}
 			if cellWidth <= 0 || cellHeight <= 0 || math.Abs(float64(runWidth-4*cellWidth)) > .1 {
 				failure = fmt.Sprintf("invalid grid metrics %f %f %f", cellWidth, cellHeight, runWidth)
 				cx.Quit()

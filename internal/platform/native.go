@@ -102,6 +102,13 @@ func MeasureTextWithFont(text string, size float32, font string) (float32, float
 	return float32(width), float32(height)
 }
 
+func TextAdvance(text string, size float32, font string) float32 {
+	bytes := C.CString(text)
+	defer C.free(unsafe.Pointer(bytes))
+	fontBytes := C.CString(font)
+	defer C.free(unsafe.Pointer(fontBytes))
+	return float32(C.gd_text_advance(bytes, C.size_t(len(text)), C.float(size), fontBytes, C.size_t(len(font))))
+}
 func Wake() { C.gd_wake() }
 func ReadClipboard() (string, error) {
 	var text *C.char

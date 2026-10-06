@@ -1,10 +1,16 @@
 # Verified status
 
-Native text-grid metrics now have owned-window acceptance using existing public
-MeasureText (no API/module change). The child is developing a real ConPTY/PTY
+Native text-grid metrics have owned-window acceptance. The child is developing a real ConPTY/PTY
 terminal with PowerShell/zsh input highlighting; local Windows race/native GPU
 checks passed. New cross-platform source promotion remains pending. The terminal
 contract/gaps are maintained in the child's agent docs/terminal.md.
+
+Initial metrics source 3abf0a6 failed both Mac CI jobs in run 37487621956:
+Menlo label sizing returned 11 DIP for one M and 36 for four because MeasureText
+includes rounded layout padding. Windows and portable results do not override
+this negative control. TextAdvance is now being added using DirectWrite native
+advance and unrounded CoreText typographic bounds; existing MeasureText layout
+semantics stay intact. Native space/monospace grid checks gate the new module.
 
 2026-10-06 framework release v0.4.0: source
 `f733ea9d6c40cad3f83cf89051f49185367bbc93`,

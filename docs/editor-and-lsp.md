@@ -22,6 +22,8 @@ change, err := buffer.Apply([]editor.Edit{{
 
 `Stack` 按绘制顺序叠加元素，光标和选区不会挤开文本。`MeasureText` 使用平台整形引擎测量文本；`Context.ElementBounds(key)` 返回上一轮有效布局中交互元素的 DIP 边界。输入携带修饰键和独立 Repeat 标记；重复按键用于编辑，普通按钮不会因长按 Enter 连续执行。
 
+`TextAdvance(text, size, font)` 返回不含布局留白或像素取整的原生文字步进，适合终端等等宽网格和光标定位。macOS `MeasureText` 包含标签留白，不能用它的单字符宽度乘列数。两者均在 UI 线程调用，字体/字号应与绘制一致；没有原生后端时仅使用模型估算值。
+
 `ReadClipboard` / `WriteClipboard` 在 UI 线程调用，Windows 使用 CF_UNICODETEXT，macOS 使用 NSPasteboard。Windows 剪贴板往返测试仅在设置 `GODESKTOP_CLIPBOARD_TEST=1` 的一次性 CI runner 上执行。完整 IME、字素簇导航、双向文本点击、多光标和水平滚动仍需补齐。
 
 ## LSP

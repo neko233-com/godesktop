@@ -17,3 +17,7 @@ func RendererStats() RenderStats { return RenderStats{Backend: "unavailable"} }
 func MeasureTextWithFont(text string, size float32, _ string) (float32, float32) {
 	return MeasureText(text, size)
 }
+func TextAdvance(text string, size float32, _ string) float32 {
+	width, _ := MeasureText(text, size)
+	return width
+}
