@@ -1,16 +1,19 @@
 # Verified status
 
-Native text-grid metrics have owned-window acceptance. The child is developing a real ConPTY/PTY
-terminal with PowerShell/zsh input highlighting; local Windows race/native GPU
-checks passed. New cross-platform source promotion remains pending. The terminal
-contract/gaps are maintained in the child's agent docs/terminal.md.
+Framework v0.5.2 is published at immutable source
+`ff69721c1a807d8be044786597bf33033f55d966`, all five jobs green in CI
+`37488721747`. TextAdvance exposes DirectWrite's native advance and unrounded
+CoreText typographic bounds for monospace grids; MeasureText retains label layout
+semantics. Real native trailing-space/monospace checks gate this public module.
+The child independently pins v0.5.2 with GOWORK=off and has published its real
+ConPTY/PTY terminal with PowerShell/zsh input highlighting as v0.7.0. Promotion
+and installed evidence follow below; terminal contracts/gaps are in its harness.
 
 Initial metrics source 3abf0a6 failed both Mac CI jobs in run 37487621956:
 Menlo label sizing returned 11 DIP for one M and 36 for four because MeasureText
 includes rounded layout padding. Windows and portable results do not override
-this negative control. TextAdvance is now being added using DirectWrite native
-advance and unrounded CoreText typographic bounds; existing MeasureText layout
-semantics stay intact. Native space/monospace grid checks gate the new module.
+this negative control. The corrected TextAdvance implementation passed both real
+Mac jobs plus both Windows jobs and Ubuntu; the failed source was not published.
 
 2026-10-06 framework release v0.4.0: source
 `f733ea9d6c40cad3f83cf89051f49185367bbc93`,
@@ -132,3 +135,39 @@ The inspected native Settings capture reports Up to date (0.6.0), automatic rout
 and gopls ready. See the child's agent docs for exact evidence and remaining
 editor/services/distribution/full VS Code and official Copilot VSIX gaps. The
 overall production/parity objective remains active.
+
+2026-10-07 terminal promotion: public godesktop v0.5.2/source ff69721 passed
+all five jobs in 37488721747. Its TextAdvance API resolves a real Mac label-padding
+negative control without changing MeasureText layout semantics. The independent
+child pins this public module and publishes gocode v0.7.0/source
+`8a0fa07670a3018b42ab86eb2dd45e814099c7c7`, all five source jobs green in
+`37498949904`, publication `37500332017`. Windows 2022/2025 use the same official
+pinned/hash-verified modern ConPTY embedded in PE resources; older system conhost
+dropped alternate-screen notifications. No system component was replaced. Real
+PowerShell 7/5.1 and Mac zsh input highlighting, PTY/VT/Unicode/alternate screen,
+native resize/Ctrl+C/exit and bounded process/history lifecycle checks passed.
+Downloaded Windows 2022 owned-GPU terminal captures were visually inspected.
+
+Actual signed public v0.7.0 automatic and separate direct GitHub full downloads
+plus manual ghfast.top SHA256 checks passed. Native large-file/VSIX/four-close/
+terminal acceptance ran from those released bytes; the owned root then rolled
+back to v0.4.0/source cfcd3513 and actually rendered its native GUI with the same
+extension store. The user installation separately updated via its actual stable
+v0.5.1 -update launcher to v0.7.0/source 8a0fa076, direct GitHub route. Its selected
+payload is 0.7.0; MSI/stable-launcher baseline stays 0.5.1. Auto=true/mode=auto,
+installed -version/-update-check, embedded runtime, real terminal, native GUI/
+icons/Settings/source-preservation, real gopls and Copilot protocol checks passed.
+Desktop/Start Menu GUI shortcuts, icon files and normalized user PATH are valid.
+Installed owned-GPU Settings/input/output captures were visually inspected:
+Up to date (0.7.0), automatic route, gopls ready, distinct pre-Enter syntax colors
+and output truecolor after resize. Copilot authenticated/LSP/SDK=true and
+networkPromptSent=false. Official Copilot VSIX and full VS Code parity remain
+unfinished; the child harness retains exact bounds and capability gaps.
+
+Generated free-channel metadata `cacee0d8b5228f63eb37748269721a266530a279`
+passed all five jobs in manual CI `37500982783`, including Windows MSI lifecycle,
+GiB native browsing, gopls/Copilot and Mac bundle packages. Child evidence commit
+`2573e677e39d0a1f694c446c50c1ab8e3550defd` updates documentation only and
+retains these exact verified code/metadata commits; the parent gitlink advances
+to it. Evidence-only commits skip redundant native CI, preserving source gates.
+The production/full-parity goal remains active.
