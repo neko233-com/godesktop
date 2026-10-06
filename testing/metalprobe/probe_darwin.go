@@ -16,8 +16,10 @@ import (
 // Before a readable completed frame exists it returns an error.
 func Snapshot() (*image.RGBA, uint64, error) { return platform.MetalSnapshot() }
 
-// Wheel constructs an NSEvent for the owned readback-enabled view, then invokes
-// its native scroll handler. Call on the UI thread. dx/dy are native AppKit
+// Wheel constructs a native CG/NSEvent and resolves its Quartz screen position
+// through the owned readback-enabled window/view. Unposted CGEvents have no
+// AppKit window attachment; it uses scrollWheel's shared native delivery path.
+// Call on the UI thread. dx/dy are native AppKit
 // deltas: positive x moves toward earlier/left content; positive y moves up.
 // precise selects pixel units, normalized by the renderer to lines. This probe
 // never posts global input or manipulates the user's pointer.

@@ -115,6 +115,7 @@ static GDRunState *current_metrics(void) {
 - (void)stopObservingDevices;
 - (void)requestRecovery:(NSString *)reason excluding:(uint64_t)registryID;
 - (void)recoverExcluding:(uint64_t)registryID reason:(NSString *)reason;
+- (void)deliverScrollWheel:(NSEvent *)event atPoint:(NSPoint)point;
 @end
 
 API_AVAILABLE(macos(14.0))
@@ -235,6 +236,9 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
 }
 - (void)scrollWheel:(NSEvent *)event {
     NSPoint p=[self convertPoint:event.locationInWindow fromView:nil];
+    [self deliverScrollWheel:event atPoint:p];
+}
+- (void)deliverScrollWheel:(NSEvent *)event atPoint:(NSPoint)p {
     CGFloat unit=event.hasPreciseScrollingDeltas?12.0f:1.0f;
     int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
     gd_go_event(1,self.bounds.size.width,self.bounds.size.height,0,0);
@@ -779,15 +783,21 @@ const char *gd_metal_test_wheel(int dx,int dy,float x,float y,int modifiers,int 
     NSPoint base=[active_view convertPoint:NSMakePoint(x,y) toView:nil];
     NSPoint screen=[active_view.window convertPointToScreen:base];
     CGEventSetLocation(raw,CGPointMake(screen.x,NSMaxY(NSScreen.screens.firstObject.frame)-screen.y));
-    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMousePointer,active_view.window.windowNumber);
-    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMousePointerThatCanHandleThisEvent,active_view.window.windowNumber);
     CGEventFlags flags=0;
     if(modifiers&1) flags|=kCGEventFlagMaskShift;if(modifiers&2) flags|=kCGEventFlagMaskControl;
     if(modifiers&4) flags|=kCGEventFlagMaskAlternate;if(modifiers&8) flags|=kCGEventFlagMaskCommand;
     CGEventSetFlags(raw,flags);
+    // Unposted CGEvents have no AppKit window attachment. Resolve their actual
+    // Quartz screen coordinates through the owned NSWindow/NSView, then use
+    // the same native delta/modifier/layout-delivery path as scrollWheel:.
+    // The probe never asks AppKit to dispatch to an unrelated window.
+    CGPoint quartz=CGEventGetLocation(raw);
+    NSPoint nativeScreen=NSMakePoint(quartz.x,NSMaxY(NSScreen.screens.firstObject.frame)-quartz.y);
+    NSPoint windowPoint=[active_view.window convertPointFromScreen:nativeScreen];
+    NSPoint local=[active_view convertPoint:windowPoint fromView:nil];
     NSEvent *event=[NSEvent eventWithCGEvent:raw];CFRelease(raw);
-    if(!event || event.windowNumber!=active_view.window.windowNumber) return "Native wheel event does not identify the owned Metal window";
-    [active_view scrollWheel:event];
+    if(!event || event.type!=NSEventTypeScrollWheel || fabs(local.x-x)>.01 || fabs(local.y-y)>.01) return "Native wheel event coordinate conversion failed";
+    [active_view deliverScrollWheel:event atPoint:local];
     return NULL;
 }
 
