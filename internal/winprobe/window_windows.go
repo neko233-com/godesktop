@@ -102,6 +102,25 @@ func (w Window) Pointer(message uint32, x, y int) error {
 	return w.Send(message, 0, parameter)
 }
 
+// Wheel sends a real HWND wheel message at a logical client position. The
+// Win32 payload requires signed physical screen coordinates, unlike Pointer.
+// Horizontal positive delta scrolls right; vertical positive delta scrolls up.
+// modifiers uses Win32 MK_SHIFT/MK_CONTROL bits in the low word.
+func (w Window) Wheel(horizontal bool, x, y int, delta int16, modifiers uint16) error {
+	scale := float64(w.DPI()) / 96
+	point := struct{ X, Y int32 }{int32(math.Round(float64(x) * scale)), int32(math.Round(float64(y) * scale))}
+	ok, _, err := user.NewProc("ClientToScreen").Call(uintptr(w), uintptr(unsafe.Pointer(&point)))
+	if ok == 0 {
+		return fmt.Errorf("ClientToScreen: %w", err)
+	}
+	message := uint32(0x20a)
+	if horizontal {
+		message = 0x20e
+	}
+	position := uintptr(uint32(uint16(int16(point.X))) | uint32(uint16(int16(point.Y)))<<16)
+	return w.Send(message, uintptr(uint32(modifiers)|uint32(uint16(delta))<<16), position)
+}
+
 func (w Window) ClientSize() (int, int, error) {
 	var r Rect
 	ok, _, err := user.NewProc("GetClientRect").Call(uintptr(w), uintptr(unsafe.Pointer(&r)))

@@ -221,7 +221,7 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
 - (void)keyDown:(NSEvent *)event {
     int key=0;
     int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
-    switch(event.keyCode) { case 48:key=9;break; case 36:case 76:key=13;break; case 49:key=32;break; case 53:key=27;break; case 51:key=8;break; case 117:key=46;break; case 123:key=37;break; case 124:key=39;break; case 125:key=40;break; case 126:key=38;break; }
+    switch(event.keyCode) { case 48:key=9;break; case 36:case 76:key=13;break; case 49:key=32;break; case 53:key=27;break; case 51:key=8;break; case 117:key=46;break; case 116:key=33;break; case 121:key=34;break; case 123:key=37;break; case 124:key=39;break; case 125:key=40;break; case 126:key=38;break; }
     if(!key && (mods&10) && event.charactersIgnoringModifiers.length) key=toupper([event.charactersIgnoringModifiers characterAtIndex:0]);
     if(key) gd_go_event(4,0,0,key,mods|(event.isARepeat?16:0));
     if(!(mods&10)) {
@@ -233,7 +233,26 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
         }
     }
 }
-- (void)scrollWheel:(NSEvent *)event { gd_go_event(7,0,event.scrollingDeltaY/(event.hasPreciseScrollingDeltas?12.0f:1.0f),0,0); }
+- (void)scrollWheel:(NSEvent *)event {
+    NSPoint p=[self convertPoint:event.locationInWindow fromView:nil];
+    CGFloat unit=event.hasPreciseScrollingDeltas?12.0f:1.0f;
+    int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
+    gd_go_event(1,self.bounds.size.width,self.bounds.size.height,0,0);
+    gd_go_scroll(-event.scrollingDeltaX/unit,event.scrollingDeltaY/unit,p.x,p.y,mods);
+}
+- (void)keyUp:(NSEvent *)event {
+    int key=0;
+    switch(event.keyCode) {case 48:key=9;break;case 36:case 76:key=13;break;case 49:key=32;break;case 53:key=27;break;case 51:key=8;break;case 117:key=46;break;case 116:key=33;break;case 121:key=34;break;case 123:key=37;break;case 124:key=39;break;case 125:key=40;break;case 126:key=38;break;}
+    if(!key && event.charactersIgnoringModifiers.length && [event.charactersIgnoringModifiers characterAtIndex:0]<128) key=toupper([event.charactersIgnoringModifiers characterAtIndex:0]);
+    int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
+    if(key) gd_go_event(9,0,0,key,mods);
+}
+- (void)flagsChanged:(NSEvent *)event {
+    int key=0;NSEventModifierFlags flag=0;
+    switch(event.keyCode) {case 59:case 62:key=17;flag=NSEventModifierFlagControl;break;case 56:case 60:key=16;flag=NSEventModifierFlagShift;break;case 58:case 61:key=18;flag=NSEventModifierFlagOption;break;case 55:case 54:key=91;flag=NSEventModifierFlagCommand;break;}
+    int mods=((event.modifierFlags&NSEventModifierFlagShift)?1:0)|((event.modifierFlags&NSEventModifierFlagControl)?2:0)|((event.modifierFlags&NSEventModifierFlagOption)?4:0)|((event.modifierFlags&NSEventModifierFlagCommand)?8:0);
+    if(key) gd_go_event((event.modifierFlags&flag)?4:9,0,0,key,mods);
+}
 - (void)mtkView:(MTKView *)view drawableSizeWillChange:(CGSize)size { [self requestFrame]; }
 - (void)requestFrame {
     GDRunState *metrics=self.metrics;
@@ -752,6 +771,52 @@ GDRenderStats gd_render_stats(void) {
     }
 }
 uint64_t gd_metal_window_identity(void) { return [NSThread isMainThread]?(uint64_t)active_view.window.windowNumber:0; }
+
+const char *gd_metal_test_wheel(int dx,int dy,float x,float y,int modifiers,int precise) {
+    if(![NSThread isMainThread] || !active_view || !active_view.readback) return "Owned Metal wheel probe requires the UI thread and GODESKTOP_READBACK=1";
+    CGEventRef raw=CGEventCreateScrollWheelEvent(NULL,precise?kCGScrollEventUnitPixel:kCGScrollEventUnitLine,2,dy,dx);
+    if(!raw) return "Cannot construct native scroll wheel event";
+    NSPoint base=[active_view convertPoint:NSMakePoint(x,y) toView:nil];
+    NSPoint screen=[active_view.window convertPointToScreen:base];
+    CGEventSetLocation(raw,CGPointMake(screen.x,NSMaxY(NSScreen.screens.firstObject.frame)-screen.y));
+    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMouse,active_view.window.windowNumber);
+    CGEventSetIntegerValueField(raw,kCGMouseEventWindowUnderMouseThatCanHandleThisEvent,active_view.window.windowNumber);
+    CGEventFlags flags=0;
+    if(modifiers&1) flags|=kCGEventFlagMaskShift;if(modifiers&2) flags|=kCGEventFlagMaskControl;
+    if(modifiers&4) flags|=kCGEventFlagMaskAlternate;if(modifiers&8) flags|=kCGEventFlagMaskCommand;
+    CGEventSetFlags(raw,flags);
+    NSEvent *event=[NSEvent eventWithCGEvent:raw];CFRelease(raw);
+    if(!event || event.windowNumber!=active_view.window.windowNumber) return "Native wheel event does not identify the owned Metal window";
+    [active_view scrollWheel:event];
+    return NULL;
+}
+
+const char *gd_metal_test_pointer(int pressed,float x,float y,int modifiers) {
+    if(![NSThread isMainThread] || !active_view || !active_view.readback) return "Owned Metal pointer probe requires the UI thread and GODESKTOP_READBACK=1";
+    NSPoint p=[active_view convertPoint:NSMakePoint(x,y) toView:nil];
+    NSEventModifierFlags flags=0;
+    if(modifiers&1) flags|=NSEventModifierFlagShift;if(modifiers&2) flags|=NSEventModifierFlagControl;
+    if(modifiers&4) flags|=NSEventModifierFlagOption;if(modifiers&8) flags|=NSEventModifierFlagCommand;
+    NSEvent *event=[NSEvent mouseEventWithType:(pressed?NSEventTypeLeftMouseDown:NSEventTypeLeftMouseUp) location:p modifierFlags:flags timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:active_view.window.windowNumber context:nil eventNumber:1 clickCount:1 pressure:(pressed?1.0:0.0)];
+    if(!event) return "Cannot construct native pointer event";
+    if(pressed) [active_view mouseDown:event];else [active_view mouseUp:event];
+    return NULL;
+}
+
+const char *gd_metal_test_key(int key,int modifiers,int pressed) {
+    if(![NSThread isMainThread] || !active_view || !active_view.readback) return "Owned Metal key probe requires the UI thread and GODESKTOP_READBACK=1";
+    unsigned short code=0;BOOL modifier=NO;int mask=0;
+    switch(key){case 9:code=48;break;case 13:code=36;break;case 27:code=53;break;case 33:code=116;break;case 34:code=121;break;case 37:code=123;break;case 39:code=124;break;case 16:code=56;modifier=YES;mask=1;break;case 17:code=59;modifier=YES;mask=2;break;case 18:code=58;modifier=YES;mask=4;break;case 91:code=55;modifier=YES;mask=8;break;default:if(key<32||key>126)return "Unsupported diagnostic native key";}
+    if(modifier) modifiers=pressed?(modifiers|mask):(modifiers&~mask);
+    NSEventModifierFlags flags=0;
+    if(modifiers&1)flags|=NSEventModifierFlagShift;if(modifiers&2)flags|=NSEventModifierFlagControl;if(modifiers&4)flags|=NSEventModifierFlagOption;if(modifiers&8)flags|=NSEventModifierFlagCommand;
+    NSString *chars=key>=32&&key<=126?[NSString stringWithFormat:@"%c",key]:@"";
+    NSEventType type=modifier?NSEventTypeFlagsChanged:(pressed?NSEventTypeKeyDown:NSEventTypeKeyUp);
+    NSEvent *event=[NSEvent keyEventWithType:type location:NSZeroPoint modifierFlags:flags timestamp:NSProcessInfo.processInfo.systemUptime windowNumber:active_view.window.windowNumber context:nil characters:chars charactersIgnoringModifiers:chars isARepeat:NO keyCode:code];
+    if(!event)return "Cannot construct owned native key event";
+    if(modifier)[active_view flagsChanged:event];else if(pressed)[active_view keyDown:event];else [active_view keyUp:event];
+    return NULL;
+}
 
 void gd_window_action(int action) {
     uint64_t expected=atomic_load(&generation);

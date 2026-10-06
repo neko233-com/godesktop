@@ -40,6 +40,15 @@ jobs:
       - name: Verify reproducible Direct3D 12 DXIL
         shell: powershell
         run: ./scripts/validate-shaders.ps1
+      - name: Native viewport pixels, positioned horizontal wheel and clipped hit targets
+        shell: powershell
+        env:
+          CGO_ENABLED: '1'
+          GOEXPERIMENT: cgocheck2
+          GOAMD64: v1
+        run: |
+          go run ./internal/viewporttest -output .cache/viewport-native
+          if ($LASTEXITCODE -ne 0) { throw 'Native viewport/wheel/hit acceptance failed.' }
       - name: Native bitmap RGBA pixels, bounded reuse/eviction and device recovery
         shell: powershell
         env:
@@ -100,6 +109,7 @@ jobs:
             .cache/windows-validation/
             .cache/bitmap-native/
             .cache/bitmap-recovery/
+            .cache/viewport-native/
             bin/counter*.exe
             testdata/fuzz/
             .cache/dx12-default/
@@ -150,6 +160,11 @@ jobs:
           go run ./internal/closeguard -mode panic
       - name: Native monospace grid metrics
         run: go run ./internal/textmetric
+      - name: Actual Metal viewport and owned native wheel/pointer events
+        run: |
+          go run ./internal/viewporttest -output bin/viewport-native
+          GODESKTOP_TEST_DRAWABLE_SCALE=1.5 go run ./internal/viewporttest -output bin/viewport-native-150
+          GODESKTOP_TEST_DRAWABLE_SCALE=2 go run ./internal/viewporttest -output bin/viewport-native-200
       - name: Metal instancing, glyph reuse, display pacing and idle wake
         shell: bash
         run: go run ./internal/renderstress -require-backend metal -require-frame-clock cametaldisplaylink -glyph-atlas -output bin/metal-render-stress.json
@@ -186,6 +201,9 @@ jobs:
             bin/metal-recovery.json*
             bin/bitmap-native/
             bin/bitmap-recovery/
+            bin/viewport-native/
+            bin/viewport-native-150/
+            bin/viewport-native-200/
           if-no-files-found: warn
 
   core:

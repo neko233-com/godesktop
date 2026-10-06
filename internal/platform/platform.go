@@ -57,7 +57,8 @@ type Options struct {
 }
 
 type Event struct {
-	Kind           int
-	X, Y           float32
-	Key, Modifiers int
+	Kind               int
+	X, Y               float32
+	Key, Modifiers     int
+	PointerX, PointerY float32
 }

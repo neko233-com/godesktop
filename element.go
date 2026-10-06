@@ -10,6 +10,7 @@ const (
 	iconKind
 	stackKind
 	imageKind
+	viewportKind
 )
 
 // Element is a transient description of a view. Build a fresh tree in each view
@@ -27,6 +28,7 @@ type Element struct {
 	width, height, grow, padding, gap, radius, fontSize float32
 	background, foreground                              Color
 	bitmap                                              *Bitmap
+	scrollX, scrollY                                    float32
 }
 
 func element(kind elementKind) *Element {
@@ -55,6 +57,22 @@ func Stack(children ...*Element) *Element {
 	return e
 }
 
+// Viewport clips a single content tree to its padded available space. Content
+// keeps its intrinsic size, at least filling the viewport; only visible paint
+// and hit targets are emitted. The application owns its scroll state.
+func Viewport(content *Element) *Element {
+	e := element(viewportKind)
+	e.children = []*Element{content}
+	return e
+}
+
+// ScrollOffset moves Viewport content toward earlier coordinates by the given
+// positive DIP offsets. Layout clamps offsets to the actual content extent.
+func (e *Element) ScrollOffset(x, y float32) *Element {
+	e.scrollX, e.scrollY = nonnegative(x), nonnegative(y)
+	return e
+}
+
 // Text creates a single-line label shaped by the platform's text engine.
 func Text(value string) *Element {
 	e := element(textKind)
@@ -71,7 +89,8 @@ func Button(label string, onClick func(*Context)) *Element {
 	return e
 }
 
-// Key assigns a unique stable identity used for focus and pointer capture.
+// Key assigns a unique visible identity for geometry, focus and pointer capture.
+// A passive element exposes ElementBounds without entering keyboard focus order.
 func (e *Element) Key(key string) *Element { e.key = key; return e }
 
 // FontFamily selects a platform font; an empty name uses the system UI font.

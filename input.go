@@ -14,6 +14,7 @@ const (
 	Character       InputKind = 6
 	Scroll          InputKind = 7
 	PointerMoved    InputKind = 8
+	KeyReleased     InputKind = 9
 	ModifierShift             = 1
 	ModifierControl           = 2
 	ModifierAlt               = 4
@@ -21,12 +22,15 @@ const (
 )
 
 // InputEvent coordinates are in DIP. Character.Key is a Unicode scalar value;
-// Scroll.Y is the number of lines (positive scrolls toward earlier content).
+// Scroll.Y is the number of lines (positive scrolls toward earlier content);
+// Scroll.X is horizontal lines (positive scrolls toward later/right content).
+// Scroll.PointerX/PointerY give its client position, independently of deltas.
 type InputEvent struct {
-	Kind           InputKind
-	X, Y           float32
-	Key, Modifiers int
-	Repeat         bool
+	Kind               InputKind
+	X, Y               float32
+	Key, Modifiers     int
+	Repeat             bool
+	PointerX, PointerY float32
 }
 
 // RenderedFrames returns successful native submissions for smoke diagnostics.

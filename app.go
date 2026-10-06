@@ -38,10 +38,11 @@ type Context struct {
 	bounds        map[string]Bounds
 }
 
-// Bounds describes a keyed interactive element in logical client coordinates.
+// Bounds describes a visible keyed element in logical client coordinates.
 type Bounds struct{ X, Y, Width, Height float32 }
 
-// ElementBounds returns the most recently laid out bounds for an interactive Key.
+// ElementBounds returns the most recently laid out clipped bounds for a Key.
+// A non-interactive Key provides geometry without joining keyboard focus order.
 // Native input refreshes layout after resize before delivering pointer events.
 func (c *Context) ElementBounds(key string) (Bounds, bool) {
 	c.mu.Lock()
@@ -122,7 +123,7 @@ type application struct {
 
 func (a *application) handle(event platform.Event) {
 	if a.input != nil && event.Kind != platform.Draw {
-		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers & 15, Repeat: event.Modifiers&16 != 0}) {
+		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers & 15, Repeat: event.Modifiers&16 != 0, PointerX: event.PointerX, PointerY: event.PointerY}) {
 			a.context.Invalidate()
 			return
 		}
@@ -137,6 +138,7 @@ func (a *application) handle(event platform.Event) {
 		a.frame.targets = a.frame.targets[:0]
 		clear(a.frame.measured)
 		clear(a.frame.keys)
+		clear(a.frame.boundKeys)
 		a.frame.focus = a.focused
 		root := a.view(a.context)
 		viewport := rect{0, 0, event.X, event.Y}
@@ -147,9 +149,8 @@ func (a *application) handle(event platform.Event) {
 		} else {
 			clear(a.context.bounds)
 		}
-		for _, target := range a.frame.targets {
-			b := target.bounds
-			a.context.bounds[target.key] = Bounds{b.x, b.y, b.w, b.h}
+		for key, b := range a.frame.boundKeys {
+			a.context.bounds[key] = Bounds{b.x, b.y, b.w, b.h}
 		}
 		a.context.mu.Unlock()
 		platform.Present(a.frame.commands)

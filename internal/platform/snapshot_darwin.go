@@ -17,6 +17,41 @@ import (
 // MetalWindowIdentity is an AppKit-window diagnostic. Call on the UI thread.
 func MetalWindowIdentity() uint64 { return uint64(C.gd_metal_window_identity()) }
 
+// MetalTestWheel constructs a native NSEvent for the readback-enabled owned view.
+// It never posts a global input event. Call on the UI thread.
+func MetalTestWheel(dx, dy int, x, y float32, modifiers int, precise bool) error {
+	var unit C.int
+	if precise {
+		unit = 1
+	}
+	if err := C.gd_metal_test_wheel(C.int(dx), C.int(dy), C.float(x), C.float(y), C.int(modifiers), unit); err != nil {
+		return errors.New(C.GoString(err))
+	}
+	return nil
+}
+
+func MetalTestPointer(pressed bool, x, y float32, modifiers int) error {
+	var down C.int
+	if pressed {
+		down = 1
+	}
+	if err := C.gd_metal_test_pointer(down, C.float(x), C.float(y), C.int(modifiers)); err != nil {
+		return errors.New(C.GoString(err))
+	}
+	return nil
+}
+
+func MetalTestKey(key, modifiers int, pressed bool) error {
+	var down C.int
+	if pressed {
+		down = 1
+	}
+	if err := C.gd_metal_test_key(C.int(key), C.int(modifiers), down); err != nil {
+		return errors.New(C.GoString(err))
+	}
+	return nil
+}
+
 // MetalSnapshot reads the most recently completed actual window drawable.
 // It is diagnostic-only and requires GODESKTOP_READBACK=1 before Run.
 func MetalSnapshot() (*image.RGBA, uint64, error) {

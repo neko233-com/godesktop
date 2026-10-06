@@ -236,6 +236,9 @@ func FuzzLayoutClipsToViewport(f *testing.F) {
 			root = Row(children...)
 		}
 		root.Gap(float32(data[0] % 12)).Padding(float32(data[0] % 20))
+		if data[0]&2 != 0 {
+			root = Viewport(root).ScrollOffset(float32(data[0]), float32(data[len(data)-1]))
+		}
 		viewport := rect{0, 0, 200, 150}
 		frame := testFrame()
 		frame.layout(root, viewport, viewport, "root")

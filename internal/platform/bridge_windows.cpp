@@ -308,6 +308,9 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
     case WM_KEYDOWN:
         gd_go_event(4,0,0,static_cast<int>(wparam),input_modifiers()|((lparam&(1LL<<30))?16:0));
         return 0;
+    case WM_KEYUP:
+        gd_go_event(9,0,0,static_cast<int>(wparam),input_modifiers());
+        return 0;
     case WM_CHAR: {
         unsigned value=static_cast<unsigned>(wparam);
         if(value>=0xd800 && value<=0xdbff) { window->high_surrogate=value; return 0; }
@@ -317,8 +320,15 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         return 0;
     }
     case WM_MOUSEWHEEL:
-        gd_go_event(7,0,GET_WHEEL_DELTA_WPARAM(wparam)/40.0f,0,0);
+    case WM_MOUSEHWHEEL: {
+        window->ensure_input_layout();
+        POINT point{GET_X_LPARAM(lparam),GET_Y_LPARAM(lparam)};
+        if(!ScreenToClient(handle,&point)) return 0;
+        float delta=GET_WHEEL_DELTA_WPARAM(wparam)/40.0f,scale=96.0f/dpi(handle);
+        int modifiers=input_modifiers()|((wparam&MK_SHIFT)?1:0)|((wparam&MK_CONTROL)?2:0);
+        gd_go_scroll(message==WM_MOUSEHWHEEL?delta:0,message==WM_MOUSEWHEEL?delta:0,point.x*scale,point.y*scale,modifiers);
         return 0;
+    }
     case WM_GETMINMAXINFO:
         if(window->custom_titlebar) {
             MONITORINFO monitor{sizeof(MONITORINFO)};

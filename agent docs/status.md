@@ -1,5 +1,17 @@
 # Verified status
 
+2026-10-07 next framework milestone: native Viewport/ScrollOffset, passive keyed
+geometry, positioned horizontal/vertical wheel and key-release events are added.
+Windows actual viewport pixels, clipped translated click, wheel coordinates/
+modifiers at a negative physical screen origin and native Control release pass.
+The final full strict-cgo/race/native/fuzz/PE suite passed (root coverage 96.7%).
+The initial full check correctly rejected changed duplicate-key wording in its
+existing panic gate. That assertion now uses the generalized element-key
+contract, retaining actual panic/close checks. New Mac owned NSEvent/drawable
+normal/1.5/2 gates are wired; no Mac or new public-version success is claimed yet.
+gocode tab overflow/virtualization/identity/MRU/routing work remains a candidate
+using an ignored local modfile. Published/installed versions remain 0.6.0/0.11.0.
+
 2026-10-07 framework v0.6.0 milestone: immutable Bitmap/Image API and native
 D3D12/Metal RGBA texture caching are implemented. Local Windows strict-cgo race,
 fuzz, native input/PE/GUI and workflow/DXIL checks passed (merged root coverage

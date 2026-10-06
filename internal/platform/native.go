@@ -28,7 +28,14 @@ func gd_go_should_close() C.int {
 //export gd_go_event
 func gd_go_event(kind C.int, x, y C.float, key, modifiers C.int) {
 	if eventHandler != nil {
-		eventHandler(Event{int(kind), float32(x), float32(y), int(key), int(modifiers)})
+		eventHandler(Event{Kind: int(kind), X: float32(x), Y: float32(y), Key: int(key), Modifiers: int(modifiers)})
+	}
+}
+
+//export gd_go_scroll
+func gd_go_scroll(x, y, pointerX, pointerY C.float, modifiers C.int) {
+	if eventHandler != nil {
+		eventHandler(Event{Kind: 7, X: float32(x), Y: float32(y), PointerX: float32(pointerX), PointerY: float32(pointerY), Modifiers: int(modifiers)})
 	}
 }
 

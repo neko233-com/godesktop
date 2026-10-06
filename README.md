@@ -111,6 +111,7 @@ go func() {
 - 不可变 RGBA `Bitmap` / `Image`，D3D12/Metal 纹理复用、透明混合和宽高比裁剪；见 [图片 API](docs/native-images.md)。
 - 按需重绘、UI 调度、批量传输命令、有界文本缓存。
 - `Flex` 零基准空间分配、独立横纵内边距、平台字体选择、矢量图标、容器点击。
+- `Viewport` 双轴视口裁切和偏移、非交互元素的 `Key` 几何查询、滚轮指针坐标和按键释放；见 [视口与输入](docs/viewports.md)。
 - 自定义标题栏拖动和窗口按钮；Unicode 字符、按键和滚轮输入回调。
 - 本地 VSIX 安装和 Node 扩展宿主，支持范围见 [扩展 API](docs/extensions.md)。
 - 无第三方 Go 模块依赖；不启用 cgo 时核心仍可测试，窗口启动返回明确错误。

@@ -26,3 +26,11 @@ premultiplied alpha, real parent clipping, odd-row RGBA uploads, 128 simultaneou
 distinct texture pixels and pinned residency, count/byte eviction, actual upload
 counts, device recovery and two successive Run lifecycles. CPU residency is
 bounded; fence-held in-flight GPU resources are accounted for separately.
+
+Native viewport acceptance requires actual red/green/blue GPU clipping, removal
+of offscreen targets, native positioned horizontal wheel/modifiers, translated
+click and Control release. Windows uses signed negative screen coordinates on an
+owned partially offscreen fixture. Mac probes construct owned native NSEvents;
+normal/1.5/2 density PNG/JSON artifacts prove native handler and drawable behavior,
+not every physical device. Unit/fuzz gates cover both axes, padding, clamping,
+passive geometry/focus separation and stale geometry removal.

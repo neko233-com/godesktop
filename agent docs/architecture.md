@@ -27,3 +27,8 @@
   completed GPU frames own texture/staging lifetime. Device recovery retains
   native CPU assets and uploads to fresh device resources; Run shutdown clears
   residency. Glyph R8 resources and bitmap RGBA accounting remain separate.
+- Viewport offsets are application state; layout clamps them to content extents
+  and uses one inherited clip for GPU commands and hit/focus targets. All visible
+  explicit keys expose clipped geometry; passive keys do not enter focus order.
+  Scroll deltas stay separate from client pointer coordinates. Key release/focus
+  cancellation ends held modifier gestures without retaining closed documents.

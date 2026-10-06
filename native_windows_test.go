@@ -370,7 +370,7 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 		}
 		p.exit(t)
 	})
-	for _, scenario := range []struct{ name, error string }{{"panic-view", "fixture-view-panic"}, {"panic-dispatch", "fixture-dispatch-panic"}, {"panic-click", "fixture-click-panic"}, {"duplicate", "duplicate button key"}, {"reentrant", ""}, {"empty", ""}, {"quit", ""}} {
+	for _, scenario := range []struct{ name, error string }{{"panic-view", "fixture-view-panic"}, {"panic-dispatch", "fixture-dispatch-panic"}, {"panic-click", "fixture-click-panic"}, {"duplicate", "duplicate element key"}, {"reentrant", ""}, {"empty", ""}, {"quit", ""}} {
 		t.Run(scenario.name, func(t *testing.T) {
 			p := startNative(t, executable, coverDir, scenario.name, 1)
 			if scenario.name == "panic-click" || scenario.name == "reentrant" || scenario.name == "empty" {

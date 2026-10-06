@@ -26,6 +26,7 @@ type frame struct {
 	measured    map[*Element]dimensions
 	focus       string
 	keys        map[string]bool
+	boundKeys   map[string]rect
 }
 
 func (f *frame) textSize(e *Element) dimensions {
@@ -129,15 +130,15 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 	}
 	px, py := e.insets()
 	inner := rect{bounds.x + px, bounds.y + py, max(0, bounds.w-px*2), max(0, bounds.h-py*2)}
+	if e.key != "" {
+		f.recordBounds(e.key, clip)
+	}
 	if e.click != nil {
 		key := e.key
 		if key == "" {
 			key = path
+			f.recordBounds(key, clip)
 		}
-		if f.keys[key] {
-			panic(fmt.Sprintf("godesktop: duplicate button key %q", key))
-		}
-		f.keys[key] = true
 		f.targets = append(f.targets, target{key, clip, e.click})
 		if key == f.focus {
 			f.rectangle(rect{bounds.x, bounds.y, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
@@ -168,6 +169,17 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 		if inner.w > 0 && inner.h > 0 && textClip.w > 0 && textClip.h > 0 {
 			f.commands = append(f.commands, platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text, FontFamily: e.fontFamily})
 		}
+		return
+	}
+	if e.kind == viewportKind {
+		if len(e.children) == 0 || e.children[0] == nil {
+			return
+		}
+		content := e.children[0]
+		d := f.size(content)
+		w, h := max(inner.w, d.w), max(inner.h, d.h)
+		x, y := min(e.scrollX, max(0, w-inner.w)), min(e.scrollY, max(0, h-inner.h))
+		f.layout(content, rect{inner.x - x, inner.y - y, w, h}, clip.intersect(inner), path+"/0")
 		return
 	}
 	if e.kind == stackKind {
@@ -237,4 +249,15 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 		f.layout(c, child, clip.intersect(inner), fmt.Sprintf("%s/%d", path, i))
 		offset += length + e.gap
 	}
+}
+
+func (f *frame) recordBounds(key string, bounds rect) {
+	if f.keys[key] {
+		panic(fmt.Sprintf("godesktop: duplicate element key %q", key))
+	}
+	f.keys[key] = true
+	if f.boundKeys == nil {
+		f.boundKeys = make(map[string]rect)
+	}
+	f.boundKeys[key] = bounds
 }
