@@ -60,76 +60,24 @@ class ColorRasterizer {
         context->SetTextAntialiasMode(D2D1_TEXT_ANTIALIAS_MODE_GRAYSCALE);
         return true;
     }
-public:
-    ~ColorRasterizer() { reset(); }
-    void reset() {
-#if defined(__IDWriteFactory8_INTERFACE_DEFINED__)
-        drop(paintContext); drop(paintFactory);
-#endif
-        drop(brush); drop(context); drop(d2dDevice); drop(d2d); drop(device); drop(factory);
-        initialized=false;
-    }
-    // Independent acceptance oracle: Direct2D draws the entire text layout with
-    // ENABLE_COLOR_FONT, without our glyph translation, packing or GPU shader.
-    HRESULT reference(IDWriteFactory *source,IDWriteTextLayout *layout,float scale,
-                      unsigned width,unsigned height,std::vector<unsigned char> &pixels) {
-        if(!init(source)) return E_FAIL;
-        ID2D1Bitmap1 *target=nullptr,*readback=nullptr;
-        D2D1_BITMAP_PROPERTIES1 properties{};
-        properties.pixelFormat={DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED};
-        properties.dpiX=properties.dpiY=96;
-        properties.bitmapOptions=D2D1_BITMAP_OPTIONS_TARGET|D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
-        HRESULT hr=context->CreateBitmap(D2D1::SizeU(width,height),nullptr,0,&properties,&target);
-        properties.bitmapOptions=D2D1_BITMAP_OPTIONS_CPU_READ|D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
-        if(SUCCEEDED(hr)) hr=context->CreateBitmap(D2D1::SizeU(width,height),nullptr,0,&properties,&readback);
-        if(SUCCEEDED(hr)) {
-            context->SetTarget(target); context->SetTransform(D2D1::Matrix3x2F::Scale(scale,scale));
-            brush->SetColor(D2D1::ColorF(1,0,0,1));
-            context->BeginDraw(); context->Clear(D2D1::ColorF(0,0,0,1));
-            context->DrawTextLayout(D2D1::Point2F(0,0),layout,brush,D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
-            hr=context->EndDraw(); context->SetTarget(nullptr);
-        }
-        if(SUCCEEDED(hr)) hr=readback->CopyFromBitmap(nullptr,target,nullptr);
-        D2D1_MAPPED_RECT mapped{};
-        if(SUCCEEDED(hr)) hr=readback->Map(D2D1_MAP_OPTIONS_READ,&mapped);
-        if(SUCCEEDED(hr)) {
-            pixels.resize(size_t(width)*height*4);
-            for(unsigned y=0;y<height;y++) for(unsigned x=0;x<width;x++) {
-                auto p=mapped.bits+y*mapped.pitch+x*4;
-                auto dest=pixels.data()+(size_t(y)*width+x)*4;
-                dest[0]=p[2];dest[1]=p[1];dest[2]=p[0];dest[3]=p[3];
-            }
-            hr=readback->Unmap();
-        }
-        drop(readback);drop(target);return hr;
-    }
-    // S_FALSE means a monochrome glyph. Failures must not silently discard color.
-    HRESULT rasterize(IDWriteFactory *source,const DWRITE_GLYPH_RUN &run,float scale,
-                      DWRITE_MEASURING_MODE mode,GDColor foreground,ColorGlyph &result) {
-        if(!init(source)) return E_FAIL;
+    HRESULT translate(const DWRITE_GLYPH_RUN &run,DWRITE_MEASURING_MODE mode,IDWriteColorGlyphRunEnumerator1 **out) {
         HRESULT hr=S_OK;
         constexpr unsigned supported=DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE|DWRITE_GLYPH_IMAGE_FORMATS_CFF|
             DWRITE_GLYPH_IMAGE_FORMATS_COLR|DWRITE_GLYPH_IMAGE_FORMATS_SVG|DWRITE_GLYPH_IMAGE_FORMATS_PNG|
             DWRITE_GLYPH_IMAGE_FORMATS_JPEG|DWRITE_GLYPH_IMAGE_FORMATS_TIFF|DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8;
-        IDWriteColorGlyphRunEnumerator1 *runs=nullptr;
 #if defined(__IDWriteFactory8_INTERFACE_DEFINED__)
         if(paintContext && paintFactory) {
             hr=paintFactory->TranslateColorGlyphRun(D2D1::Point2F(0,0),&run,nullptr,
                 static_cast<DWRITE_GLYPH_IMAGE_FORMATS>(supported|DWRITE_GLYPH_IMAGE_FORMATS_COLR_PAINT_TREE),
-                paintContext->GetPaintFeatureLevel(),mode,nullptr,0,&runs);
+                paintContext->GetPaintFeatureLevel(),mode,nullptr,0,out);
         } else
 #endif
             hr=factory->TranslateColorGlyphRun(D2D1::Point2F(0,0),&run,nullptr,
-                static_cast<DWRITE_GLYPH_IMAGE_FORMATS>(supported),mode,nullptr,0,&runs);
-        if(hr==DWRITE_E_NOCOLOR) return S_FALSE;
-        if(FAILED(hr)) return hr;
-        ID2D1CommandList *commands=nullptr;
-        hr=context->CreateCommandList(&commands);
-        if(FAILED(hr)) { drop(runs); return hr; }
-        context->SetTarget(commands);
-        context->SetTransform(D2D1::Matrix3x2F::Identity());
-        context->BeginDraw();
-        BOOL next=FALSE; unsigned layers=0;
+                static_cast<DWRITE_GLYPH_IMAGE_FORMATS>(supported),mode,nullptr,0,out);
+        return hr;
+    }
+    HRESULT drawRuns(IDWriteColorGlyphRunEnumerator1 *runs,GDColor foreground,ColorGlyph &result,unsigned &layers) {
+        HRESULT hr=S_OK; BOOL next=FALSE; layers=0;
         while(SUCCEEDED(hr=runs->MoveNext(&next)) && next) {
             if(++layers>256) { hr=E_OUTOFMEMORY; break; }
             const DWRITE_COLOR_GLYPH_RUN1 *layer=nullptr;
@@ -172,6 +120,69 @@ public:
                 context->DrawGlyphRun(origin,&layer->glyphRun,brush,layer->measuringMode);
             }
         }
+        return hr;
+    }
+
+public:
+    ~ColorRasterizer() { reset(); }
+    void reset() {
+#if defined(__IDWriteFactory8_INTERFACE_DEFINED__)
+        drop(paintContext); drop(paintFactory);
+#endif
+        drop(brush); drop(context); drop(d2dDevice); drop(d2d); drop(device); drop(factory);
+        initialized=false;
+    }
+    // Independent acceptance oracle: Direct2D draws the entire text layout with
+    // ENABLE_COLOR_FONT, without our glyph translation, packing or GPU shader.
+    HRESULT reference(IDWriteFactory *source,IDWriteTextLayout *layout,float scale,
+                      unsigned width,unsigned height,std::vector<unsigned char> &pixels) {
+        if(!init(source)) return E_FAIL;
+        ID2D1Bitmap1 *target=nullptr,*readback=nullptr;
+        D2D1_BITMAP_PROPERTIES1 properties{};
+        properties.pixelFormat={DXGI_FORMAT_B8G8R8A8_UNORM,D2D1_ALPHA_MODE_PREMULTIPLIED};
+        properties.dpiX=properties.dpiY=96;
+        properties.bitmapOptions=D2D1_BITMAP_OPTIONS_TARGET|D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+        HRESULT hr=context->CreateBitmap(D2D1::SizeU(width,height),nullptr,0,&properties,&target);
+        properties.bitmapOptions=D2D1_BITMAP_OPTIONS_CPU_READ|D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
+        if(SUCCEEDED(hr)) hr=context->CreateBitmap(D2D1::SizeU(width,height),nullptr,0,&properties,&readback);
+        if(SUCCEEDED(hr)) {
+            context->SetTarget(target); context->SetTransform(D2D1::Matrix3x2F::Scale(scale,scale));
+            brush->SetColor(D2D1::ColorF(1,0,0,1));
+            context->BeginDraw(); context->Clear(D2D1::ColorF(0,0,0,1));
+            context->DrawTextLayout(D2D1::Point2F(0,0),layout,brush,D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT|D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+            hr=context->EndDraw(); context->SetTarget(nullptr);
+        }
+        if(SUCCEEDED(hr)) hr=readback->CopyFromBitmap(nullptr,target,nullptr);
+        D2D1_MAPPED_RECT mapped{};
+        if(SUCCEEDED(hr)) hr=readback->Map(D2D1_MAP_OPTIONS_READ,&mapped);
+        if(SUCCEEDED(hr)) {
+            pixels.resize(size_t(width)*height*4);
+            for(unsigned y=0;y<height;y++) for(unsigned x=0;x<width;x++) {
+                auto p=mapped.bits+y*mapped.pitch+x*4;
+                auto dest=pixels.data()+(size_t(y)*width+x)*4;
+                dest[0]=p[2];dest[1]=p[1];dest[2]=p[0];dest[3]=p[3];
+            }
+            hr=readback->Unmap();
+        }
+        drop(readback);drop(target);return hr;
+    }
+    // S_FALSE means a monochrome glyph. Failures must not silently discard color.
+    HRESULT rasterize(IDWriteFactory *source,const DWRITE_GLYPH_RUN &run,float scale,
+                      DWRITE_MEASURING_MODE mode,GDColor foreground,float phaseX,float phaseY,ColorGlyph &result) {
+        if(!init(source)) return E_FAIL;
+        HRESULT hr=S_OK;
+        IDWriteColorGlyphRunEnumerator1 *runs=nullptr;
+        hr=translate(run,mode,&runs);
+        if(hr==DWRITE_E_NOCOLOR) return S_FALSE;
+        if(FAILED(hr)) return hr;
+        ID2D1CommandList *commands=nullptr;
+        hr=context->CreateCommandList(&commands);
+        if(FAILED(hr)) { drop(runs); return hr; }
+        context->SetTarget(commands);
+        context->SetTransform(D2D1::Matrix3x2F::Identity());
+        context->BeginDraw();
+        unsigned layers=0;
+        hr=drawRuns(runs,foreground,result,layers);
         HRESULT drawn=context->EndDraw();
         context->SetTarget(nullptr); drop(runs);
         if(SUCCEEDED(hr)) hr=drawn;
@@ -180,8 +191,8 @@ public:
         if(SUCCEEDED(hr)) hr=context->GetImageLocalBounds(commands,&bounds);
         if(FAILED(hr)) { drop(commands); return hr; }
         if(!layers || bounds.right<=bounds.left || bounds.bottom<=bounds.top) { drop(commands); return S_OK; }
-        double left=std::floor(double(bounds.left)*scale)-1,top=std::floor(double(bounds.top)*scale)-1;
-        double right=std::ceil(double(bounds.right)*scale)+1,bottom=std::ceil(double(bounds.bottom)*scale)+1;
+        double left=std::floor(double(bounds.left)*scale+phaseX)-1,top=std::floor(double(bounds.top)*scale+phaseY)-1;
+        double right=std::ceil(double(bounds.right)*scale+phaseX)+1,bottom=std::ceil(double(bounds.bottom)*scale+phaseY)+1;
         if(!std::isfinite(left) || !std::isfinite(top) || !std::isfinite(right) || !std::isfinite(bottom) ||
            std::abs(left)>1048576 || std::abs(top)>1048576 || right-left>1022 || bottom-top>1022) {
             drop(commands); return E_OUTOFMEMORY;
@@ -197,9 +208,17 @@ public:
         properties.bitmapOptions=D2D1_BITMAP_OPTIONS_CPU_READ|D2D1_BITMAP_OPTIONS_CANNOT_DRAW;
         if(SUCCEEDED(hr)) hr=context->CreateBitmap(D2D1::SizeU(width,height),nullptr,0,&properties,&readback);
         if(SUCCEEDED(hr)) {
-            context->SetTarget(target); context->SetTransform(D2D1::Matrix3x2F(scale,0,0,scale,-float(left),-float(top)));
-            context->BeginDraw(); context->Clear(D2D1::ColorF(0,0,0,0));
-            context->DrawImage(commands); hr=context->EndDraw(); context->SetTarget(nullptr);
+            context->SetTarget(target); context->SetTransform(D2D1::Matrix3x2F(scale,0,0,scale,-float(left)+phaseX,-float(top)+phaseY));
+            hr=translate(run,mode,&runs);
+            if(SUCCEEDED(hr)) {
+                context->BeginDraw(); context->Clear(D2D1::ColorF(0,0,0,0));
+                // Draw native layers directly at the final physical phase.
+                // The command list above is only the independent bounds prepass.
+                unsigned renderedLayers=0;
+                HRESULT rendered=drawRuns(runs,foreground,result,renderedLayers);
+                HRESULT ended=context->EndDraw(); hr=FAILED(rendered)?rendered:ended;
+            }
+            context->SetTarget(nullptr); drop(runs);
         }
         if(SUCCEEDED(hr)) hr=readback->CopyFromBitmap(nullptr,target,nullptr);
         D2D1_MAPPED_RECT mapped{};

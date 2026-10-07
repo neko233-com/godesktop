@@ -1,5 +1,16 @@
 # Verified status
 
+2026-10-07 native color phase/density candidate: fc1a57c/37585540976 passes
+both Windows repeated race/strict-cgo/native/PE/bitmap gates, both Macs and Ubuntu.
+Windows 2022 fails unchanged 95% reference RGB (92.62% at 100%); Windows 2025
+passes 100/150, but a small CI monitor clamps 200% client width. Failed PNGs were
+retained and Windows 2022 actual/reference inspected. A candidate permits exact
+readback fixture size, caches 1/64-pixel baseline phases, draws native layers
+directly at final phase and places color quads at physical integers. Reference
+NO_SNAP matches the existing renderer contract. Local all three density color/
+reference/clip/resize/two-eviction/recovery/restart gates pass with 100% color
+matches and zero tint/half-opacity error. Exact source CI/promotion pending.
+
 2026-10-07 Windows shader/cache correction candidate: diagnosis 37584001053 at
 9d4b134 shows Windows 2022 validation-off ordinary/readback pass; validation-on
 stops inside first ExecuteCommandLists. Windows 2025 ordinary diagnostic passes,

@@ -334,6 +334,12 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         return 0;
     }
     case WM_GETMINMAXINFO:
+        if(diagnostic_dpi) {
+            // Readback fixtures may exceed a small CI monitor's physical size.
+            // Allow their owned client target without changing system settings.
+            auto info=reinterpret_cast<MINMAXINFO *>(lparam);
+            info->ptMaxTrackSize={16384,16384}; return 0;
+        }
         if(window->custom_titlebar) {
             MONITORINFO monitor{sizeof(MONITORINFO)};
             if(GetMonitorInfoW(MonitorFromWindow(handle,MONITOR_DEFAULTTONEAREST),&monitor)) {

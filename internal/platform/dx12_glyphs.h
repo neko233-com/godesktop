@@ -46,7 +46,7 @@ struct Glyph {
 };
 class GlyphAtlas {
     // Font faces stay retained while their identity is part of a cache key.
-    using Key=std::tuple<IDWriteFontFace *,float,float,UINT16,bool,unsigned,float,DWRITE_MEASURING_MODE,bool,float,float,float>;
+    using Key=std::tuple<IDWriteFontFace *,float,float,UINT16,bool,unsigned,float,DWRITE_MEASURING_MODE,bool,float,float,float,float,float>;
     std::map<Key,Glyph> glyphs;
     struct Face { IDWriteFontFace *font=nullptr; bool color=false; };
     std::map<IDWriteFontFace *,Face> faces;
@@ -71,18 +71,11 @@ public:
         if(pages.empty()) pages.push_back(std::make_shared<AtlasPage>(accounting));
         return pages[0];
     }
-    const Glyph *get(IDWriteFactory *factory,const DWRITE_GLYPH_RUN *run,unsigned index,float scale,DWRITE_MEASURING_MODE mode,GDColor foreground) {
+    const Glyph *get(IDWriteFactory *factory,const DWRITE_GLYPH_RUN *run,unsigned index,float scale,DWRITE_MEASURING_MODE mode,GDColor foreground,float originX,float originY) {
         float advance=run->glyphAdvances?run->glyphAdvances[index]:0;
-        auto key=Key{run->fontFace,run->fontEmSize,scale,run->glyphIndices[index],run->isSideways!=FALSE,run->bidiLevel&1u,(run->bidiLevel&1)?advance:0,mode,false,0,0,0};
-        auto existing=glyphs.find(key);
-        if(existing!=glyphs.end()) { hits++; return &existing->second; }
-        auto coloredKey=key;
-        std::get<8>(coloredKey)=true; std::get<9>(coloredKey)=foreground.r; std::get<10>(coloredKey)=foreground.g; std::get<11>(coloredKey)=foreground.b;
-        existing=glyphs.find(coloredKey);
-        if(existing!=glyphs.end()) { hits++; return &existing->second; }
-        if(glyphs.size()>=maxGlyphs) { full=true; return nullptr; }
         auto knownFace=faces.find(run->fontFace);
         if(knownFace==faces.end()) {
+            if(glyphs.size()>=maxGlyphs) { full=true; return nullptr; }
             // Base DirectWrite table APIs avoid SDK-specific overload/vtable
             // declarations. Probe once per retained face, including SVG/bitmap.
             trace_stage("font table probe begin");
@@ -99,12 +92,25 @@ public:
             run->fontFace->AddRef(); knownFace=faces.emplace(run->fontFace,Face{run->fontFace,color}).first;
             trace_stage(color?"color font tables found":"ordinary font tables found");
         }
+        // Bake color glyphs at their physical baseline phase. Integer GPU
+        // placement avoids a second filtering pass over colored details.
+        auto phase=[](float value) { return std::floor((value-std::floor(value))*64+0.5f)/64; };
+        float phaseX=knownFace->second.color?phase(originX*scale):0;
+        float phaseY=knownFace->second.color?phase(originY*scale):0;
+        auto key=Key{run->fontFace,run->fontEmSize,scale,run->glyphIndices[index],run->isSideways!=FALSE,run->bidiLevel&1u,(run->bidiLevel&1)?advance:0,mode,false,0,0,0,phaseX,phaseY};
+        auto existing=glyphs.find(key);
+        if(existing!=glyphs.end()) { hits++; return &existing->second; }
+        auto coloredKey=key;
+        std::get<8>(coloredKey)=true; std::get<9>(coloredKey)=foreground.r; std::get<10>(coloredKey)=foreground.g; std::get<11>(coloredKey)=foreground.b;
+        existing=glyphs.find(coloredKey);
+        if(existing!=glyphs.end()) { hits++; return &existing->second; }
+        if(glyphs.size()>=maxGlyphs) { full=true; return nullptr; }
         DWRITE_GLYPH_RUN single=*run;
         single.glyphCount=1; single.glyphIndices=run->glyphIndices+index;
         single.glyphAdvances=run->glyphAdvances?&advance:nullptr;
         single.glyphOffsets=nullptr;
         ColorGlyph color;
-        HRESULT hr=knownFace->second.color?colors.rasterize(factory,single,scale,mode,foreground,color):S_FALSE;
+        HRESULT hr=knownFace->second.color?colors.rasterize(factory,single,scale,mode,foreground,phaseX,phaseY,color):S_FALSE;
         if(FAILED(hr)) { error="Native color glyph rasterization failed (HRESULT="+std::to_string(uint32_t(hr))+")"; return nullptr; }
         bool rgba=hr==S_OK;
         IDWriteGlyphRunAnalysis *analysis=nullptr;
@@ -198,16 +204,20 @@ public:
         float advance=0;
         bool rtl=(run->bidiLevel&1)!=0;
         for(unsigned i=0;i<run->glyphCount;i++) {
-            auto glyph=atlas.get(factory,run,i,scale,mode,command.color);
+            auto offset=run->glyphOffsets?run->glyphOffsets[i]:DWRITE_GLYPH_OFFSET{};
+            float x=originX+(rtl?-advance:advance)+(rtl?-offset.advanceOffset:offset.advanceOffset);
+            float y=originY-offset.ascenderOffset;
+            auto glyph=atlas.get(factory,run,i,scale,mode,command.color,x,y);
             if(!glyph) return E_FAIL;
             if(glyph->page) {
-                auto offset=run->glyphOffsets?run->glyphOffsets[i]:DWRITE_GLYPH_OFFSET{};
-                float x=originX+(rtl?-advance:advance)+(rtl?-offset.advanceOffset:offset.advanceOffset);
-                float y=originY-offset.ascenderOffset;
                 GDGPUInstance v=gd_gpu_instance(&command);
                 v.bounds={x+glyph->bounds.left/scale,y+glyph->bounds.top/scale,glyph->width/scale,glyph->height/scale};
                 v.uv={glyph->x/float(glyph->page->width),glyph->y/float(glyph->page->height),glyph->width/float(glyph->page->width),glyph->height/float(glyph->page->height)};
-                if(glyph->page->channels==4) v.kind=6;
+                if(glyph->page->channels==4) {
+                    v.kind=6;
+                    v.bounds.x=(std::floor(x*scale)+glyph->bounds.left)/scale;
+                    v.bounds.y=(std::floor(y*scale)+glyph->bounds.top)/scale;
+                }
                 scene.append(v,glyph->page);
             }
             if(run->glyphAdvances) advance+=run->glyphAdvances[i];

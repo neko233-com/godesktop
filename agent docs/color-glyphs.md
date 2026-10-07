@@ -156,3 +156,22 @@ could reuse old native objects. Local WARP/validation Unicode previously failed
 its three-second synchronous paint probe in all three repeats; the newly tracked
 shader passes the same three-repeat gate. Exact Windows 2022/2025 source/diagnostic
 results and all color/bitmap/native/public-module promotion checks remain pending.
+
+Source fc1a57c/CI 37585540976 now passes both Windows full repeated race/native/
+coverage/PE and bitmap/recovery gates; readiness no longer stalls. Windows 2022
+then fails the unchanged 95% color-reference gate at 100% (92.62%), while 2025
+passes 100/150 but its 200% client is clamped by a small monitor to width 1028.
+Both failed owned PNGs are retained; actual Windows 2022 COLRv0 face/details and
+the independent reference were visually inspected. No source is published yet.
+
+The subsequent candidate permits large readback-only owned fixture track sizes,
+without changing physical monitor/system DPI. Color cache keys retain a bounded
+1/64-pixel baseline phase, native layers draw directly at that phase after a
+command-list bounds prepass, and GPU glyph quads use integer physical placement.
+This avoids an extra filtering pass through a phase-zero colored bitmap.
+The independent whole-layout reference explicitly sets NO_SNAP, matching the
+renderer's existing IsPixelSnappingDisabled=true contract. The 95% RGB/85% mask/
+two-channel/two-eviction/recovery deadlines and assertions remain unchanged.
+Actual local normal/150/200% color/reference/opacity/clip/resize/eviction/restart
+passes: reference color matches are 100%, tint/half-opacity differences are zero.
+Exact Windows source CI, published module and gocode promotion remain pending.
