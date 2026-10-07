@@ -120,6 +120,10 @@ func Present(commands []Command) {
 			panic("native text buffer exceeds 4 GiB")
 		}
 		native[i] = C.GDCommand{kind: C.int(cmd.Kind), bounds: rectangle(cmd.Bounds), clip: rectangle(cmd.Clip), color: color(cmd.Color), radius: C.float(cmd.Radius), font_size: C.float(cmd.FontSize), text_offset: C.uint32_t(len(blob)), text_length: C.uint32_t(len(cmd.Text))}
+		for j, mask := range cmd.RoundedClips {
+			native[i].rounded_bounds[j] = rectangle(mask.Bounds)
+			native[i].rounded_radii[j] = C.float(mask.Radius)
+		}
 		if cmd.Bitmap != nil {
 			native[i].image_id = C.uint64_t(cmd.Bitmap.ID)
 		}

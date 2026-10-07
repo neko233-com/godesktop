@@ -69,5 +69,5 @@ func (f *frame) paintBitmap(e *Element, bounds, clip rect) {
 	}
 	w, h := float32(source.Width)*scale, float32(source.Height)*scale
 	fit := rect{inner.x + (inner.w-w)/2, inner.y + (inner.h-h)/2, w, h}
-	f.commands = append(f.commands, platform.Command{Kind: platform.BitmapImage, Bounds: nativeRect(fit), Clip: nativeRect(visible), Color: nativeColor(e.foreground), Bitmap: source})
+	f.appendCommand(platform.Command{Kind: platform.BitmapImage, Bounds: nativeRect(fit), Clip: nativeRect(visible), Color: nativeColor(e.foreground), Bitmap: source})
 }

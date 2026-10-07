@@ -40,7 +40,9 @@ float dpi(HWND window) {
     auto fn=reinterpret_cast<GetDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetDpiForWindow"));
     return fn ? static_cast<float>(fn(window)) : 96.0f;
 }
+thread_local int replay_modifiers=-1;
 int input_modifiers() {
+    if(replay_modifiers>=0) return replay_modifiers;
     return ((GetKeyState(VK_SHIFT)&0x8000)?1:0)|((GetKeyState(VK_CONTROL)&0x8000)?2:0)|((GetKeyState(VK_MENU)&0x8000)?4:0);
 }
 int metric_for_dpi(int index,HWND window) {
@@ -49,6 +51,8 @@ int metric_for_dpi(int index,HWND window) {
     return fn?fn(index,static_cast<UINT>(dpi(window))):MulDiv(GetSystemMetrics(index),static_cast<int>(dpi(window)),96);
 }
 struct Window {
+	bool test_input_isolation=false;
+	unsigned replay_depth=0;
     HWND handle=nullptr;
     IDWriteFactory *text_factory=nullptr;
     gd_dx12::Capture capture;
@@ -251,6 +255,34 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         SetWindowLongPtrW(handle,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(window));
     }
     if(!window) return DefWindowProcW(handle,message,wparam,lparam);
+    // Opt-in native acceptance transport. USER32 marshals WM_COPYDATA across
+    // processes; replay uses the original Win32 handler/GPU path. Physical
+    // desktop input cannot alter a fixture while the user works elsewhere.
+    if(message==WM_COPYDATA && window->test_input_isolation) {
+        struct Replay { uint32_t message,modifiers; uintptr_t wparam,lparam; };
+        auto copy=reinterpret_cast<const COPYDATASTRUCT *>(lparam);
+        if(!copy || copy->dwData!=0x47445052 || copy->cbData!=sizeof(Replay) || !copy->lpData) return 0;
+        const Replay replay=*reinterpret_cast<const Replay *>(copy->lpData);
+        switch(replay.message) {
+        case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:
+        case WM_KEYDOWN:case WM_KEYUP:case WM_SYSKEYDOWN:case WM_SYSKEYUP:case WM_CHAR:
+        case WM_CANCELMODE:case WM_KILLFOCUS:case WM_CAPTURECHANGED:break;
+        default:return 0;
+        }
+        int previous=replay_modifiers; replay_modifiers=static_cast<int>(replay.modifiers&15);
+        window->replay_depth++;
+        SendMessageW(handle,replay.message,replay.wparam,replay.lparam);
+        window->replay_depth--; replay_modifiers=previous;
+        return 1;
+    }
+    if(window->test_input_isolation && !window->replay_depth) {
+        switch(message) {
+        case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:
+        case WM_KEYDOWN:case WM_KEYUP:case WM_SYSKEYDOWN:case WM_SYSKEYUP:case WM_CHAR:
+        case WM_CANCELMODE:case WM_KILLFOCUS:case WM_CAPTURECHANGED:return 0;
+        case WM_MOUSEACTIVATE:return MA_NOACTIVATEANDEAT;
+        }
+    }
     switch(message) {
     case WM_NCCALCSIZE:
         if(window->custom_titlebar) {
@@ -406,6 +438,8 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
         window.custom_titlebar=custom_titlebar!=0;
         wchar_t readback_option[2]{};
         window.readback=GetEnvironmentVariableW(L"GODESKTOP_READBACK",readback_option,2)>0 && readback_option[0]==L'1';
+        wchar_t isolation_option[2]{};
+        window.test_input_isolation=GetEnvironmentVariableW(L"GODESKTOP_TEST_INPUT_ISOLATION",isolation_option,2)>0 && isolation_option[0]==L'1';
         HRESULT hr=DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED,__uuidof(IDWriteFactory),reinterpret_cast<IUnknown **>(&window.text_factory));
         if(FAILED(hr)) { window.fail("Initialize DirectWrite",hr); }
         else {

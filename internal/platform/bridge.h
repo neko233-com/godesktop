@@ -18,6 +18,8 @@ typedef struct {
     uint32_t text_offset, text_length;
     uint32_t font_offset, font_length;
     uint64_t image_id;
+    GDRect rounded_bounds[4];
+    float rounded_radii[4];
 } GDCommand;
 
 // Counters describe real native encoding/submission, independently of Go view
@@ -39,12 +41,12 @@ typedef struct {
 #ifdef __cplusplus
 static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
-static_assert(sizeof(GDCommand) == 88 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68 && offsetof(GDCommand,image_id)==80, "GD command ABI layout changed");
+static_assert(sizeof(GDCommand) == 168 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68 && offsetof(GDCommand,image_id)==80 && offsetof(GDCommand,rounded_bounds)==88, "GD command ABI layout changed");
 static_assert(sizeof(GDRenderStats)==256 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #else
 _Static_assert(sizeof(float) == 4 && sizeof(int) == 4, "GD ABI requires 32-bit scalars");
 _Static_assert(sizeof(GDRect) == 16 && sizeof(GDColor) == 16, "GD ABI geometry layout changed");
-_Static_assert(sizeof(GDCommand) == 88 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68 && offsetof(GDCommand,image_id)==80, "GD command ABI layout changed");
+_Static_assert(sizeof(GDCommand) == 168 && offsetof(GDCommand, text_offset) == 60 && offsetof(GDCommand, font_offset) == 68 && offsetof(GDCommand,image_id)==80 && offsetof(GDCommand,rounded_bounds)==88, "GD command ABI layout changed");
 _Static_assert(sizeof(GDRenderStats)==256 && offsetof(GDRenderStats,submitted)==24,"GD statistics ABI changed");
 #endif
 

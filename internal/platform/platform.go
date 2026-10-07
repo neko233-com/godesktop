@@ -8,6 +8,13 @@ var ErrUnavailable = errors.New("godesktop: native backend requires Windows or m
 type Color struct{ R, G, B, A float32 }
 type Rect struct{ X, Y, W, H float32 }
 
+const MaxRoundedClips = 4
+
+type RoundedClip struct {
+	Bounds Rect
+	Radius float32
+}
+
 const MaxBitmapEdge = 4096
 const MaxBitmapBytes = 64 << 20
 const MaxFrameBitmaps = 128
@@ -21,6 +28,7 @@ type Bitmap struct {
 }
 
 type Command struct {
+	RoundedClips     [MaxRoundedClips]RoundedClip
 	Kind             int
 	Bounds, Clip     Rect
 	Color            Color
@@ -39,6 +47,7 @@ const (
 	Draw        = 1
 	PointerDown = 2
 	PointerUp   = 3
+	PointerMove = 8
 	KeyDown     = 4
 	Cancel      = 5
 	Tab         = 9

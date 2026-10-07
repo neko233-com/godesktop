@@ -1,5 +1,18 @@
 # Verified status
 
+2026-10-07 v0.15 candidate adds actual descendant rounded clipping (shapes,
+glyphs/intrinsic emoji/bitmaps), matching rounded hit areas and hover fills for
+the application's latest VS Code Modern UI correction. Three Windows native
+race/strict-cgo repeats pass (16.563s); pinned DXIL/source/ABI checks and vet pass.
+Scene memory remains capped at 16MiB with 160-byte instances. Opt-in Windows
+test input isolation replays bounded USER32 messages through the same handlers
+after actual traces confirm unrelated physical input altered visible fixtures.
+Full independent GOWORK=off Windows script now passes three shuffled strict-cgo/
+race repeats (132.559s), all native/regression/PE/console+GUI gates and fuzzing;
+merged root coverage is 94.0%. Pinned shader/workflow lint/vet/diff checks pass.
+Exact source CI/public tag and application promotion remain pending. Public
+v0.14.0 and installed gocode v0.21.0 remain unchanged. See rounded-clipping.md.
+
 2026-10-07 core v0.14.0 is public at immutable
 08c8e355110b8e7241411e36781c2a1919d81eb5. All five exact-source jobs in
 CI 37624236198 pass, including Windows 2022/2025 native input/menu events,

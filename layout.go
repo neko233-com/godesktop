@@ -18,15 +18,19 @@ type target struct {
 	click  func(*Context)
 }
 type frame struct {
-	commands    []platform.Command
-	targets     []target
-	measure     func(string, float32) (float32, float32)
-	fontMeasure func(string, float32, string) (float32, float32)
-	textCache   map[textKey]dimensions
-	measured    map[*Element]dimensions
-	focus       string
-	keys        map[string]bool
-	boundKeys   map[string]rect
+	roundedClips [platform.MaxRoundedClips]platform.RoundedClip
+	roundedDepth int
+	targetClips  map[string][platform.MaxRoundedClips]platform.RoundedClip
+	commands     []platform.Command
+	targets      []target
+	measure      func(string, float32) (float32, float32)
+	fontMeasure  func(string, float32, string) (float32, float32)
+	textCache    map[textKey]dimensions
+	measured     map[*Element]dimensions
+	focus        string
+	hover        string
+	keys         map[string]bool
+	boundKeys    map[string]rect
 }
 
 func (f *frame) textSize(e *Element) dimensions {
@@ -113,7 +117,12 @@ func (f *frame) rectangle(bounds, clip rect, color Color, radius float32) {
 	if color.A <= 0 || clip.w <= 0 || clip.h <= 0 {
 		return
 	}
-	f.commands = append(f.commands, platform.Command{Kind: platform.Rectangle, Bounds: nativeRect(bounds), Clip: nativeRect(clip), Color: nativeColor(color), Radius: min(radius, min(bounds.w, bounds.h)/2)})
+	f.appendCommand(platform.Command{Kind: platform.Rectangle, Bounds: nativeRect(bounds), Clip: nativeRect(clip), Color: nativeColor(color), Radius: min(radius, min(bounds.w, bounds.h)/2)})
+}
+
+func (f *frame) appendCommand(command platform.Command) {
+	command.RoundedClips = f.roundedClips
+	f.commands = append(f.commands, command)
 }
 
 func (f *frame) layout(e *Element, bounds, clip rect, path string) {
@@ -124,9 +133,26 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 	if clip.w <= 0 || clip.h <= 0 {
 		return
 	}
-	f.rectangle(bounds, clip, e.background, e.radius)
+	background := e.background
+	key := e.key
+	if key == "" {
+		key = path
+	}
+	if e.click != nil && key == f.hover && e.hoverBackground.A > 0 {
+		background = e.hoverBackground
+	}
+	f.rectangle(bounds, clip, background, e.radius)
+	if e.clipRadius > 0 {
+		if f.roundedDepth == platform.MaxRoundedClips {
+			panic("godesktop: at most four nested rounded clips are supported")
+		}
+		index := f.roundedDepth
+		f.roundedClips[index] = platform.RoundedClip{Bounds: nativeRect(bounds), Radius: min(e.clipRadius, min(bounds.w, bounds.h)/2)}
+		f.roundedDepth++
+		defer func() { f.roundedDepth--; f.roundedClips[index] = platform.RoundedClip{} }()
+	}
 	if e.draggable {
-		f.commands = append(f.commands, platform.Command{Kind: platform.DragRegion, Bounds: nativeRect(bounds), Clip: nativeRect(clip)})
+		f.appendCommand(platform.Command{Kind: platform.DragRegion, Bounds: nativeRect(bounds), Clip: nativeRect(clip)})
 	}
 	px, py := e.insets()
 	inner := rect{bounds.x + px, bounds.y + py, max(0, bounds.w-px*2), max(0, bounds.h-py*2)}
@@ -140,6 +166,14 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 			f.recordBounds(key, clip)
 		}
 		f.targets = append(f.targets, target{key, clip, e.click})
+		if f.roundedDepth > 0 {
+			if f.targetClips == nil {
+				f.targetClips = make(map[string][platform.MaxRoundedClips]platform.RoundedClip)
+			}
+			f.targetClips[key] = f.roundedClips
+		} else {
+			delete(f.targetClips, key)
+		}
 		if key == f.focus && e.focusRing {
 			f.rectangle(rect{bounds.x, bounds.y, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
 			f.rectangle(rect{bounds.x, bounds.y + bounds.h - 2, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
@@ -167,7 +201,7 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 			color.A *= 0.45
 		}
 		if inner.w > 0 && inner.h > 0 && textClip.w > 0 && textClip.h > 0 {
-			f.commands = append(f.commands, platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text, FontFamily: e.fontFamily})
+			f.appendCommand(platform.Command{Kind: platform.Label, Bounds: nativeRect(inner), Clip: nativeRect(textClip), Color: nativeColor(color), FontSize: e.fontSize, Text: e.text, FontFamily: e.fontFamily})
 		}
 		return
 	}

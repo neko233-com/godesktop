@@ -27,7 +27,9 @@ type Element struct {
 	paddingX, paddingY                                  float32
 	click                                               func(*Context)
 	width, height, grow, padding, gap, radius, fontSize float32
+	clipRadius                                          float32
 	background, foreground                              Color
+	hoverBackground                                     Color
 	bitmap                                              *Bitmap
 	scrollX, scrollY                                    float32
 }
@@ -137,8 +139,17 @@ func (e *Element) insets() (float32, float32) {
 	}
 	return e.padding, e.padding
 }
-func (e *Element) Gap(px float32) *Element         { e.gap = nonnegative(px); return e }
-func (e *Element) Radius(px float32) *Element      { e.radius = nonnegative(px); return e }
+func (e *Element) Gap(px float32) *Element              { e.gap = nonnegative(px); return e }
+func (e *Element) Radius(px float32) *Element           { e.radius = nonnegative(px); return e }
+func (e *Element) HoverBackground(color Color) *Element { e.hoverBackground = color; return e }
+
+// ClipRounded rounds the background and clips all descendant drawing/input.
+// At most four nested rounded clip surfaces are supported per element path.
+func (e *Element) ClipRounded(px float32) *Element {
+	e.radius = nonnegative(px)
+	e.clipRadius = e.radius
+	return e
+}
 func (e *Element) FontSize(px float32) *Element    { e.fontSize = max(1, nonnegative(px)); return e }
 func (e *Element) Background(color Color) *Element { e.background = color; return e }
 func (e *Element) Foreground(color Color) *Element { e.foreground = color; return e }

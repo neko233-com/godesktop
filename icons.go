@@ -30,7 +30,7 @@ func (f *frame) paintIcon(e *Element, bounds, clip rect) {
 	x, y := bounds.x+(bounds.w-size)/2, bounds.y+(bounds.h-size)/2
 	for _, path := range iconPaths[e.icon] {
 		for i := 0; i+3 < len(path); i += 2 {
-			f.commands = append(f.commands, platform.Command{Kind: platform.Line, Bounds: platform.Rect{X: x + path[i]*scale, Y: y + path[i+1]*scale, W: (path[i+2] - path[i]) * scale, H: (path[i+3] - path[i+1]) * scale}, Clip: nativeRect(clip), Color: nativeColor(e.foreground), Radius: 1.4 * scale})
+			f.appendCommand(platform.Command{Kind: platform.Line, Bounds: platform.Rect{X: x + path[i]*scale, Y: y + path[i+1]*scale, W: (path[i+2] - path[i]) * scale, H: (path[i+3] - path[i+1]) * scale}, Clip: nativeRect(clip), Color: nativeColor(e.foreground), Radius: 1.4 * scale})
 		}
 	}
 }

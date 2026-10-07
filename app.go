@@ -118,6 +118,7 @@ type application struct {
 	view             func(*Context) *Element
 	frame            frame
 	pressed, focused string
+	hovered          string
 	input            func(*Context, InputEvent) bool
 }
 
@@ -135,11 +136,13 @@ func (a *application) handle(event platform.Event) {
 		a.context.mu.Unlock()
 		a.context.drain()
 		a.frame.commands = a.frame.commands[:0]
+		clear(a.frame.targetClips)
 		a.frame.targets = a.frame.targets[:0]
 		clear(a.frame.measured)
 		clear(a.frame.keys)
 		clear(a.frame.boundKeys)
 		a.frame.focus = a.focused
+		a.frame.hover = a.hovered
 		root := a.view(a.context)
 		viewport := rect{0, 0, event.X, event.Y}
 		a.frame.layout(root, viewport, viewport, "root")
@@ -154,11 +157,23 @@ func (a *application) handle(event platform.Event) {
 		}
 		a.context.mu.Unlock()
 		platform.Present(a.frame.commands)
+	case platform.PointerMove:
+		hovered := ""
+		for i := len(a.frame.targets) - 1; i >= 0; i-- {
+			if a.frame.targetContains(a.frame.targets[i], event.X, event.Y) {
+				hovered = a.frame.targets[i].key
+				break
+			}
+		}
+		if hovered != a.hovered {
+			a.hovered = hovered
+			a.context.Invalidate()
+		}
 	case platform.PointerDown:
 		a.pressed = ""
 		for i := len(a.frame.targets) - 1; i >= 0; i-- {
 			t := a.frame.targets[i]
-			if t.bounds.contains(event.X, event.Y) {
+			if a.frame.targetContains(t, event.X, event.Y) {
 				a.pressed = t.key
 				a.focused = t.key
 				a.context.Invalidate()
@@ -170,7 +185,7 @@ func (a *application) handle(event platform.Event) {
 		a.pressed = ""
 		for i := len(a.frame.targets) - 1; i >= 0; i-- {
 			t := a.frame.targets[i]
-			if t.bounds.contains(event.X, event.Y) {
+			if a.frame.targetContains(t, event.X, event.Y) {
 				if t.key == pressed {
 					t.click(a.context)
 					a.context.Invalidate()
@@ -180,6 +195,7 @@ func (a *application) handle(event platform.Event) {
 		}
 	case platform.Cancel:
 		a.pressed = ""
+		a.hovered = ""
 	case platform.KeyDown:
 		if event.Key == platform.Tab && len(a.frame.targets) > 0 {
 			next := 0

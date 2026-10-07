@@ -6,6 +6,7 @@ package winprobe
 import (
 	"fmt"
 	"math"
+	"os"
 	"syscall"
 	"unsafe"
 )
@@ -75,6 +76,46 @@ func Find(title string, pid uint32) (Window, error) {
 
 func (w Window) Send(message uint32, key, parameter uintptr) error {
 	var result uintptr
+	if os.Getenv("GODESKTOP_TEST_INPUT_ISOLATION") == "1" {
+		switch message {
+		case 0x201, 0x202, 0x200, 0x20a, 0x20e, 0x100, 0x101, 0x104, 0x105, 0x102, 0x1f, 0x8, 0x215:
+			payload := struct {
+				Message, Modifiers uint32
+				WParam, LParam     uintptr
+			}{Message: message, WParam: key, LParam: parameter}
+			if message == 0x104 || message == 0x105 {
+				payload.Modifiers |= 4
+			}
+			var pid uint32
+			user.NewProc("GetWindowThreadProcessId").Call(uintptr(w), uintptr(unsafe.Pointer(&pid)))
+			if pid == uint32(os.Getpid()) && (message == 0x100 || message == 0x101 || message == 0x104 || message == 0x105) {
+				for _, pair := range [][2]uint32{{16, 1}, {17, 2}, {18, 4}} {
+					state, _, _ := user.NewProc("GetKeyState").Call(uintptr(pair[0]))
+					if state&0x8000 != 0 {
+						payload.Modifiers |= pair[1]
+					}
+				}
+			}
+			if message == 0x201 || message == 0x202 || message == 0x200 {
+				if key&4 != 0 {
+					payload.Modifiers |= 1
+				}
+				if key&8 != 0 {
+					payload.Modifiers |= 2
+				}
+			}
+			copy := struct {
+				ID   uintptr
+				Size uint32
+				Data unsafe.Pointer
+			}{ID: 0x47445052, Size: uint32(unsafe.Sizeof(payload)), Data: unsafe.Pointer(&payload)}
+			ok, _, err := user.NewProc("SendMessageTimeoutW").Call(uintptr(w), 0x4a, 0, uintptr(unsafe.Pointer(&copy)), 0x2|0x20, 3000, uintptr(unsafe.Pointer(&result)))
+			if ok == 0 || result != 1 {
+				return fmt.Errorf("isolated owned message 0x%x rejected: %w", message, err)
+			}
+			return nil
+		}
+	}
 	ok, _, err := user.NewProc("SendMessageTimeoutW").Call(uintptr(w), uintptr(message), key, parameter, 0x2|0x20, 3000, uintptr(unsafe.Pointer(&result)))
 	if ok == 0 {
 		return fmt.Errorf("SendMessageTimeout(0x%x): %w", message, err)

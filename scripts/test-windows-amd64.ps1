@@ -18,7 +18,7 @@ function Invoke-CheckedGo {
 }
 
 $taskRoot = Split-Path -Parent $PSScriptRoot
-$taskEnvNames = @('GOOS', 'GOARCH', 'GOAMD64', 'CGO_ENABLED', 'GOEXPERIMENT', 'CC', 'CXX', 'GODESKTOP_NATIVE_COVERDIR')
+$taskEnvNames = @('GOOS', 'GOARCH', 'GOAMD64', 'CGO_ENABLED', 'GOEXPERIMENT', 'CC', 'CXX', 'GODESKTOP_NATIVE_COVERDIR', 'GODESKTOP_TEST_INPUT_ISOLATION')
 $taskSavedEnv = @{}
 foreach ($taskName in $taskEnvNames) { $taskSavedEnv[$taskName] = [Environment]::GetEnvironmentVariable($taskName, 'Process') }
 Push-Location -LiteralPath $taskRoot
@@ -30,7 +30,11 @@ try {
     $env:GOEXPERIMENT = 'cgocheck2'
     $env:CC = 'gcc'
     $env:CXX = 'g++'
-    $taskReportDir = Join-Path $taskRoot ('.cache/windows-validation/' + [guid]::NewGuid().ToString('N'))
+    $env:GODESKTOP_TEST_INPUT_ISOLATION = '1'
+    $taskReportDir = [IO.Path]::GetFullPath((Join-Path $taskRoot '.cache/windows-validation/current'))
+    $taskExpectedParent = [IO.Path]::GetFullPath((Join-Path $taskRoot '.cache/windows-validation'))
+    if ([IO.Path]::GetDirectoryName($taskReportDir) -ne $taskExpectedParent -or [IO.Path]::GetFileName($taskReportDir) -ne 'current') { throw 'Invalid owned validation report directory.' }
+    if (Test-Path -LiteralPath $taskReportDir) { Remove-Item -LiteralPath $taskReportDir -Recurse -Force }
     $taskCoreDir = Join-Path $taskReportDir 'core'
     $taskNativeDir = Join-Path $taskReportDir 'native'
     New-Item -ItemType Directory -Path $taskCoreDir, $taskNativeDir -Force | Out-Null
