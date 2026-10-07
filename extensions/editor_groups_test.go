@@ -3,6 +3,7 @@ package extensions
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sort"
@@ -267,5 +268,36 @@ func TestConcurrentVSIXOpeningReceiptsAreInvocationLocal(t *testing.T) {
 	sort.Ints(got)
 	if got[0] != 1 || got[1] != 2 {
 		t.Fatal("shared TextDocument mixed two invocation receipts", got)
+	}
+}
+
+func TestLegacySelectionRejectionRestoresAcknowledgedCaret(t *testing.T) {
+	workspace := t.TempDir()
+	file := filepath.Join(workspace, "main.go")
+	os.WriteFile(file, []byte("abcde"), 0600)
+	script := `const v=require('vscode');exports.activate=c=>c.subscriptions.push(v.commands.registerCommand('test.hello',async()=>{const e=v.window.activeTextEditor;e.selection=new v.Selection(0,3,0,3);await e.edit(()=>{});return e.selection.active.character;}));`
+	e, err := Install(t.TempDir(), archive(t, testManifest, map[string]string{"extension/main.cjs": script}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	h, err := Start(ctx, workspace, []Extension{e})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	h.Register("window/setSelection", func(context.Context, json.RawMessage) (any, error) {
+		return nil, errors.New("stale selection rejected")
+	})
+	h.Register("workspace/applyEdit", func(context.Context, json.RawMessage) (any, error) { return map[string]bool{"applied": false}, nil })
+	p := editor.Position{Character: 1}
+	doc := map[string]any{"path": file, "text": "abcde", "version": 1, "selection": editor.Selection{Anchor: p, Active: p}}
+	if err = h.Call(ctx, "initialize", map[string]any{"documents": []any{doc}, "active": doc}, nil); err != nil {
+		t.Fatal(err)
+	}
+	var caret int
+	if err = h.Call(ctx, "execute", map[string]string{"command": "test.hello"}, &caret); err != nil || caret != 1 {
+		t.Fatal("legacy rejection lost last acknowledged caret", caret, err)
 	}
 }

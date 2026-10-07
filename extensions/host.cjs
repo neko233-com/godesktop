@@ -125,6 +125,7 @@ class TextEditor {
 function editorFor(doc){const key='legacy:'+uriKey(doc.uri);if(!editors.has(key))editors.set(key,new TextEditor(doc,key));return editors.get(key);}
 function setLegacyActive(editor){const changed=activeEditor!==editor,previous=visibleEditors;activeEditor=editor;visibleEditors=editor?[editor]:[];if(changed)events.active.fire(editor);if(previous.length!==visibleEditors.length||previous[0]!==editor)events.visible.fire([...visibleEditors]);}
 function syncEditors(state){
+	if(!clientCapabilities.editorGroups)return;
   if(!state||!Number.isSafeInteger(state.generation)||state.generation<=editorGeneration)return;
   if(!Array.isArray(state.editors)||state.editors.length>9)throw new Error('Invalid native editor count');
   const ids=new Set(), entries=state.editors.map(value=>{const doc=documents.get(uriKey(Uri.file(value.path)));if(!value.id||typeof value.id!=='string'||ids.has(value.id)||!doc||doc.isClosed||!Number.isInteger(value.viewColumn)||value.viewColumn<1||value.viewColumn>9||!value.selection||!Array.isArray(value.visibleRanges)||value.visibleRanges.length>256)throw new Error('Invalid native editor state');ids.add(value.id);const old=editors.get(value.id);if(old&&old.document!==doc)throw new Error('Editor identity changed its document');const selection=new Selection(position(value.selection.anchor),position(value.selection.active)),ranges=value.visibleRanges.map(range);for(const p of [selection.anchor,selection.active,...ranges.flatMap(r=>[r.start,r.end])])if(!doc.validatePosition(p).isEqual(p))throw new Error('Native editor coordinates exceed its document');return {value,doc,selection,ranges,editor:old||new TextEditor(doc,value.id)};});
@@ -152,7 +153,7 @@ function syncDocument(value,kind,changes=[],layout){
   if(value.text!==undefined)doc.update(value.text);
   else if(changed){if(value.version!==doc.version+1)throw new Error('Document synchronization skipped a version');let text=doc.text;for(const c of changes){const a=doc.offsetAt(position(c.range.start)),z=doc.offsetAt(position(c.range.end));text=text.slice(0,a)+c.text+text.slice(z);}doc.update(text);}
   doc.version=value.version;doc.isDirty=!!value.dirty;
-  let editor;if(clientCapabilities.editorGroups)syncEditors(layout);else{editor=editorFor(doc);if(value.selection)editor._selection=new Selection(position(value.selection.anchor),position(value.selection.active));}
+  let editor;if(clientCapabilities.editorGroups)syncEditors(layout);else{editor=editorFor(doc);if(value.selection){editor._selection=new Selection(position(value.selection.anchor),position(value.selection.active));editor._nativeSelection=editor._selection;}}
   if(replaced)events.close.fire(replaced);
   if(fresh)events.open.fire(doc);
   if(changed)events.change.fire({document:doc,contentChanges,reason:value.reason});
