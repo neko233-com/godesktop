@@ -1,5 +1,16 @@
 # Verified status
 
+2026-10-07 Windows shader/cache correction candidate: diagnosis 37584001053 at
+9d4b134 shows Windows 2022 validation-off ordinary/readback pass; validation-on
+stops inside first ExecuteCommandLists. Windows 2025 ordinary diagnostic passes,
+but full 37583999968 still fails first-frame probes on both Windows jobs; Mac/
+Ubuntu pass. Font probing is not the diagnosed stall. A single explicitly
+nonuniform glyph-array sample replaces the sixteen-case shader switch, retaining
+one mixed batch/validation. DXIL now uses a .h tracked by cgo HFiles; .inc was
+absent and could hide local shader changes. Actual local WARP+validation Unicode
+passes three repeats, where the prior cached shader failed all three identical
+paint deadlines. Exact source CI/diagnosis and promotion remain pending.
+
 2026-10-07 initial Windows color source 03ed1c7/CI 37581933475 passes Mac Intel/
 ARM and Ubuntu; both Windows jobs fail preexisting readiness/input gates before
 the first GPU submission. It is not published. Local WARP+GPU-validation close

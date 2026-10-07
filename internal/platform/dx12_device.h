@@ -13,7 +13,7 @@
 #include <cstring>
 #include <cstdio>
 #include "gpu_scene.h"
-#include "gpu_shader_dx12.inc"
+#include "gpu_shader_dx12.h"
 
 namespace gd_dx12 {
 template<class T> void drop(T *&value) { if(value) { value->Release(); value=nullptr; } }

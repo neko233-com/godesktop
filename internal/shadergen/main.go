@@ -93,7 +93,9 @@ func run() error {
 		}
 		generated.WriteString("\n};\n")
 	}
-	target := filepath.Join(root, "internal", "platform", "gpu_shader_dx12.inc")
+	// cgo tracks same-directory .h inputs. An .inc payload could otherwise
+	// leave a regenerated shader hidden behind a stale native build cache.
+	target := filepath.Join(root, "internal", "platform", "gpu_shader_dx12.h")
 	if *check {
 		existing, err := os.ReadFile(target)
 		if err != nil {

@@ -36,6 +36,8 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 
 HLSL 为 `internal/platform/shaders/ui.hlsl`，实例 ABI 为 `gpu_scene.h`。DXIL 使用微软 DXC 1.9.2609.5，以 Shader Model 6.0 作为现代 Direct3D 12 的兼容基线；不要求应用运行时存在编译器。生成头文件记录两份源码的 SHA256。
 
+DXIL 输出使用 `gpu_shader_dx12.h`，确保 cgo 将生成代码列入 `HFiles` 并在着色器变更后重新编译原生桥接。此前 `.inc` 后缀不在该列表，单独更新着色器可能复用旧本机对象。混合字形纹理索引显式使用 `NonUniformResourceIndex`，因为同一 wave 可以包含不同页的实例；一次采样降低 GPU 验证着色器的首帧编译复杂度。精确旧系统诊断与验证范围在工程记录中。
+
 ```powershell
 # 验证；缺少编译器时下载固定版本并检查官方发布文件的 SHA256
 powershell -File scripts/validate-shaders.ps1

@@ -102,7 +102,7 @@ entries across label colors. Ordinary glyphs retain R8 and normal foreground tin
 The lazy rasterizer is rebuilt on actual device recovery and released at shutdown.
 
 D3D12 now has a fixed 16-slot glyph table plus a separate bitmap binding, with
-static slot dispatch/explicit LOD. The 80-byte instance/public command ABI stays
+explicit nonuniform descriptor indexing/LOD. The 80-byte instance/public command ABI stays
 unchanged. Mixed R8/RGBA/geometry preserves painter order in one draw; 128 distinct
 user bitmap/frame residency remains separate. Active glyph pixels retain the
 16 MiB/16-page/16,384-entry cap; actual live/in-flight page sizes and upload bytes
@@ -139,3 +139,20 @@ Opt-in bounded first-frame stage traces and a manual Windows 2022/2025 diagnosti
 compare ordinary/readback and validation-off/on lifecycles with the same ten-second
 readiness guard. SDK overload declarations are a suspected difference; source CI
 and diagnostic evidence are pending, and no driver/ABI cause is yet established.
+
+Diagnostic 37584001053/9d4b134 completes scene/font/upload stages: Windows 2022
+passes both validation-off ordinary/readback paths, but validation-on blocks
+inside the first ExecuteCommandLists until the unchanged ten-second guard fails.
+Windows 2025's four ordinary diagnostic lifecycles pass; full source CI still
+fails synchronous first-frame paint probes. The font-table change is not claimed
+to resolve this; the trace rules out a stalled font probe in that diagnostic.
+
+The next shader uses one explicitly NonUniformResourceIndex-marked array sample
+instead of a sixteen-case sampling switch, keeping mixed painter-order batching
+and GPU validation enabled. A wave may contain several instance/page indices.
+Generated DXIL is renamed to gpu_shader_dx12.h: go list confirms cgo tracks it
+in HFiles, whereas the previous .inc was absent and local shader-only iterations
+could reuse old native objects. Local WARP/validation Unicode previously failed
+its three-second synchronous paint probe in all three repeats; the newly tracked
+shader passes the same three-repeat gate. Exact Windows 2022/2025 source/diagnostic
+results and all color/bitmap/native/public-module promotion checks remain pending.

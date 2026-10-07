@@ -58,25 +58,9 @@ Out vertex_main(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_Instance
 }
 
 float4 glyphSample(uint slot, float2 uv) {
-    // Static slots and explicit LOD also preserve derivatives across mixed runs.
-    switch (slot) {
-        case 0: return glyphs[0].SampleLevel(glyphSampler,uv,0);
-        case 1: return glyphs[1].SampleLevel(glyphSampler,uv,0);
-        case 2: return glyphs[2].SampleLevel(glyphSampler,uv,0);
-        case 3: return glyphs[3].SampleLevel(glyphSampler,uv,0);
-        case 4: return glyphs[4].SampleLevel(glyphSampler,uv,0);
-        case 5: return glyphs[5].SampleLevel(glyphSampler,uv,0);
-        case 6: return glyphs[6].SampleLevel(glyphSampler,uv,0);
-        case 7: return glyphs[7].SampleLevel(glyphSampler,uv,0);
-        case 8: return glyphs[8].SampleLevel(glyphSampler,uv,0);
-        case 9: return glyphs[9].SampleLevel(glyphSampler,uv,0);
-        case 10: return glyphs[10].SampleLevel(glyphSampler,uv,0);
-        case 11: return glyphs[11].SampleLevel(glyphSampler,uv,0);
-        case 12: return glyphs[12].SampleLevel(glyphSampler,uv,0);
-        case 13: return glyphs[13].SampleLevel(glyphSampler,uv,0);
-        case 14: return glyphs[14].SampleLevel(glyphSampler,uv,0);
-        default: return glyphs[15].SampleLevel(glyphSampler,uv,0);
-    }
+    // A wave can contain several glyph/page instances. Mark that descriptor
+    // index explicitly, keeping GPU-validation instrumentation to one sample.
+    return glyphs[NonUniformResourceIndex(min(slot,15u))].SampleLevel(glyphSampler,uv,0);
 }
 
 float4 fragment_main(Out input) : SV_Target {
