@@ -1,5 +1,14 @@
 # Verified status
 
+2026-10-07 candidate color-glyph fix: actual Mac v0.17.0 screenshots exposed
+alpha-only emoji tinting. Metal now retains intrinsic premultiplied RGBA for
+color fonts, batches mixed glyph pages in one draw and counts actual storage
+within the existing 16 MiB/16-page cache. New owned drawable color/opacity/clip,
+independent CoreText, RGBA eviction and recovery checks are in color-glyphs.md.
+Local strict-cgo/three-repeat Windows race checks pass. Mac source CI and
+application/release promotion are pending; v0.10.0/v0.17.0
+remain the independently tested public/installed releases below.
+
 2026-10-07 native extension-editor release: core v0.10.0 adds per-view identity,
 shared documents, visible/column/range/selection events, optional native open/show/
 selection/reveal, disposal/reopened-instance guards and bounded ordered operations.

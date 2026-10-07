@@ -1,17 +1,17 @@
 #ifndef GODESKTOP_GPU_GLYPHS_METAL_H
 #define GODESKTOP_GPU_GLYPHS_METAL_H
 
-// CoreText shapes the line; this cache stores individual glyph coverage only.
+// CoreText shapes the line; R8 coverage and premultiplied color glyphs are cached.
 // GPU-private pages are updated through per-submission staging buffers.
-enum { GDAtlasEdge=1024, GDAtlasMaxPages=16, GDAtlasMaxGlyphs=16384 };
+enum { GDAtlasEdge=1024, GDAtlasColorEdge=512, GDAtlasMaxPages=16, GDAtlasMaxGlyphs=16384, GDAtlasMaxBytes=16*1024*1024 };
 typedef struct { NSUInteger start,count,texture; } GDBatch;
 
-@interface GDAtlasUsage : NSObject { @public _Atomic uint64_t pages,peak; }
+@interface GDAtlasUsage : NSObject { @public _Atomic uint64_t pages,peak,bytes,peakBytes; }
 @end
 @implementation GDAtlasUsage
 - (instancetype)init {
     self=[super init];
-    if(self) { atomic_init(&pages,0); atomic_init(&peak,0); }
+    if(self) { atomic_init(&pages,0); atomic_init(&peak,0); atomic_init(&bytes,0); atomic_init(&peakBytes,0); }
     return self;
 }
 @end
@@ -24,27 +24,30 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
 @property(nonatomic) uint64_t version,uploaded;
 @property(nonatomic) NSUInteger width,height,channels;
 @property(nonatomic) uint64_t bitmapID;
-- (instancetype)initWithUsage:(GDAtlasUsage *)usage;
+- (instancetype)initWithUsage:(GDAtlasUsage *)usage channels:(NSUInteger)channels edge:(NSUInteger)edge;
 - (BOOL)packWidth:(NSUInteger)width height:(NSUInteger)height left:(NSUInteger *)left top:(NSUInteger *)top;
 @end
 @implementation GDAtlasPage
-- (instancetype)initWithUsage:(GDAtlasUsage *)usage {
+- (instancetype)initWithUsage:(GDAtlasUsage *)usage channels:(NSUInteger)channels edge:(NSUInteger)edge {
     self=[super init];
     if(self) {
-        self.usage=usage; self.pixels=[NSMutableData dataWithLength:GDAtlasEdge*GDAtlasEdge];
+        self.usage=usage; self.pixels=[NSMutableData dataWithLength:edge*edge*channels];
         ((unsigned char *)self.pixels.mutableBytes)[0]=255;
+        if(channels==4) { unsigned char *pixel=self.pixels.mutableBytes; pixel[1]=255;pixel[2]=255;pixel[3]=255; }
         self.x=1; self.y=1; self.version=1;
-        self.width=GDAtlasEdge;self.height=GDAtlasEdge;self.channels=1;
+        self.width=edge;self.height=edge;self.channels=channels;
         uint64_t count=atomic_fetch_add(&usage->pages,1)+1,peak=atomic_load(&usage->peak);
         while(count>peak && !atomic_compare_exchange_weak(&usage->peak,&peak,count)) {}
+        uint64_t bytes=atomic_fetch_add(&usage->bytes,self.pixels.length)+self.pixels.length,peakBytes=atomic_load(&usage->peakBytes);
+        while(bytes>peakBytes && !atomic_compare_exchange_weak(&usage->peakBytes,&peakBytes,bytes)) {}
     }
     return self;
 }
-- (void)dealloc { if(_usage) atomic_fetch_sub(&_usage->pages,1); }
+- (void)dealloc { if(_usage) { atomic_fetch_sub(&_usage->pages,1); atomic_fetch_sub(&_usage->bytes,_pixels.length); } }
 - (BOOL)packWidth:(NSUInteger)width height:(NSUInteger)height left:(NSUInteger *)left top:(NSUInteger *)top {
-    if(width+2>GDAtlasEdge || height+2>GDAtlasEdge) return NO;
-    if(self.x+width+2>GDAtlasEdge) { self.x=1; self.y+=self.rowHeight; self.rowHeight=0; }
-    if(self.y+height+2>GDAtlasEdge) return NO;
+    if(width+2>self.width || height+2>self.height) return NO;
+    if(self.x+width+2>self.width) { self.x=1; self.y+=self.rowHeight; self.rowHeight=0; }
+    if(self.y+height+2>self.height) return NO;
     *left=self.x+1; *top=self.y+1;
     self.x+=width+2; self.rowHeight=MAX(self.rowHeight,height+2);
     return YES;
@@ -65,6 +68,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
 @property(nonatomic,strong) NSMutableArray<GDAtlasPage *> *pages;
 @property(nonatomic,strong) NSMutableDictionary<NSArray *,GDAtlasGlyph *> *glyphs;
 @property(nonatomic) uint64_t rasterized,hits,epochs,uploadedBytes;
+@property(nonatomic) NSUInteger residentBytes;
 @property(nonatomic) uint64_t bitmapUploads,bitmapUploadedBytes;
 @property(nonatomic) BOOL full;
 @property(nonatomic,copy) NSString *failure;
@@ -84,12 +88,15 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
     return self;
 }
 - (GDAtlasPage *)white {
-    if(!self.pages.count) [self.pages addObject:[[GDAtlasPage alloc] initWithUsage:self.usage]];
+    if(!self.pages.count) {
+        GDAtlasPage *page=[[GDAtlasPage alloc] initWithUsage:self.usage channels:1 edge:GDAtlasEdge];
+        [self.pages addObject:page]; self.residentBytes+=page.pixels.length;
+    }
     return self.pages[0];
 }
 - (void)clear {
     [self.glyphs removeAllObjects]; [self.pages removeAllObjects];
-    self.full=NO; self.failure=nil; self.epochs++;
+    self.residentBytes=0; self.full=NO; self.failure=nil; self.epochs++;
 }
 - (GDAtlasGlyph *)glyph:(CGGlyph)index font:(CTFontRef)font scale:(CGFloat)scale {
     // The immutable key retains the actual fallback/variation font and size.
@@ -98,6 +105,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
     if(cached) { self.hits++; return cached; }
     if(self.glyphs.count>=GDAtlasMaxGlyphs) { self.full=YES; return nil; }
     GDAtlasGlyph *glyph=[[GDAtlasGlyph alloc] init];
+    NSUInteger channels=(CTFontGetSymbolicTraits(font)&kCTFontTraitColorGlyphs)?4:1;
     CGRect bounds;
     CTFontGetBoundingRectsForGlyphs(font,kCTFontOrientationDefault,&index,&bounds,1);
     if(!CGRectIsEmpty(bounds)) {
@@ -112,15 +120,17 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
         glyph.width=(NSUInteger)(right-left); glyph.height=(NSUInteger)(top-bottom);
         [self white];
         NSUInteger x=0,y=0;
-        for(GDAtlasPage *page in self.pages) if([page packWidth:glyph.width height:glyph.height left:&x top:&y]) { glyph.page=page; break; }
+        for(GDAtlasPage *page in self.pages) if(page.channels==channels && [page packWidth:glyph.width height:glyph.height left:&x top:&y]) { glyph.page=page; break; }
         if(!glyph.page) {
-            if(self.pages.count>=GDAtlasMaxPages) { self.full=YES; return nil; }
-            glyph.page=[[GDAtlasPage alloc] initWithUsage:self.usage]; [self.pages addObject:glyph.page];
+            NSUInteger edge=channels==4 && MAX(glyph.width,glyph.height)+2<=GDAtlasColorEdge?GDAtlasColorEdge:GDAtlasEdge;
+            NSUInteger bytes=edge*edge*channels;
+            if(self.pages.count>=GDAtlasMaxPages || self.residentBytes+bytes>GDAtlasMaxBytes) { self.full=YES; return nil; }
+            glyph.page=[[GDAtlasPage alloc] initWithUsage:self.usage channels:channels edge:edge]; [self.pages addObject:glyph.page]; self.residentBytes+=bytes;
             [glyph.page packWidth:glyph.width height:glyph.height left:&x top:&y];
         }
         glyph.x=x; glyph.y=y;
-        // RGBA is temporary so bitmap/color-font glyphs also yield coverage.
-        // The persistent CPU/GPU atlas is R8, with monochrome foreground tint.
+        // Color glyphs keep their actual premultiplied RGB; extracting only
+        // alpha would erase facial details and tint the entire emoji silhouette.
         NSMutableData *rgba=[NSMutableData dataWithLength:glyph.width*glyph.height*4];
         CGColorSpaceRef space=CGColorSpaceCreateDeviceRGB();
         CGContextRef context=CGBitmapContextCreate(rgba.mutableBytes,glyph.width,glyph.height,8,glyph.width*4,space,kCGImageAlphaPremultipliedLast|kCGBitmapByteOrder32Big);
@@ -133,8 +143,10 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
         CTFontDrawGlyphs(font,&index,&position,1,context);
         CGContextRelease(context);
         const unsigned char *source=rgba.bytes; unsigned char *dest=glyph.page.pixels.mutableBytes;
-        for(NSUInteger row=0;row<glyph.height;row++) for(NSUInteger col=0;col<glyph.width;col++)
-            dest[(y+row)*GDAtlasEdge+x+col]=source[(row*glyph.width+col)*4+3];
+        for(NSUInteger row=0;row<glyph.height;row++) {
+            if(channels==4) memcpy(dest+((y+row)*glyph.page.width+x)*4,source+row*glyph.width*4,glyph.width*4);
+            else for(NSUInteger col=0;col<glyph.width;col++) dest[(y+row)*glyph.page.width+x+col]=source[(row*glyph.width+col)*4+3];
+        }
         glyph.page.version++;
     }
     self.rasterized++; self.glyphs[key]=glyph;
@@ -146,7 +158,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
     for(GDAtlasPage *page in pages) {
         if(page.uploaded==page.version) continue;
         if(!page.texture) {
-            MTLTextureDescriptor *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(page.bitmapID?MTLPixelFormatRGBA8Unorm:MTLPixelFormatR8Unorm) width:page.width height:page.height mipmapped:NO];
+            MTLTextureDescriptor *desc=[MTLTextureDescriptor texture2DDescriptorWithPixelFormat:(page.channels==4?MTLPixelFormatRGBA8Unorm:MTLPixelFormatR8Unorm) width:page.width height:page.height mipmapped:NO];
             desc.storageMode=MTLStorageModePrivate; desc.usage=MTLTextureUsageShaderRead;
             page.texture=[self.device newTextureWithDescriptor:desc];
         }
@@ -163,7 +175,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
         [blit copyFromBuffer:upload sourceOffset:0 sourceBytesPerRow:pitch sourceBytesPerImage:pitch*page.height sourceSize:MTLSizeMake(page.width,page.height,1) toTexture:page.texture destinationSlice:0 destinationLevel:0 destinationOrigin:MTLOriginMake(0,0,0)];
         page.uploaded=page.version;
         if(page.bitmapID) {self.bitmapUploads++;self.bitmapUploadedBytes+=page.width*page.height*4;}
-        else self.uploadedBytes+=GDAtlasEdge*GDAtlasEdge;
+        else self.uploadedBytes+=page.width*page.height*page.channels;
     }
     [blit endEncoding]; return uploads;
 }
@@ -172,6 +184,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
 @interface GDGlyphScene : NSObject
 @property(nonatomic,strong) NSMutableData *instances,*batches;
 @property(nonatomic,strong) NSMutableArray<GDAtlasPage *> *pages;
+@property(nonatomic,strong) NSMutableArray<GDAtlasPage *> *glyphPages;
 @property(nonatomic) NSUInteger currentPage;
 @property(nonatomic,copy) NSString *failure;
 - (instancetype)initWithWhite:(GDAtlasPage *)white;
@@ -181,7 +194,7 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
 @implementation GDGlyphScene
 - (instancetype)initWithWhite:(GDAtlasPage *)white {
     self=[super init];
-    if(self) { self.instances=[NSMutableData data]; self.batches=[NSMutableData data]; self.pages=[NSMutableArray arrayWithObject:white]; }
+    if(self) { self.instances=[NSMutableData data]; self.batches=[NSMutableData data]; self.pages=[NSMutableArray arrayWithObject:white]; self.glyphPages=[NSMutableArray arrayWithObject:white]; }
     return self;
 }
 - (BOOL)append:(GDGPUInstance)instance page:(GDAtlasPage *)page {
@@ -191,10 +204,21 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
         if(found==NSNotFound) { [self.pages addObject:page]; found=self.pages.count-1; }
         self.currentPage=found;
     }
+    // Glyph pages are a fixed 16-slot texture table. Mixed monochrome/color
+    // text stays in painter order without creating one draw per font run.
+    NSUInteger texture=page.bitmapID?self.currentPage:0;
+    if(page && !page.bitmapID) {
+        NSUInteger slot=[self.glyphPages indexOfObjectIdenticalTo:page];
+        if(slot==NSNotFound) {
+            if(self.glyphPages.count>=GDAtlasMaxPages) { self.failure=@"Glyph texture table exceeds 16 pages"; return NO; }
+            [self.glyphPages addObject:page]; slot=self.glyphPages.count-1;
+        }
+        instance.padding[0]=(float)slot;
+    }
     NSUInteger count=self.batches.length/sizeof(GDBatch);
     GDBatch *last=count?(GDBatch *)self.batches.mutableBytes+count-1:NULL;
-    if(last && last->texture==self.currentPage) last->count++;
-    else { GDBatch batch={self.instances.length/sizeof(instance),1,self.currentPage}; [self.batches appendBytes:&batch length:sizeof(batch)]; }
+    if(last && last->texture==texture) last->count++;
+    else { GDBatch batch={self.instances.length/sizeof(instance),1,texture}; [self.batches appendBytes:&batch length:sizeof(batch)]; }
     [self.instances appendBytes:&instance length:sizeof(instance)]; return YES;
 }
 - (BOOL)appendLine:(CTLineRef)line command:(const GDCommand *)command atlas:(GDGlyphAtlas *)atlas scale:(CGFloat)scale {
@@ -219,7 +243,8 @@ typedef struct { NSUInteger start,count,texture; } GDBatch;
             if(!glyph.page) continue;
             GDGPUInstance instance=gd_gpu_instance(command);
             instance.bounds=(GDRect){command->bounds.x+1+positions[i].x+glyph.left/scale,baseline-positions[i].y+glyph.top/scale,glyph.width/scale,glyph.height/scale};
-            instance.uv=(GDRect){glyph.x/(float)GDAtlasEdge,glyph.y/(float)GDAtlasEdge,glyph.width/(float)GDAtlasEdge,glyph.height/(float)GDAtlasEdge};
+            instance.uv=(GDRect){glyph.x/(float)glyph.page.width,glyph.y/(float)glyph.page.height,glyph.width/(float)glyph.page.width,glyph.height/(float)glyph.page.height};
+            if(glyph.page.channels==4) instance.kind=6; // Native color glyph; RGB is intrinsic, alpha still follows the label.
             if(![self append:instance page:glyph.page]) return NO;
         }
     }

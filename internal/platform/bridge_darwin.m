@@ -442,8 +442,8 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
     uint64_t pages=atomic_load(&atlas.usage->pages);
     atomic_store(&metrics->glyph_rasterizations,atlas.rasterized); atomic_store(&metrics->glyph_cache_hits,atlas.hits);
     atomic_store(&metrics->glyph_cache_entries,atlas.glyphs.count); atomic_store(&metrics->glyph_atlas_pages,pages);
-    atomic_store(&metrics->glyph_atlas_bytes,pages*GDAtlasEdge*GDAtlasEdge);
-    atomic_store(&metrics->glyph_atlas_peak_bytes,atomic_load(&atlas.usage->peak)*GDAtlasEdge*GDAtlasEdge);
+    atomic_store(&metrics->glyph_atlas_bytes,atomic_load(&atlas.usage->bytes));
+    atomic_store(&metrics->glyph_atlas_peak_bytes,atomic_load(&atlas.usage->peakBytes));
     atomic_store(&metrics->glyph_atlas_epochs,atlas.epochs); atomic_store(&metrics->glyph_uploaded_bytes,atlas.uploadedBytes);
     atomic_store(&metrics->bitmap_cache_entries,gd_image_entries());atomic_store(&metrics->bitmap_cache_bytes,gd_image_bytes);
     atomic_store(&metrics->bitmap_uploads,atlas.bitmapUploads);atomic_store(&metrics->bitmap_uploaded_bytes,atlas.bitmapUploadedBytes);
@@ -522,10 +522,15 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
         [encoder setRenderPipelineState:self.pipeline];
         float viewport[2]={self.bounds.size.width,self.bounds.size.height};
         [encoder setVertexBytes:viewport length:sizeof(viewport) atIndex:1];
+        for(NSUInteger i=0;i<GDAtlasMaxPages;i++) {
+            GDAtlasPage *page=i<native.glyphPages.count?native.glyphPages[i]:native.glyphPages[0];
+            [encoder setFragmentTexture:page.texture atIndex:i];
+        }
+        [encoder setFragmentTexture:native.glyphPages[0].texture atIndex:GDAtlasMaxPages];
         for(NSUInteger i=0;i<batchCount;i++) {
             GDBatch batch=batches[i];
             [encoder setVertexBuffer:slot.instances offset:batch.start*sizeof(GDGPUInstance) atIndex:0];
-            [encoder setFragmentTexture:heldPages[batch.texture].texture atIndex:0];
+            if(batch.texture) [encoder setFragmentTexture:heldPages[batch.texture].texture atIndex:GDAtlasMaxPages];
             [encoder drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:6 instanceCount:batch.count];
         }
         [encoder endEncoding];

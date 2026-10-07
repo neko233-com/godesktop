@@ -6,6 +6,9 @@
    PE/system-DLL checks and native clipboard only on disposable CI runners.
 3. macOS Intel/ARM builds native code and verifies real Metal/AppKit submissions,
    pixels, resource lifetime and same-window recovery.
+   Color glyph acceptance compares intrinsic RGB with whole-line CoreText,
+   preserves ordinary tint, checks opacity/clipping/one mixed batch, forces RGBA
+   eviction and verifies color after recovery/restart at normal/1.5/2 density.
 4. gocode verifies the published module with GOWORK=off and its own native window.
    Delayed opener/scan acceptance holds worker latency, then uses real file bytes,
    actual Node VSIX and owned Windows typing/resize/Cancel/tab messages/GPU rows.

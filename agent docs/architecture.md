@@ -49,7 +49,8 @@
   128-entry / 64 MiB cache. Current-frame assets are pinned before any eviction;
   completed GPU frames own texture/staging lifetime. Device recovery retains
   native CPU assets and uploads to fresh device resources; Run shutdown clears
-  residency. Glyph R8 resources and bitmap RGBA accounting remain separate.
+  residency. Glyph R8/RGBA resources and user bitmap RGBA accounting remain
+  separate; color-glyphs.md records intrinsic RGB, batching and actual byte bounds.
 - Viewport offsets are application state; layout clamps them to content extents
   and uses one inherited clip for GPU commands and hit/focus targets. All visible
   explicit keys expose clipped geometry; passive keys do not enter focus order.

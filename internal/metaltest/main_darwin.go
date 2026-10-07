@@ -166,7 +166,11 @@ func validate(output string, requestedScale float32) error {
 		return err
 	}
 	fmt.Println(string(data))
-	return recoveryLimit(output, commands)
+	colorScene, err := validateColors(output)
+	if err != nil {
+		return err
+	}
+	return recoveryLimit(output, colorScene)
 }
 
 // The diagnostic requests resource recovery after real successful submissions;
@@ -189,6 +193,17 @@ func recoveryLimit(output string, commands []platform.Command) error {
 	if err == nil || !strings.Contains(err.Error(), "Metal GPU recovery limit exhausted") || stats.DeviceRecoveries != 3 || stats.Submitted < 36 || stats.Completed != stats.Submitted || stats.DroppedFrames != 0 || stats.InFlight != 0 {
 		return fmt.Errorf("Metal repeated recovery did not terminate and drain within its limit: error=%v renderer=%+v", err, stats)
 	}
+	limitedPixels, frame, snapshotErr := platform.MetalSnapshot()
+	if snapshotErr != nil {
+		return snapshotErr
+	}
+	limitedScene := sceneReport{Frame: frame, Scale: float32(limitedPixels.Bounds().Dx()) / 640, Renderer: stats}
+	if _, _, err := compareColors(limitedPixels, limitedScene); err != nil {
+		return fmt.Errorf("color glyphs after three Metal recoveries: %w", err)
+	}
+	if err = savePNG(filepath.Join(output, "color-glyphs-after-three-recoveries-gpu.png"), limitedPixels); err != nil {
+		return err
+	}
 	if err := os.Unsetenv("GODESKTOP_TEST_METAL_RECOVERY"); err != nil {
 		return err
 	}
@@ -204,6 +219,9 @@ func recoveryLimit(output string, commands []platform.Command) error {
 	}
 	if err = savePNG(filepath.Join(output, "restart-after-recovery-limit-gpu.png"), pixels); err != nil {
 		return err
+	}
+	if _, _, err := compareColors(pixels, restart); err != nil {
+		return fmt.Errorf("color glyphs after Run restart: %w", err)
 	}
 	report := struct {
 		Diagnostic bool                 `json:"diagnostic_injection_no_hardware_disconnect"`
