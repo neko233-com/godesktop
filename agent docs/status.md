@@ -1,23 +1,51 @@
 # Verified status
 
-2026-10-07 native extension-editor candidate: core v0.10.0 adds per-view identity,
+2026-10-07 native extension-editor release: core v0.10.0 adds per-view identity,
 shared documents, visible/column/range/selection events, optional native open/show/
 selection/reveal, disposal/reopened-instance guards and bounded ordered operations.
 Process-owned source/config files remove Windows' command-line length limit and
 clean up on exit; fixed reads reject GiB input before allocation. PositionFromRunes
 short queries no longer copy a whole line. Three-repeat actual Node/editor races
 pass, including >32 KiB configuration and zero-object 8 MiB short-position queries.
-Candidate gocode model and actual owned VSIX/UTF-16/CRLF/save/pixels plus opener/editor
+Released gocode model and actual owned VSIX/UTF-16/CRLF/save/pixels plus opener/editor
 regressions pass at 100%/150% density. A causal receipt fixes the newly observed
-delayed-hidden-open focus regression. See extension-editors.md for bounds and pending
-independent public-module/native/source/package/release/install evidence. Published
-core/app and installed versions remain v0.9.0 / v0.16.0; full parity stays active.
+delayed-hidden-open focus regression. See extension-editors.md for bounds and verified
+independent public-module/native/source/package/release/install evidence. Core
+v0.10.0 is published at immutable 8da1ad62268bc5ef1de58ec8703fa288fcd86250 after
+all five jobs in [CI 37567374583](https://github.com/neko233-com/godesktop/actions/runs/37567374583)
+pass. Public/installed app is v0.17.0/source aa9d838; full parity stays active.
 
 Full local Windows framework strict-cgo/three-repeat race/native/fuzz/PE/system-DLL/
 GUI checks pass; merged root coverage is 96.7% (92f1a84a47ba4c9981e97a56d6608e17).
 Additional three-repeat actual Node races prove two concurrent commands opening
 the same shared TextDocument carry distinct invocation-local receipts. Vet/lint/
-diff checks pass. Five-platform source CI and immutable v0.10.0 promotion are pending.
+diff checks pass. Exact five-platform source CI and immutable v0.10.0 promotion
+passed; gocode public-module/source/package/install promotion also passed.
+
+gocode v0.17.0 source aa9d838b8b59bd82d0ce0fe52ffb2225213708c9 passes all five jobs
+in [CI 37570381921](https://github.com/neko233-com/gocode/actions/runs/37570381921).
+Actual Node/native views share documents with independent selection/reveal and
+stable/disposed/reopened identities; hidden opens retain causal focus receipts.
+Public-module strict-cgo/three-repeat race/vet and console/GUI gates pass, including
+the 1024×728/96-DPI fixture (model 31.3%, search 81.4%). Windows 2025/installed GUI
+prove actual GiB independent pages, original-view close/survivor and source hash.
+Both Mac architectures pass normal/1.5/2. Windows 100%, ARM 200%, Intel 150% and
+installed 150% screenshots were inspected; Mac emoji remains a solid fallback.
+The caption-ink pixel wait is corrected; the first ARM 200% Undo timeout did not
+recur in two later source runs, with unchanged gates/key-history traces retained.
+
+[Publication 37571358158](https://github.com/neko233-com/gocode/actions/runs/37571358158)
+tags exact source and reuses tested packages. Seven metadata files at eb0de72 pass
+two policy tests. Real signed automatic/direct GitHub/manual ghfast.top bodies,
+all released native gates and actual old v0.4.0 GUI rollback pass. User v0.16→v0.17
+uses the stable 0.5.1 launcher; installed GUI/icons/Settings/groups/VSIX/actual GiB/
+highlighted terminal pass. Settings shows Up to date (0.17.0), auto route/updates
+and gopls ready. Configuration/PATH hashes and stable shortcuts remain unchanged.
+Official Copilot authenticated/LSP/SDK=true without a prompt. Child status.md
+records immutable hashes and the unfinished full API/rendering/layout/VS Code/
+GPUI/official Copilot VSIX scope.
+Child documentation/gitlink 33c2b6ad988b8c59b4128760f0fd432f8e5695c7 retains the
+exact tested source aa9d838 and metadata eb0de72; published tags remain immutable.
 
 2026-10-07 gocode v0.16.0 promotion: immutable application/package source
 38f7d15533361ffc0b7a6e0c9b74d0dc21839962 passed all five jobs in

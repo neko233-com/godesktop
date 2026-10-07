@@ -23,7 +23,10 @@ held toolbar click and scoped Cancel/Save. Large split acceptance streams actual
 first/tail pages, closes the original view, reads its survivor and hashes unchanged
 bytes; Windows 2025 includes a real GiB. Both Mac architectures run normal/1.5/2.
 Release bytes, installed GUI and exact CI/source evidence remain separate gates;
-child groups.md records the eight-group bound and incomplete VSIX/layout scope.
+child groups.md records the current nine-group bound and incomplete layout scope.
+Native VSIX acceptance adds hidden opens, actual visible/shared identities,
+independent UTF-16 selection/reveal, causal focus receipts, disposed/reopened
+references, native mouse focus/close and disk-acknowledged CRLF save.
 
 Workflow changes: scripts/validate-github-actions.ps1 (actionlint/ShellCheck),
 appropriate Go checks and git diff --check. Paid Copilot requests use isolated

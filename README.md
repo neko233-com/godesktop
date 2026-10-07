@@ -11,6 +11,8 @@
 
 v0.4 增加版本化编辑缓冲区、原生选区/剪贴板接口、LSP 和 VSIX 编辑/语言提供者。gocode 接入官方 Copilot Language Server 与 Go SDK。API 见 [编辑与 LSP](docs/editor-and-lsp.md)，完整 VS Code 目标的当前覆盖见 [gocode 功能矩阵](https://github.com/neko233-com/gocode/blob/main/docs/vscode-parity.md)。
 
+v0.10.0 将可选 VSIX 宿主接到真实原生编辑视图，支持共享文档、独立视图身份、可见编辑器/列/范围/选区事件和有序的原生打开、显示、选区、reveal。关闭重开与异步焦点回执保护旧引用；Node 的来源/配置文件有界并在退出时清理。已通过 Windows amd64、macOS Intel/ARM 和 Ubuntu 五个平台 CI，具体范围见 [扩展编辑器契约](agent%20docs/extension-editors.md)。
+
 gocode 的安装与更新通过独立的 [发布入口](https://github.com/neko233-com/gocode/releases)
 提供 Windows x64 MSI／ZIP 和 macOS Intel／ARM 包，并维护免费 CLI、winget manifest、
 Scoop bucket 和 Homebrew cask。原生更新页支持自动路由、GitHub 直连和手动镜像；

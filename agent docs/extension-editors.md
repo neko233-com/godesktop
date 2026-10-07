@@ -1,7 +1,7 @@
 # Native extension editor contract
 
-Candidate core v0.10.0 adds optional native editor-group synchronization. Published
-core remains v0.9.0 and installed gocode remains v0.16.0 until promotion. Reference:
+Published core v0.10.0 adds optional native editor-group synchronization. Installed
+gocode v0.17.0 independently imports the public module. Reference:
 the official VS Code ViewColumn/TextDocumentShowOptions/TextEditor/window APIs.
 This is an implemented subset, not full official extension-host/Copilot VSIX parity.
 
@@ -57,19 +57,25 @@ clamping/transaction/fuzz oracles retain coordinate semantics.
 
 Three-repeat actual Node/VSIX races cover shared-document/distinct-editor identity,
 hidden tabs, renumber/disposal, generation/coordinate rejection, reopened-instance
-receipts, >32 KiB configuration, cleanup and real GiB fallback rejection. Candidate
-gocode uses local go.work; model races cover real hidden reads, focus/closed-target
+receipts, >32 KiB configuration, cleanup and real GiB fallback rejection. Released
+gocode uses GOWORK=off/no replace; model races cover real hidden reads, focus/closed-target
 receipts, all nine columns, UTF-16 inactive selection/reveal and GiB rejection
 before indexing. Owned -groups-vsix-smoke installs a genuine temporary VSIX and
 verifies Node↔Go UI, actual focus/close controls/completed pixels, shared UTF-16/CRLF
 edits, independent reveal, events/disposal and actual acknowledged disk save with
 an untouched hidden file. It passes at local 150% and process 100% density.
 The new hidden open initially bypassed the old focus guard; causal receipts fix
-it and the unchanged native stale-open/editor gates pass. Full CI/promotion is pending.
+it and the unchanged native stale-open/editor gates pass. Core source
+8da1ad62268bc5ef1de58ec8703fa288fcd86250 passes all five jobs in CI 37567374583
+and is published immutably as v0.10.0. gocode source aa9d838 passes exact all-five
+CI 37570381921 and publication 37571358158; public v0.17.0 bytes, installed GUI/
+actual GiB/VSIX/terminal, update integrity/routes/real rollback and settings/PATH
+preservation pass. Windows 100%, Mac ARM 200%/Intel 150% and installed 150% PNGs
+were inspected. Child status.md records exact hashes and remaining scope.
 
 Full local strict-cgo/three-repeat race/native/fuzz/PE/system-DLL/GUI passes at
 96.7% merged root coverage; additional concurrent shared-document receipt tests
-and vet pass. Five-platform source CI and immutable module promotion remain pending.
+and vet pass. Five-platform exact-source CI and immutable module promotion pass.
 
 Full tabGroups/preview/pinning/docking, multicursor/IME/accessibility, options/
 decorations/snippets/undo merging, SCM/DAP, remote/webview providers and official
