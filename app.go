@@ -17,7 +17,8 @@ type WindowOptions struct {
 	Width, Height  float32
 	Background     Color
 	CustomTitlebar bool
-	// Input can consume keyboard, character, pointer and scroll events on the UI thread.
+	// Input receives keyboard, character, pointer, scroll and native window
+	// activation events on the UI thread. Return true to consume an input event.
 	Input func(*Context, InputEvent) bool
 	// CloseRequested runs on the UI thread for an OS/custom-titlebar close.
 	// Return false to keep the window open, for example while confirming unsaved
@@ -124,7 +125,7 @@ type application struct {
 
 func (a *application) handle(event platform.Event) {
 	if a.input != nil && event.Kind != platform.Draw {
-		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers & 15, Repeat: event.Modifiers&16 != 0, PointerX: event.PointerX, PointerY: event.PointerY}) {
+		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers & 15, Repeat: event.Modifiers&16 != 0, PointerX: event.PointerX, PointerY: event.PointerY, Focused: event.Kind == platform.WindowFocus && event.Key != 0}) {
 			a.context.Invalidate()
 			return
 		}

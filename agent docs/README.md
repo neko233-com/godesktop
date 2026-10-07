@@ -11,6 +11,8 @@ The current Windows-only menu input and deferred IME record is in
 [Windows menus](windows-menus.md).
 Native descendant clipping, GPU ABI/budgets and isolated replay acceptance are in
 [rounded clipping](rounded-clipping.md).
+Native window activation and independent capture cancellation are in
+[window focus](window-focus.md).
 
 A milestone is verified only after its real implementation and applicable
 platform checks pass. Distinguish model/transport tests, owned native-window

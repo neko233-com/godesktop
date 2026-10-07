@@ -15,10 +15,13 @@ const (
 	Scroll          InputKind = 7
 	PointerMoved    InputKind = 8
 	KeyReleased     InputKind = 9
-	ModifierShift             = 1
-	ModifierControl           = 2
-	ModifierAlt               = 4
-	ModifierCommand           = 8
+	// WindowFocusChanged reports native top-level activation. It is independent
+	// of keyboard focus within the window and pointer capture cancellation.
+	WindowFocusChanged InputKind = 10
+	ModifierShift                = 1
+	ModifierControl              = 2
+	ModifierAlt                  = 4
+	ModifierCommand              = 8
 )
 
 // InputEvent coordinates are in DIP. Character.Key is a Unicode scalar value;
@@ -31,6 +34,9 @@ type InputEvent struct {
 	Key, Modifiers     int
 	Repeat             bool
 	PointerX, PointerY float32
+	// Focused is meaningful only for WindowFocusChanged. Callbacks run on the
+	// native UI thread, including activation before the first rendered frame.
+	Focused bool
 }
 
 // RenderedFrames returns successful native submissions for smoke diagnostics.

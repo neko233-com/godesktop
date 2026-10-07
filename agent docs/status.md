@@ -1,5 +1,15 @@
 # Verified status
 
+2026-10-08 next Windows milestone implements native activation for application
+Auto Save (four modes) and File/Revert. WindowFocusChanged/Focused uses WM_ACTIVATE,
+keeping keyboard/capture cancellation distinct. Paired AppKit delegate behavior
+preserves the shared callback ABI. Three owned native focus repeats pass (6.880s).
+Independent full Windows script passes three shuffled strict-cgo/race repeats
+(root 145.240s), existing native/PE/console+GUI checks and fuzz, with merged root
+coverage 94.0%. Mapping/no-cgo/vet pass. Exact-source CI/public-module application
+validation/promotion remain pending. Public core v0.15.0 and installed gocode
+v0.22.0 remain the verified distribution. See window-focus.md and child autosave.md.
+
 2026-10-08 Windows workbench/rounding/keymaps promotion is public and installed
 as gocode v0.22.0/source 0b5966171e5e183e74a9fecbeccce391cd1cf229. All five
 exact-source app jobs in CI 37651719075 and tested-package publication

@@ -50,6 +50,7 @@ const (
 	PointerMove = 8
 	KeyDown     = 4
 	Cancel      = 5
+	WindowFocus = 10 // Existing C callback encodes active state in key (0 or 1).
 	Tab         = 9
 	Enter       = 13
 	Escape      = 27

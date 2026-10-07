@@ -126,6 +126,7 @@ API_AVAILABLE(macos(14.0))
 
 @interface GDDelegate : NSObject <NSApplicationDelegate,NSWindowDelegate>
 @property(nonatomic,strong) NSWindow *window;
+@property(nonatomic) BOOL focused;
 @end
 
 static GDView *active_view;
@@ -632,9 +633,15 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender { return NO; }
 - (NSApplicationTerminateReply)applicationShouldTerminate:(NSApplication *)sender { [self.window performClose:nil]; return NSTerminateCancel; }
 - (BOOL)windowShouldClose:(NSWindow *)sender { return gd_go_should_close()!=0; }
-- (void)windowDidResignKey:(NSNotification *)notification { gd_go_event(5,0,0,0,0); }
+- (void)windowDidResignKey:(NSNotification *)notification {
+    if(self.focused) { self.focused=NO; gd_go_event(10,0,0,0,0); }
+    gd_go_event(5,0,0,0,0);
+}
 - (void)windowDidDeminiaturize:(NSNotification *)notification { [active_view requestFrame]; }
-- (void)windowDidBecomeKey:(NSNotification *)notification { [active_view requestFrame]; }
+- (void)windowDidBecomeKey:(NSNotification *)notification {
+    if(!self.focused) { self.focused=YES; gd_go_event(10,0,0,1,0); }
+    [active_view requestFrame];
+}
 - (void)windowDidChangeBackingProperties:(NSNotification *)notification { [active_view requestFrame]; }
 - (void)windowWillClose:(NSNotification *)notification {
     [active_view stopFrameClock];

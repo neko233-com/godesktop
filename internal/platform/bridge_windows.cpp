@@ -53,6 +53,7 @@ int metric_for_dpi(int index,HWND window) {
 struct Window {
 	bool test_input_isolation=false;
 	unsigned replay_depth=0;
+    bool focused=false;
     HWND handle=nullptr;
     IDWriteFactory *text_factory=nullptr;
     gd_dx12::Capture capture;
@@ -266,7 +267,7 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         switch(replay.message) {
         case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:
         case WM_KEYDOWN:case WM_KEYUP:case WM_SYSKEYDOWN:case WM_SYSKEYUP:case WM_CHAR:
-        case WM_CANCELMODE:case WM_KILLFOCUS:case WM_CAPTURECHANGED:break;
+        case WM_CANCELMODE:case WM_KILLFOCUS:case WM_CAPTURECHANGED:case WM_ACTIVATE:break;
         default:return 0;
         }
         int previous=replay_modifiers; replay_modifiers=static_cast<int>(replay.modifiers&15);
@@ -279,7 +280,7 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         switch(message) {
         case WM_LBUTTONDOWN:case WM_LBUTTONUP:case WM_MOUSEMOVE:case WM_MOUSEWHEEL:case WM_MOUSEHWHEEL:
         case WM_KEYDOWN:case WM_KEYUP:case WM_SYSKEYDOWN:case WM_SYSKEYUP:case WM_CHAR:
-        case WM_CANCELMODE:case WM_KILLFOCUS:case WM_CAPTURECHANGED:return 0;
+        case WM_CANCELMODE:case WM_KILLFOCUS:case WM_CAPTURECHANGED:case WM_ACTIVATE:return 0;
         case WM_MOUSEACTIVATE:return MA_NOACTIVATEANDEAT;
         }
     }
@@ -347,6 +348,22 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         gd_go_event(5,0,0,0,0); return 0;
     case WM_KILLFOCUS:
         gd_go_event(5,0,0,0,0); return 0;
+    case WM_ACTIVATE: {
+        // WM_KILLFOCUS can be caused by an owned child control, and losing
+        // mouse capture is unrelated to top-level activation. Preserve those
+        // existing cancellation events without treating them as window blur.
+        const WORD activation=LOWORD(wparam);
+        if(activation==WA_INACTIVE || activation==WA_ACTIVE || activation==WA_CLICKACTIVE) {
+            const bool focused=activation!=WA_INACTIVE;
+            if(window->focused!=focused) {
+                window->focused=focused;
+                gd_go_event(10,0,0,focused?1:0,0);
+            }
+        }
+        // Preserve DefWindowProc's ordinary keyboard-focus behavior on active
+        // non-minimized windows. The input callback does not replace USER32.
+        break;
+    }
     case WM_SYSKEYDOWN:
         if(wparam==VK_F4 && (lparam&(1LL<<29))) break; // preserve guarded Alt+F4
         gd_go_event(4,0,0,static_cast<int>(wparam),input_modifiers()|((lparam&(1LL<<30))?16:0)); return 0;
