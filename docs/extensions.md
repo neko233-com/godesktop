@@ -17,6 +17,13 @@
 | 类型 | Uri、Position、Range、Selection、TextEdit、WorkspaceEdit、CompletionItem/List、Hover、MarkdownString、Location、Diagnostic、取消令牌、Disposable/EventEmitter |
 | 持久状态 | 提供 storageRoot 后，globalState/workspaceState 跨宿主启动保存；按扩展和工作区隔离 |
 
+候选原生桥接支持独立视图身份、`ViewColumn` 1–9/Active/Beside、隐藏打开、
+`showTextDocument` 列/保留焦点/选区选项、`revealRange` 和可见/列/范围/选区事件。
+客户端须提供 editorGroups/openDocument 能力，旧客户端的缺失选项明确报错。
+精确协议、临时进程文件清理、实例/异步焦点保护与验证状态见
+[扩展编辑器契约](../agent%20docs/extension-editors.md)。预览标签、tabGroups、
+多光标/snippet、undo-stop 合并和完整配置/装饰仍未实现。
+
 ## Go 应用接入
 
 先用 `Host.Register` 注册 `workspace/applyEdit`、`workspace/saveDocument`、`window/showTextDocument`、`window/setSelection`，处理器通过 `Context.Dispatch` 修改原生状态。初始化参数包含 `documents`、`active`、`storageRoot` 和 `clientCapabilities`；gocode 的 [接入代码](https://github.com/neko233-com/gocode/blob/main/extensions_ui.go) 提供完整示例。

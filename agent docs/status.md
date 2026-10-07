@@ -1,5 +1,24 @@
 # Verified status
 
+2026-10-07 native extension-editor candidate: core v0.10.0 adds per-view identity,
+shared documents, visible/column/range/selection events, optional native open/show/
+selection/reveal, disposal/reopened-instance guards and bounded ordered operations.
+Process-owned source/config files remove Windows' command-line length limit and
+clean up on exit; fixed reads reject GiB input before allocation. PositionFromRunes
+short queries no longer copy a whole line. Three-repeat actual Node/editor races
+pass, including >32 KiB configuration and zero-object 8 MiB short-position queries.
+Candidate gocode model and actual owned VSIX/UTF-16/CRLF/save/pixels plus opener/editor
+regressions pass at 100%/150% density. A causal receipt fixes the newly observed
+delayed-hidden-open focus regression. See extension-editors.md for bounds and pending
+independent public-module/native/source/package/release/install evidence. Published
+core/app and installed versions remain v0.9.0 / v0.16.0; full parity stays active.
+
+Full local Windows framework strict-cgo/three-repeat race/native/fuzz/PE/system-DLL/
+GUI checks pass; merged root coverage is 96.7% (92f1a84a47ba4c9981e97a56d6608e17).
+Additional three-repeat actual Node races prove two concurrent commands opening
+the same shared TextDocument carry distinct invocation-local receipts. Vet/lint/
+diff checks pass. Five-platform source CI and immutable v0.10.0 promotion are pending.
+
 2026-10-07 gocode v0.16.0 promotion: immutable application/package source
 38f7d15533361ffc0b7a6e0c9b74d0dc21839962 passed all five jobs in
 [CI 37561829837](https://github.com/neko233-com/gocode/actions/runs/37561829837),

@@ -15,3 +15,6 @@ Current user objective includes GB-scale browsing, generic LSP, native workbench
 latest VS Code source reference, free installers/CLI distribution, automatic
 updates with reachability/routing controls, local installation and maintained
 agent documentation. Full production/VS Code parity remains an active objective.
+
+Native VSIX editor identity/visibility/columns, runtime/receipt bounds and evidence
+are in [extension editors](extension-editors.md).

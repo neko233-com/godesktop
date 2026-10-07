@@ -168,7 +168,12 @@ func (b *Buffer) SetSelection(s Selection) error {
 func (b *Buffer) PositionFromRunes(line, column int) Position {
 	line = max(0, min(line, len(b.lines)-1))
 	character := 0
-	for _, r := range []rune(b.lines[line])[:max(0, min(column, utf8.RuneCountInString(b.lines[line])))] {
+	remaining := max(0, column)
+	for _, r := range b.lines[line] {
+		if remaining == 0 {
+			break
+		}
+		remaining--
 		character++
 		if r > 0xffff {
 			character++

@@ -5,6 +5,7 @@ import (
 	_ "embed"
 	"encoding/json"
 	"errors"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"sync/atomic"
@@ -27,10 +28,11 @@ type Event struct {
 // a security sandbox. Drain Events continuously; edit requests use acknowledged
 // RPC handlers rather than this optional notification stream.
 type Host struct {
-	Events  chan Event
-	rpc     *lsp.Client
-	done    chan struct{}
-	dropped atomic.Uint64
+	Events      chan Event
+	rpc         *lsp.Client
+	done        chan struct{}
+	dropped     atomic.Uint64
+	runtimeRoot string
 }
 
 func Start(ctx context.Context, workspace string, installed []Extension) (*Host, error) {
@@ -42,17 +44,36 @@ func Start(ctx context.Context, workspace string, installed []Extension) (*Host,
 	if err != nil {
 		return nil, err
 	}
-	config, _ := json.Marshal(struct {
+	config, err := json.Marshal(struct {
 		Workspace  string      `json:"workspace"`
 		Extensions []Extension `json:"extensions"`
 	}{workspace, installed})
-	client, err := lsp.Start(ctx, lsp.Command{Executable: node, Arguments: []string{"-e", hostSource, string(config)}, Directory: workspace})
 	if err != nil {
 		return nil, err
 	}
-	h := &Host{Events: make(chan Event, 256), rpc: client, done: make(chan struct{})}
+	// Files avoid Windows' 32 KiB command-line limit for source and manifests.
+	// Each process owns an isolated temporary runtime; no credentials are stored.
+	if len(config) > lsp.MaxMessageBytes {
+		return nil, errors.New("extension configuration exceeds 16 MiB")
+	}
+	runtimeRoot, err := os.MkdirTemp("", "godesktop-extension-host-")
+	if err != nil {
+		return nil, err
+	}
+	sourcePath, configPath := filepath.Join(runtimeRoot, "host.cjs"), filepath.Join(runtimeRoot, "config.json")
+	if err := errors.Join(os.WriteFile(sourcePath, []byte(hostSource), 0600), os.WriteFile(configPath, config, 0600)); err != nil {
+		os.RemoveAll(runtimeRoot)
+		return nil, err
+	}
+	client, err := lsp.Start(ctx, lsp.Command{Executable: node, Arguments: []string{sourcePath, configPath}, Directory: workspace})
+	if err != nil {
+		os.RemoveAll(runtimeRoot)
+		return nil, err
+	}
+	h := &Host{Events: make(chan Event, 256), rpc: client, done: make(chan struct{}), runtimeRoot: runtimeRoot}
 	go func() {
 		defer close(h.done)
+		defer os.RemoveAll(runtimeRoot)
 		defer close(h.Events)
 		for notification := range client.Notifications() {
 			if notification.Method != "godesktop/event" {
