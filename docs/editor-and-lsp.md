@@ -27,6 +27,13 @@ change, err := buffer.Apply([]editor.Edit{{
 身份、递增版本、保存点和撤销／重做历史。返回的协议变更独立复制，预览快照保持不可变。
 源文件大小、整批内存与后台任务数量上限由应用设置。磁盘保存仍是独立的后台步骤。
 
+v0.9.0 的 `Buffer.HistorySnapshot()` 在 UI 线程按值冻结撤销/重做栈顶及不可变
+源文本。后台 `PrepareUndo(ctx)` / `PrepareRedo(ctx)` 准备真实历史栈转换；UI
+通过同一 `CanCommit` / `CommitPrepared` API 完成整批预检和提交。历史计划还
+核对修订与栈深度/栈顶；返回 `ErrHistoryEmpty` 表示该方向没有记录。普通 Snapshot
+不会额外保留历史字符串。`UndoRevision` / `RedoRevision` 是同一 Buffer 内的记录
+标识，应用必须同时检查文档身份。提交保持原保存点和后续修订序列，不自动写回磁盘。
+
 `Stack` 按绘制顺序叠加元素，光标和选区不会挤开文本。`MeasureText` 使用平台整形引擎测量文本；`Context.ElementBounds(key)` 返回上一轮有效布局中交互元素的 DIP 边界。输入携带修饰键和独立 Repeat 标记；重复按键用于编辑，普通按钮不会因长按 Enter 连续执行。
 
 `TextAdvance(text, size, font)` 返回不含布局留白或像素取整的原生文字步进，适合终端等等宽网格和光标定位。macOS `MeasureText` 包含标签留白，不能用它的单字符宽度乘列数。两者均在 UI 线程调用，字体/字号应与绘制一致；没有原生后端时仅使用模型估算值。

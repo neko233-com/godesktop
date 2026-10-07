@@ -1,5 +1,46 @@
 # Verified status
 
+2026-10-07 gocode v0.15.0 promotion: immutable application/package source
+9ba89081f8aea463853c58a6c0955a9a91c950af passed all five jobs in
+[CI 37557043933](https://github.com/neko233-com/gocode/actions/runs/37557043933),
+independently importing public core v0.9.0/cb8b077 with GOWORK=off/no replace.
+Native grouped workspace Undo/Redo prepares real history transitions on a bounded
+dedicated worker. Complete identity/version/caret/stack/expiry preflight precedes
+all buffer commits and callbacks; confirmation supports All/current-file/Cancel.
+Newer/closed/reopened members split safely; undo never writes disk. Three-repeat
+race, full local public-module strict-cgo/vet/console/GUI and all-five native/
+protocol/installer gates pass. The first Windows 100% glyph predicate was corrected
+after exact owned reproduction; a missing-label overlay still fails with zero ink.
+Final Windows 100%, Mac ARM 200%, Intel 150% and installed 150% PNGs were reviewed.
+Actual Windows 2025 GiB race search: 32.7752619 s / 748,960 new Go allocation bytes /
+2,147,492,044 I/O bytes; this is a scoped measurement. Native GiB and existing
+VSIX/recovered-gopls/watch/opener/terminal/search/tabs/MSI/package checks pass.
+
+[Publication 37558228545](https://github.com/neko233-com/gocode/actions/runs/37558228545)
+reuses tested packages and tags exact source 9ba8908. Seven metadata files at
+35bc1bd pass two policy tests. Real signed automatic/direct/manual ghfast.top
+archive bodies, released native gates and actual v0.4.0 native rollback pass.
+User update v0.14→v0.15 selects source 9ba8908; baseline MSI/launcher stays 0.5.1.
+Installed GUI/icons/Settings/grouped history/search/tabs/highlighted terminal and
+official ConPTY pass; Auto=true/mode=auto, both mirrors, stable shortcuts and
+normalized user PATH are retained. Actual Settings shows Up to date (0.15.0) and
+gopls ready. Copilot authenticated/LSP/SDK=true, networkPromptSent=false. The first
+terminal fixture omitted GPU readback opt-in; corrected invocation passes. Public
+child gitlink advances to evidence 3afdc1d0b262d9f563936ffdbe216c9d341a6948.
+Exact hashes, limits, source and remaining closed-resource/provider history and
+production/GPUI/VS Code/official Copilot VSIX gaps are in child history.md/status.md.
+
+2026-10-07 framework v0.9.0 promotion: immutable source
+cb8b0777c87c4abe0d6f75b5bbf014069a42874b passed all five jobs in
+[CI 37555224866](https://github.com/neko233-com/godesktop/actions/runs/37555224866)
+(Windows 2022/2025 amd64, Mac Intel/ARM and Ubuntu), and the release tag resolves
+to that source. HistorySnapshot/PrepareUndo/PrepareRedo preserve real stack/save/
+revision semantics and reject stale ownership/version/caret/history. Full local
+strict-cgo/race/native/fuzz/PE/GUI passes; root coverage 96.7%. Actual local 8 MiB
+history commit allocated 224 new Go bytes. gocode now independently downloads
+public v0.9.0 with GOWORK=off/no replace; source/package/native/install promotion
+for grouped workspace history remains pending. Installed app is still v0.14.0.
+
 2026-10-07 prepared history candidate: HistorySnapshot freezes top stack entries
 by value, independently of ordinary Snapshot. PrepareUndo/PrepareRedo use private
 worker buffers; CommitPrepared preserves saved revision, original stack entries,

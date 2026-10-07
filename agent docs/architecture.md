@@ -8,9 +8,9 @@
   Immutable snapshots prepare cancellable transactions on workers. UI bulk edits
   preflight original buffer identity/version/selection before adopting prepared
   lines; saved revision and existing bounded undo/redo history are retained.
-	HistorySnapshot copies only the top undo/redo values and immutable source;
-	workers prepare real stack transitions. Commit revalidates identity/version/
-	selection/revision/stack metadata, then adopts lines without copying source.
+  HistorySnapshot copies only the top undo/redo values and immutable source;
+  workers prepare real stack transitions. Commit revalidates identity/version/
+  selection/revision/stack metadata, then adopts lines without copying source.
   File-backed large-document browsing must avoid loading/duplicating the full file.
   Buffer.Reload adopts a saved disk revision with monotonic versions, immutable
   snapshots and bounded undo history, including LF/CRLF transitions. The caller
@@ -37,7 +37,9 @@
   buffer states, runs open hooks before final preflight, then commits all buffers
   without interleaved callbacks. Per-file background saves follow, retaining dirty
   undoable text on late conflicts. Captured click identity protects the reviewed
-  plan. This does not provide filesystem-wide atomicity or grouped global undo.
+  plan. Bounded metadata groups use a separate worker to prepare genuine global
+  Undo/Redo, then preflight and commit all buffers before callbacks. This does not
+  provide filesystem-wide atomicity or history across closed resources.
 - Immutable Go bitmaps transfer premultiplied RGBA copies to a UI-owned native
   128-entry / 64 MiB cache. Current-frame assets are pinned before any eviction;
   completed GPU frames own texture/staging lifetime. Device recovery retains
