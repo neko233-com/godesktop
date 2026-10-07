@@ -1,5 +1,16 @@
 # Verified status
 
+2026-10-07 prepared history candidate: HistorySnapshot freezes top stack entries
+by value, independently of ordinary Snapshot. PrepareUndo/PrepareRedo use private
+worker buffers; CommitPrepared preserves saved revision, original stack entries,
+monotonic version and the next revision sequence. Direct history/CRLF/UTF-16/save/
+branch oracles, empty/stale identity/version/caret and frozen-history race tests
+pass locally. Actual 8 MiB history commit allocates 224 new Go bytes in this scoped
+run (32 KiB guard). Full local Windows strict-cgo/race/vet/native/fuzz/PE/GUI pass;
+merged root coverage remains 96.7%. Five-platform public CI is pending. gocode global
+workspace history is a candidate using an ignored local modfile; published/user
+versions remain core v0.8.0 / app v0.14.0 until promotion is verified.
+
 2026-10-07 gocode v0.14.0 promotion: immutable source/package
 de2a98fb0a041cd88c0ec5ac658bb2fd41a62f9b passed all five jobs in
 [CI 37552538844](https://github.com/neko233-com/gocode/actions/runs/37552538844),

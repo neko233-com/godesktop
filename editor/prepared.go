@@ -19,6 +19,8 @@ type PreparedEdit struct {
 	change        ChangeEvent
 	undo          history
 	noop          bool
+	historyKind   uint8
+	historySource HistorySnapshot
 }
 
 // Prepare validates and computes a whole transaction without changing its source
@@ -60,7 +62,10 @@ func (p *PreparedEdit) Snapshot() Snapshot { return p.after }
 // same text/version is a different identity. Moving the caret invalidates a plan
 // whose prepared selection was based on the old caret. Call only on the UI thread.
 func (b *Buffer) CanCommit(p *PreparedEdit) bool {
-	return p != nil && p.before.identity != nil && len(p.after.lines) > 0 && p.before.identity == b.identity && p.before.Version == b.version && p.before.Selection == b.selection
+	if p == nil || p.before.identity == nil || len(p.after.lines) == 0 || p.before.identity != b.identity || p.before.Version != b.version || p.before.Selection != b.selection {
+		return false
+	}
+	return p.historyKind == 0 || p.historySource.matches(b)
 }
 
 // CommitPrepared adopts precomputed lines while keeping this buffer's identity,
@@ -75,6 +80,24 @@ func (b *Buffer) CommitPrepared(p *PreparedEdit) (ChangeEvent, error) {
 		return ChangeEvent{Version: b.version}, nil
 	}
 	b.lines, b.eol, b.selection = p.after.lines, p.after.EOL, p.after.Selection
+	if p.historyKind != 0 {
+		item := p.undo
+		if p.historyKind == 1 {
+			b.undo[len(b.undo)-1] = history{}
+			b.undo = b.undo[:len(b.undo)-1]
+			b.historyBytes -= len(item.removed) + len(item.inserted)
+			b.redo = append(b.redo, item)
+			b.revision = item.beforeRevision
+		} else {
+			b.redo[len(b.redo)-1] = history{}
+			b.redo = b.redo[:len(b.redo)-1]
+			b.undo = append(b.undo, item)
+			b.historyBytes += len(item.removed) + len(item.inserted)
+			b.revision = item.afterRevision
+		}
+		b.version++
+		return ChangeEvent{Version: b.version, Changes: slices.Clone(p.change.Changes)}, nil
+	}
 	b.nextRevision++
 	undo := p.undo
 	undo.beforeRevision, undo.afterRevision = b.revision, b.nextRevision

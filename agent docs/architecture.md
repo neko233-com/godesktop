@@ -8,6 +8,9 @@
   Immutable snapshots prepare cancellable transactions on workers. UI bulk edits
   preflight original buffer identity/version/selection before adopting prepared
   lines; saved revision and existing bounded undo/redo history are retained.
+	HistorySnapshot copies only the top undo/redo values and immutable source;
+	workers prepare real stack transitions. Commit revalidates identity/version/
+	selection/revision/stack metadata, then adopts lines without copying source.
   File-backed large-document browsing must avoid loading/duplicating the full file.
   Buffer.Reload adopts a saved disk revision with monotonic versions, immutable
   snapshots and bounded undo history, including LF/CRLF transitions. The caller
