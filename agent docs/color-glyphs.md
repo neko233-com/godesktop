@@ -52,6 +52,23 @@ dispatch and level-zero sampling, retaining one mixed painter-order batch.
 Its exact Intel/ARM CI and diagnosis are pending; driver causality is unproven.
 Public core promotion, independent gocode source CI and installed release
 verification remain pending.
+
+Final source 6706e59bd83b07705eed1e2d378dc954dd2a2970 passes all five jobs in
+[CI 37574802922](https://github.com/neko233-com/godesktop/actions/runs/37574802922),
+including both Mac architectures' full normal/1.5/2 pixel, eviction and recovery
+gates. Its [Intel diagnosis 37574803095](https://github.com/neko233-com/godesktop/actions/runs/37574803095)
+passes ordinary/readback close and all pixel checks without changed deadlines.
+The actual Intel normal PNG was inspected: faces/details, flag, skin tone/ZWJ,
+heart, half opacity, red ordinary text and clipping are correct. Opaque reference
+color matching is 100%, tint difference zero and opacity error one channel unit.
+The combined static-slot/explicit-LOD change resolves the observed regression;
+the individual driver/compiler cause has not been isolated. Immutable public
+v0.11.0 tags this exact source. App v0.18.0 public-module/native/release/install
+promotion remains pending; v0.17.0 remains installed/public.
+
+Glyph byte counters measure one atlas representation's actual page sizes;
+CPU mirrors, GPU textures and per-submission staging also have their own storage
+and lifetimes. They are not total process resident memory measurements.
 Color glyph support does not establish general editor grapheme/bidi/IME,
 full VS Code UI parity or official Copilot VSIX compatibility.
 Windows currently retains DirectWrite monochrome glyph coverage; native Windows

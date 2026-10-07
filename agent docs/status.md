@@ -1,5 +1,18 @@
 # Verified status
 
+2026-10-07 public core v0.11.0: immutable source
+6706e59bd83b07705eed1e2d378dc954dd2a2970 passes all five jobs in
+[CI 37574802922](https://github.com/neko233-com/godesktop/actions/runs/37574802922)
+and Intel diagnosis 37574803095. Native color, mixed one-draw batching, opacity,
+clip, bounded RGBA eviction and recovery/restart pass on both Mac architectures
+at normal/1.5/2. Actual Intel normal and ARM normal/200% PNGs were inspected.
+Static texture-slot/explicit-LOD sampling resolves the earlier Intel regression
+without relaxed close/readiness/drain gates; individual driver cause is unisolated.
+Local strict-cgo/three-repeat race/vet, Windows native close, actionlint/ShellCheck
+and diff checks pass. Workflow lint now includes the manual diagnostic workflow.
+Independent gocode v0.18.0 public dependency/native/release/install is pending;
+public/installed app remains v0.17.0. See color-glyphs.md for scope/evidence.
+
 2026-10-07 candidate color-glyph fix: actual Mac v0.17.0 screenshots exposed
 alpha-only emoji tinting. Metal now retains intrinsic premultiplied RGBA for
 color fonts, batches mixed glyph pages in one draw and counts actual storage

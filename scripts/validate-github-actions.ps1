@@ -10,7 +10,11 @@ if (-not (Get-Command shellcheck -ErrorAction SilentlyContinue)) {
 $taskRoot = Split-Path -Parent $PSScriptRoot
 Push-Location -LiteralPath $taskRoot
 try {
-    actionlint .github/workflows/ci.yml
+    $taskWorkflows = @(Get-ChildItem -LiteralPath '.github/workflows' -File |
+        Where-Object { $_.Extension -in @('.yml', '.yaml') } |
+        ForEach-Object { $_.FullName })
+    if ($taskWorkflows.Count -eq 0) { throw 'No GitHub Actions workflows found.' }
+    actionlint @taskWorkflows
     if ($LASTEXITCODE -ne 0) {
         throw "actionlint failed with exit code $LASTEXITCODE"
     }
