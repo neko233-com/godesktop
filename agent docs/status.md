@@ -1,5 +1,37 @@
 # Verified status
 
+2026-10-08 Windows workbench/rounding/keymaps promotion is public and installed
+as gocode v0.22.0/source 0b5966171e5e183e74a9fecbeccce391cd1cf229. All five
+exact-source app jobs in CI 37651719075 and tested-package publication
+37654475129 pass, including Windows 2022/2025 default-three strict-cgo/race,
+actual shell/native keymap/idempotence/VSIX/Git/services/MSI acceptance and GiB
+on Windows 2025. The application independently verifies public core v0.15.0
+with GOWORK=off/no replace before advancing this gitlink. Seven distribution
+metadata files at 787be53 pass both Python policies; child evidence is pinned
+at 7b347b9712ac736290b77e39a0d809d5c2656346. No published tags are moved.
+
+Signed automatic and manual gh-proxy.com full Windows archives, all released
+native gates and actual v0.4.0/cfcd351 GUI/VSIX rollback pass. Direct GitHub
+archive download checks fail twice on the current network and are not claimed.
+The user's original stable 0.5.1 launcher selects exact v0.22.0/0b596617 via
+automatic mirror routing. Installed File/Settings/icons/two keymaps/groups/real
+VSIX, actual 1,073,741,824-byte shared split with identical SHA256, highlighted
+shell/VSIX terminals and real Git index/HEAD controls pass. Actual 150% installed
+File/Settings GPU pixels were inspected. Update config/PATH hashes and both
+stable Desktop/Start Menu shortcut targets/icons match baseline. Official
+Copilot SDK/LSP are connected/authenticated; networkPromptSent=false.
+
+The core fixes true rounded descendant masks and hit geometry, beyond painting
+a rounded parent background. Full VS Code layout/API/debug/refactoring and
+official Copilot VSIX parity remain active. Microsoft's official Marketplace
+requires separate service authorization; default Open VSX and native authorized
+Gallery protocol are the implemented scope. One owned invalid manual diagnostic
+fixture C:/Users/14170/AppData/Local/Temp/gocode-scm-native-4191533845 remains:
+automatic approval review rejected checked literal deletion ('blocked by policy',
+no further reason). Isolated repeated tests clean their owned scratch roots.
+See child status.md/windows-workbench.md/keymaps-and-idempotence.md/
+modern-ui-and-gallery.md for exact evidence and limitations.
+
 2026-10-07 core v0.15.0 is public at immutable
 4d62ed73a5513d8cbc281e05fe9ea43a74fd61ea. All five exact-source jobs pass in
 CI 37642213032: both Windows amd64, Mac Intel/ARM and Ubuntu. Windows includes
@@ -8,7 +40,7 @@ fuzzing, pinned shader, bitmap/color/device recovery and default/WARP native
 instancing/idle/wake/ownership. Metal ABI/native regressions pass on both Macs.
 Publication retains the 16MiB scene cap and immutable v0.15 tag; the earlier
 896161a stale-stride failure is retained below. Independent public-module gocode
-v0.22.0 validation is underway; installed gocode remains verified v0.21.0.
+v0.22.0 validation/publication/installation now passes as recorded above.
 
 2026-10-07 v0.15 candidate adds actual descendant rounded clipping (shapes,
 glyphs/intrinsic emoji/bitmaps), matching rounded hit areas and hover fills for
