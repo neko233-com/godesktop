@@ -58,6 +58,7 @@ struct Window {
     std::map<uint64_t,std::shared_ptr<gd_dx12::AtlasPage>> bitmaps;
     GDColor background{};
     bool custom_titlebar=false;
+	bool normal_capture_release=false;
     unsigned high_surrogate=0;
     bool readback=false;
     bool hardwareOnly=false,warpOnly=false,debug=false;
@@ -303,18 +304,28 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
     case WM_LBUTTONUP:
         window->ensure_input_layout();
         gd_go_event(3,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,input_modifiers());
-        ReleaseCapture(); return 0;
+        // A normal release is already acknowledged by PointerReleased. Its
+        // synchronous WM_CAPTURECHANGED must not cancel a newly opened menu.
+        if(GetCapture()==handle) { window->normal_capture_release=true; ReleaseCapture(); window->normal_capture_release=false; } return 0;
     case WM_MOUSEMOVE:
-        if(wparam&MK_LBUTTON) { window->ensure_input_layout(); gd_go_event(8,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,input_modifiers()); }
+        window->ensure_input_layout(); gd_go_event(8,GET_X_LPARAM(lparam)*96.0f/dpi(handle),GET_Y_LPARAM(lparam)*96.0f/dpi(handle),0,input_modifiers());
         return 0;
-    case WM_CAPTURECHANGED: case WM_KILLFOCUS:
+    case WM_CAPTURECHANGED:
+        if(window->normal_capture_release) return 0;
         gd_go_event(5,0,0,0,0); return 0;
+    case WM_KILLFOCUS:
+        gd_go_event(5,0,0,0,0); return 0;
+    case WM_SYSKEYDOWN:
+        if(wparam==VK_F4 && (lparam&(1LL<<29))) break; // preserve guarded Alt+F4
+        gd_go_event(4,0,0,static_cast<int>(wparam),input_modifiers()|((lparam&(1LL<<30))?16:0)); return 0;
     case WM_KEYDOWN:
         gd_go_event(4,0,0,static_cast<int>(wparam),input_modifiers()|((lparam&(1LL<<30))?16:0));
         return 0;
     case WM_KEYUP:
+    case WM_SYSKEYUP:
         gd_go_event(9,0,0,static_cast<int>(wparam),input_modifiers());
         return 0;
+    case WM_SYSCHAR: return 0; // custom menubar owns Alt mnemonics, no system beep
     case WM_CHAR: {
         unsigned value=static_cast<unsigned>(wparam);
         if(value>=0xd800 && value<=0xdbff) { window->high_surrogate=value; return 0; }

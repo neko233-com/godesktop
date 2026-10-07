@@ -140,7 +140,7 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 			f.recordBounds(key, clip)
 		}
 		f.targets = append(f.targets, target{key, clip, e.click})
-		if key == f.focus {
+		if key == f.focus && e.focusRing {
 			f.rectangle(rect{bounds.x, bounds.y, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
 			f.rectangle(rect{bounds.x, bounds.y + bounds.h - 2, bounds.w, 2}, clip, RGB(0x93c5fd), 0)
 		}

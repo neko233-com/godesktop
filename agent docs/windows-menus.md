@@ -1,0 +1,29 @@
+# Windows menu input contract
+
+The user's 2026-10-07 correction prioritizes Windows workbench fidelity and actual
+File/extension interactions. Mac development and the unpublished IME prototype
+are deferred. The prototype's exact tracked patch and two new source files are
+preserved under ignored `.cache/ime-wip-20261007/`; it is not published or active.
+
+The previous Windows backend emitted InputCancelled synchronously from every
+ordinary ReleaseCapture after PointerReleased. A click could open a popup and
+immediately cancel it. The backend now suppresses only that known synchronous
+normal release; stolen capture and actual focus loss retain cancellation.
+WM_MOUSEMOVE reports unpressed hover as well as dragging. WM_SYSKEYDOWN/UP reach
+the input handler, while Alt+F4 still follows DefWindowProc/WM_CLOSE and the
+application's existing dirty-close guard. Custom Alt mnemonic characters do not
+produce a system beep. These are Windows changes; no Mac input parity is claimed.
+
+Element.FocusRing(false) lets a custom workbench supply its own focus/selection
+style. It retains keyboard focus and pointer capture. Default elements keep the
+old indicator. The application uses it for source-based menu/button styling.
+
+TestNativeWin32MenuEvents builds a race-enabled owned native process. Actual HWND
+press/release activates a button without cancellation; an unpressed WM_MOUSEMOVE,
+WM_SYSKEYDOWN and a separate WM_CAPTURECHANGED each reach their required event.
+Three repeats pass locally. Complete GOWORK=off Windows strict-cgo, shuffled
+three-repeat race tests pass (root 132.003 seconds), including native D3D12,
+input/close, bitmap/text/editor/Node/process checks. The application candidate
+also passes real native shell File Open/Save As/cancel and UTF-16/emoji disk saves
+against this checkout. That workspace-linked result is not independent public
+module proof. Exact source CI and immutable core v0.14.0 remain pending.

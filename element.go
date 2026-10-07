@@ -22,6 +22,7 @@ type Element struct {
 	key                                                 string
 	fontFamily, icon                                    string
 	flexBasisZero, draggable                            bool
+	focusRing                                           bool
 	separatePadding                                     bool
 	paddingX, paddingY                                  float32
 	click                                               func(*Context)
@@ -32,7 +33,7 @@ type Element struct {
 }
 
 func element(kind elementKind) *Element {
-	return &Element{kind: kind, fontSize: 16, foreground: RGB(0xe5e7eb)}
+	return &Element{kind: kind, fontSize: 16, foreground: RGB(0xe5e7eb), focusRing: true}
 }
 
 // Column lays out children vertically. Nil children are ignored.
@@ -105,6 +106,11 @@ func (e *Element) Flex(weight float32) *Element {
 
 // OnClick makes an element focusable and clickable, using the same button semantics.
 func (e *Element) OnClick(fn func(*Context)) *Element { e.click = fn; return e }
+
+// FocusRing controls the default focus indicator. Custom workbenches can draw
+// their own keyboard focus/selection styles without a second generic outline.
+// Keyboard focus and click semantics remain available when it is false.
+func (e *Element) FocusRing(show bool) *Element { e.focusRing = show; return e }
 
 // Draggable marks an otherwise non-interactive custom titlebar region.
 func (e *Element) Draggable() *Element        { e.draggable = true; return e }

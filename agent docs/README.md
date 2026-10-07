@@ -7,6 +7,9 @@ Read [status](status.md), [architecture](architecture.md) and [validation](valid
 before changes. gocode owns the product, large-file, LSP, packaging/update and
 distribution contracts in its own `agent docs/` folder. Keep both records aligned.
 
+The current Windows-only menu input and deferred IME record is in
+[Windows menus](windows-menus.md).
+
 A milestone is verified only after its real implementation and applicable
 platform checks pass. Distinguish model/transport tests, owned native-window
 behavior, GPU pixels, real upstream service requests and installed-app checks.

@@ -1,5 +1,16 @@
 # Verified status
 
+2026-10-07 Windows priority correction: native normal mouse release no longer
+immediately cancels an opened popup; unpressed hover and Alt system keys reach
+the application while stolen capture/focus loss and guarded Alt+F4 remain.
+Custom FocusRing(false) supports application-owned selection styling. The new
+owned native event process passes three repeats; full GOWORK=off strict-cgo,
+shuffled three-repeat race suites pass locally (root 132.003s). Application
+workspace-linked native File/shell dialogs/Unicode save/quick input/VSIX manager
+acceptance passes. Public-module/source CI/promotion remain pending; installed
+v0.21.0 is unchanged. See windows-menus.md. Unpublished IME source is preserved
+in ignored .cache/ime-wip-20261007 and deferred with Mac development.
+
 2026-10-07 gocode v0.21.0 native Git promotion: real repository status/initialization,
 index stage/unstage/commit, bounded read-only original/staged/worktree GPU diff
 and owned Git cancellation use public core v0.13.0 with GOWORK=off. Local strict-
