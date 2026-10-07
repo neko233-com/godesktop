@@ -1,5 +1,36 @@
 # Verified status
 
+2026-10-07 native terminal promotion: gocode v0.20.0 immutable source/package
+05ae59a211ca6649553682ab609d938600c6a86a independently imports public core v0.13.0
+with GOWORK=off/no replace. All five source jobs in application CI 37602674156
+pass first; publication 37604774438 reuses those tested packages and seven free
+metadata files at cb2b036 pass Python policies. Stable process-backed Terminal API,
+copied cwd/env/strict settings, ordered Unicode input, show/hide/focus, actual
+exit/dispose/user-close/failure and process cleanup are verified in a genuine VSIX
+and owned native windows. Windows 2022/2025 and both Mac normal/1.5/2 gates pass;
+all four actual VSIX terminal PNGs were inspected. Native API/queue/snapshot bounds,
+real Windows raw arguments and Unicode title limits are in extension-terminals.md.
+
+Actual signed automatic/direct GitHub/manual ghfast release bytes, all released
+native gates and original v0.4.0 GUI rollback pass. The user's original stable
+0.5.1 launcher updates v0.19→v0.20 via direct GitHub and selects exact 05ae59a.
+Installed GUI/icons/Settings/groups/real VSIX/actual 1,073,741,824-byte split with
+unchanged full hash, highlighted terminal/new VSIX terminal/source checks pass.
+Settings and installed terminal PNGs were inspected; up to date (0.20.0), auto/
+automatic route and gopls ready. Config/user-PATH hashes and stable Desktop/Start
+Menu shortcut targets remain unchanged. Official Copilot authenticated/LSP/SDK
+are true, networkPromptSent=false. Full VS Code/official Copilot VSIX and the
+recorded shell integration/Pseudoterminal/editor/services gaps remain active.
+
+2026-10-07 core v0.13.0 is public at immutable
+965678a4ed3f1828155038b0c340a7ceda0832e6. All five jobs in CI 37599839423 pass.
+Mac ARM's initial existing bitmap gate times out after the 128-visible grid;
+actual PNGs/logs are retained and the unchanged same-source job retry passes.
+No cause or relaxed timeout/assertion is claimed. Other four jobs pass first.
+The optional native Terminal bridge is released; independent application v0.20.0
+process/native/package/release/install validation is underway. User app remains
+verified v0.19.0 pending that promotion. Copilot retains the SDK/Language Server path.
+
 2026-10-07 terminal extension candidate: stable process-backed Terminal objects,
 optional native capability, ordered acknowledged actions, monotonic/atomic
 snapshots, lifecycle/state events and bounded queues now have three-repeat actual
