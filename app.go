@@ -31,6 +31,7 @@ type WindowOptions struct {
 type Context struct {
 	mu            sync.Mutex
 	pending       []func()
+	wakeQueued    bool
 	closed        bool
 	wake          func()
 	quit          func()
@@ -52,19 +53,21 @@ func (c *Context) ElementBounds(key string) (Bounds, bool) {
 	return b, ok
 }
 
-// Dispatch schedules a state mutation on the UI thread and invalidates the view.
-// It returns false after shutdown. Keep callbacks short; do I/O in a goroutine.
+// Dispatch schedules a state mutation on the UI thread and invalidates the view,
+// including while the native window is minimized or hidden. It returns false
+// after shutdown or when 1024 callbacks are already queued. Keep callbacks short;
+// do I/O in a goroutine and handle a rejected dispatch without awaiting its reply.
 func (c *Context) Dispatch(fn func()) bool {
 	if fn == nil {
 		return false
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed {
+	if c.closed || len(c.pending) >= maxPendingDispatches {
 		return false
 	}
 	c.pending = append(c.pending, fn)
-	c.wake()
+	c.requestWakeLocked()
 	return true
 }
 
@@ -73,6 +76,18 @@ func (c *Context) Invalidate() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if !c.closed {
+		c.requestWakeLocked()
+	}
+}
+
+const maxPendingDispatches = 1024
+const maxDispatchBatch = 64
+
+// Native wake callbacks are asynchronous. One outstanding wake covers both the
+// queued state callbacks and repeated frame invalidations until the UI drains it.
+func (c *Context) requestWakeLocked() {
+	if !c.wakeQueued {
+		c.wakeQueued = true
 		c.wake()
 	}
 }
@@ -93,8 +108,18 @@ func (c *Context) RequestClose() { c.performWindowAction(3) }
 
 func (c *Context) drain() {
 	c.mu.Lock()
-	pending := c.pending
-	c.pending = nil
+	count := min(len(c.pending), maxDispatchBatch)
+	pending := append([]func(){}, c.pending[:count]...)
+	remaining := copy(c.pending, c.pending[count:])
+	clear(c.pending[remaining:])
+	c.pending = c.pending[:remaining]
+	if remaining == 0 {
+		c.pending = nil
+	}
+	c.wakeQueued = false
+	if remaining != 0 {
+		c.requestWakeLocked()
+	}
 	c.mu.Unlock()
 	for _, fn := range pending {
 		fn()
@@ -124,6 +149,12 @@ type application struct {
 }
 
 func (a *application) handle(event platform.Event) {
+	if event.Kind == platform.UIWake {
+		// Worker replies cannot depend on an available drawable. This private
+		// event neither reaches Input nor invokes View/layout/Present.
+		a.context.drain()
+		return
+	}
 	if a.input != nil && event.Kind != platform.Draw {
 		if a.input(a.context, InputEvent{Kind: InputKind(event.Kind), X: event.X, Y: event.Y, Key: event.Key, Modifiers: event.Modifiers & 15, Repeat: event.Modifiers&16 != 0, PointerX: event.PointerX, PointerY: event.PointerY, Focused: event.Kind == platform.WindowFocus && event.Key != 0}) {
 			a.context.Invalidate()

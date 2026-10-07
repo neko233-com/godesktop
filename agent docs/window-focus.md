@@ -1,5 +1,22 @@
 # Native window activation
 
+2026-10-08 diagnostics-only source 21feee2de0b05e7424dd6297d6e818638df45bfc
+in CI 37662570658 attempt 1 passes Windows 2022/2025, ARM and Ubuntu. ARM
+includes the complete bitmap -recovery and 1.5/2-density checks; that successful
+run does not establish the earlier intermittent timeout's cause. Intel
+job 112933540457 fails in setup-go before any test: DNS ENOTFOUND for
+raw.githubusercontent.com, then fallback go.dev. Its code/native checks are
+skipped and no acceptance artifacts are produced. The unchanged source's
+Intel job alone is retried as attempt 2/job 112938588709 and passes all race,
+vet, native, Metal bitmap recovery and fractional/double-density checks. Run
+37662570658 then completes successfully with all five platforms green on the
+same source. First-attempt failure is retained in .cache/ci-37662570658-failed.log;
+final exact results and successful Intel log are in
+.cache/ci-37662570658-attempt2-results.json and
+.cache/ci-37662570658-intel-attempt2.log. This diagnostic commit is not tagged;
+subsequent minimized-dispatch source requires separate exact-source CI and
+independent application validation.
+
 The Windows-first application needs VS Code's onWindowChange Auto Save behavior.
 InputCancelled could not prove window deactivation: keyboard focus loss and
 mouse capture cancellation use the same cancellation event. They remain separate

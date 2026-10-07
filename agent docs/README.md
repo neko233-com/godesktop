@@ -13,6 +13,8 @@ Native descendant clipping, GPU ABI/budgets and isolated replay acceptance are i
 [rounded clipping](rounded-clipping.md).
 Native window activation and independent capture cancellation are in
 [window focus](window-focus.md).
+Background receipts while minimized/hidden, UI wake bounds and actual GPU-idle
+proof are in [UI dispatch](ui-dispatch.md).
 
 A milestone is verified only after its real implementation and applicable
 platform checks pass. Distinguish model/transport tests, owned native-window

@@ -98,7 +98,8 @@ func TestDispatchIsConcurrentAndReentrant(t *testing.T) {
 	cx.Dispatch(func() { cx.Dispatch(func() { count += 10 }) })
 	cx.drain()
 	cx.drain()
-	if count != 110 || wakes.Load() != 102 {
+	cx.drain()
+	if count != 110 || wakes.Load() != 3 {
 		t.Fatalf("count=%d wakes=%d", count, wakes.Load())
 	}
 	cx.mu.Lock()
@@ -108,7 +109,7 @@ func TestDispatchIsConcurrentAndReentrant(t *testing.T) {
 		t.Fatal("accepted callback after shutdown")
 	}
 	cx.Invalidate()
-	if wakes.Load() != 102 {
+	if wakes.Load() != 3 {
 		t.Fatal("woke a closed context")
 	}
 }

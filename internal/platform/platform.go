@@ -51,6 +51,7 @@ const (
 	KeyDown     = 4
 	Cancel      = 5
 	WindowFocus = 10 // Existing C callback encodes active state in key (0 or 1).
+	UIWake      = 11 // UI callbacks without input delivery or drawable work.
 	Tab         = 9
 	Enter       = 13
 	Escape      = 27

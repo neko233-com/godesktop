@@ -2,6 +2,9 @@
 
 - UI thread owns mutable view/document state. Background work receives immutable
   snapshots and returns through Context.Dispatch with version/identity checks.
+  Private native wake events process receipts even without a visible drawable;
+  1024 pending callbacks/64 per turn and coalesced wakes bound queued UI work.
+  Rejected dispatches cannot be awaited; I/O stays outside callbacks.
 - Windows uses Win32, D3D12/DXIL/DirectWrite; macOS uses AppKit/Metal/CoreText.
   Fence/completion ownership governs three-slot buffers and glyph resources.
 - The editable document API uses UTF-16 protocol positions with UTF-8 storage.

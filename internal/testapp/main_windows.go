@@ -63,9 +63,23 @@ func main() {
 
 func run(iteration int, scenario string) {
 	clicks, async, frames := [2]int{}, 0, 0
+	closePending := false
 	var saved *ui.Context
 	guard := ""
 	options := ui.WindowOptions{Title: fmt.Sprintf("godesktop-test-%d-%d", os.Getpid(), iteration), Width: 480, Height: 260, Background: ui.RGB(0x102030)}
+	if scenario == "interactive" {
+		options.CloseRequested = func(cx *ui.Context) bool {
+			// UI probe acknowledgements no longer require a drawable. Keep the
+			// existing five-native-submission shutdown assertion, explicitly
+			// waiting for that GPU evidence rather than counting probe replies.
+			if cx.RenderedFrames() < 5 {
+				closePending = true
+				cx.Invalidate()
+				return false
+			}
+			return true
+		}
+	}
 	if scenario == "resize-input" {
 		options.Input = func(_ *ui.Context, event ui.InputEvent) bool {
 			if event.Kind != ui.KeyPressed || event.Key != 123 { // F12
@@ -115,6 +129,13 @@ func run(iteration int, scenario string) {
 	err := ui.Run(options, func(cx *ui.Context) *ui.Element {
 		saved = cx
 		frames++
+		if closePending {
+			if cx.RenderedFrames() >= 5 {
+				cx.RequestClose()
+			} else {
+				cx.Invalidate()
+			}
+		}
 		if frames == 1 {
 			if scenario == "quit" {
 				cx.Quit()

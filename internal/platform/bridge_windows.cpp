@@ -204,7 +204,9 @@ struct Window {
     bool event_loop() {
         for(;;) {
             MSG message{};
-            while(PeekMessageW(&message,nullptr,0,0,PM_REMOVE)) {
+            // Reentrant UI work can keep posting wakes. A bounded message turn
+            // still polls completions and lets visible GPU frames make progress.
+            for(unsigned messages=0;messages<64 && PeekMessageW(&message,nullptr,0,0,PM_REMOVE);messages++) {
                 if(message.message==WM_QUIT) {
                     bool finished=surface->finish();
                     publish_stats();
@@ -414,7 +416,11 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
             }
         }
         break;
-    case wake_message: window->request_frame(); return 0;
+    case wake_message:
+        // Worker receipts must reach the UI even without a drawable (minimized
+        // or hidden). Keep layout/GPU work behind the event loop's visible guard.
+        gd_go_event(11,0,0,0,0);
+        window->request_frame(); return 0;
     case action_message:
         if(wparam==1) ShowWindow(handle,SW_MINIMIZE);
         if(wparam==2) ShowWindow(handle,IsZoomed(handle)?SW_RESTORE:SW_MAXIMIZE);

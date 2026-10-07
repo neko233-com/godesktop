@@ -723,7 +723,13 @@ void gd_measure(const char *text,size_t length,float size,const char *font,size_
 }
 void gd_wake(void) {
     uint64_t expected=atomic_load(&generation);
-    dispatch_async(dispatch_get_main_queue(),^{ if(running && expected==atomic_load(&generation)) [active_view requestFrame]; });
+    dispatch_async(dispatch_get_main_queue(),^{
+        if(running && expected==atomic_load(&generation)) {
+            // UI receipts are independent of a visible/available Metal drawable.
+            gd_go_event(11,0,0,0,0);
+            [active_view requestFrame];
+        }
+    });
 }
 void gd_quit(void) {
     uint64_t expected=atomic_load(&generation);

@@ -169,6 +169,10 @@ func TestDispatchFIFOAndShutdownRace(t *testing.T) {
 		cx.Dispatch(func() { order = append(order, i) })
 	}
 	cx.drain()
+	cx.drain()
+	if len(order) != 100 {
+		t.Fatalf("bounded turns lost callbacks: %d", len(order))
+	}
 	for i, v := range order {
 		if i != v {
 			t.Fatalf("FIFO: %v", order)

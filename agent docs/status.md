@@ -1,5 +1,35 @@
 # Verified status
 
+2026-10-08 minimized/hidden UI dispatch candidate fixes an actual source defect:
+background receipts no longer require Draw or a visible drawable. Private native
+UIWake drains at most 64 callbacks without View/Input/Present; 1024 queued slots
+and coalesced wakes bound backlog, with Windows message turns capped at 64.
+Three strict-cgo/race unit repeats pass (1.084s) and three actual owned native
+minimized/hidden repeats pass (12.399s): 512 UI-thread callbacks, idle GPU/views,
+restored green pixels, minimized Quit and old-context isolation across two Runs.
+Independent full no-cgo/vet passes. Corrected full Windows script passes three
+shuffled strict-cgo/race repeats (root 124.098s), fuzz/PE/console+GUI and merged
+root coverage 94.6%; actual ordinary/recovery bitmap fixtures also pass. Six
+private gocode minimized save runs pass (25.572s). The earlier full-run shutdown
+fixture failure and unchanged five-native-submission guard are in ui-dispatch.md.
+Metal exact-source CI/public-module/release/install checks remain pending.
+Published core v0.15.0 and installed gocode v0.22.0 remain unchanged. See ui-dispatch.md.
+
+Diagnostics-only source 21feee2de0b05e7424dd6297d6e818638df45bfc /
+CI 37662570658 attempt 1 passes Windows 2022/2025, ARM and Ubuntu, including
+ARM's full bitmap recovery and fractional/double-density regressions. Intel
+job 112933540457 fails before tests in setup-go: raw.githubusercontent.com
+and the fallback go.dev both return DNS ENOTFOUND. Every source/native check
+there is skipped; no Intel acceptance artifact exists. The failure is preserved
+in .cache/ci-37662570658-failed.log. Only that infrastructure-failed Intel job
+is retried on the same source as attempt 2/job 112938588709 and passes every
+race/vet/native/Metal bitmap recovery/density step. The run completes successfully
+with all five platforms green. Exact results and the successful Intel log are
+preserved in .cache/ci-37662570658-attempt2-results.json and
+.cache/ci-37662570658-intel-attempt2.log. The original ARM timeout cause remains
+unconfirmed. This diagnostic commit is not tagged; the forthcoming minimized-
+dispatch change needs its own exact-source validation before publication.
+
 2026-10-08 next Windows milestone implements native activation for application
 Auto Save (four modes) and File/Revert. WindowFocusChanged/Focused uses WM_ACTIVATE,
 keeping keyboard/capture cancellation distinct. Paired AppKit delegate behavior
@@ -43,10 +73,15 @@ The core fixes true rounded descendant masks and hit geometry, beyond painting
 a rounded parent background. Full VS Code layout/API/debug/refactoring and
 official Copilot VSIX parity remain active. Microsoft's official Marketplace
 requires separate service authorization; default Open VSX and native authorized
-Gallery protocol are the implemented scope. One owned invalid manual diagnostic
-fixture C:/Users/14170/AppData/Local/Temp/gocode-scm-native-4191533845 remains:
-automatic approval review rejected checked literal deletion ('blocked by policy',
-no further reason). Isolated repeated tests clean their owned scratch roots.
+Gallery protocol are the implemented scope. The owned invalid manual diagnostic
+fixture C:/Users/14170/AppData/Local/Temp/gocode-scm-native-4191533845 is now
+removed under the current permission after rechecking its exact literal path,
+owned Git acceptance config, bounded contents and target boundary. The earlier
+automatic approval review rejections ('blocked by policy', no further reason)
+remain historical evidence; the cleanup blocker is resolved. Fifteen explicitly
+named inactive failed-test directories under gocode/.cache/go-tmp-current are
+also removed after ownership/boundary/age/reparse/live-process checks. Isolated
+repeated tests clean their owned scratch roots.
 See child status.md/windows-workbench.md/keymaps-and-idempotence.md/
 modern-ui-and-gallery.md for exact evidence and limitations.
 
