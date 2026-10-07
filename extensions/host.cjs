@@ -193,11 +193,13 @@ function matches(selector,doc){
 }
 function registerProvider(kind,selector,provider){const entry={kind,selector,provider};providers.push(entry);return new Disposable(()=>{const i=providers.indexOf(entry);if(i>=0)providers.splice(i,1);});}
 async function activateLanguage(doc){for(const e of config.extensions)if((e.manifest.activationEvents||[]).includes('onLanguage:'+doc.languageId))await activate(e);}
+const terminalAPI=require('./terminals.cjs')({native,strict,EventEmitter,Uri,enabled:()=>!!clientCapabilities.terminals,report:error=>emit({type:'error',text:String(error)})});
 const vscode=strict('vscode',{
   version:'1.140.0',Disposable,EventEmitter,CancellationTokenSource,Uri,Position,Range,Selection,TextEdit,WorkspaceEdit,CompletionItem,CompletionList,MarkdownString,Hover,Location,Diagnostic,
   StatusBarAlignment:{Left:1,Right:2},ExtensionMode:{Production:1,Development:2,Test:3},EndOfLine:{LF:1,CRLF:2},ConfigurationTarget:{Global:1,Workspace:2,WorkspaceFolder:3},
   DiagnosticSeverity:{Error:0,Warning:1,Information:2,Hint:3},TextDocumentChangeReason:{Undo:1,Redo:2},CompletionTriggerKind:{Invoke:0,TriggerCharacter:1,TriggerForIncompleteCompletions:2},
   ViewColumn:{Active:-1,Beside:-2,One:1,Two:2,Three:3,Four:4,Five:5,Six:6,Seven:7,Eight:8,Nine:9},TextEditorRevealType:{Default:0,InCenter:1,InCenterIfOutsideViewport:2,AtTop:3},TextEditorSelectionChangeKind:{Keyboard:1,Mouse:2,Command:3},
+  TerminalLocation:{Panel:1,Editor:2},TerminalExitReason:{Unknown:0,Shutdown:1,Process:2,User:3,Extension:4},
   CompletionItemKind:Object.fromEntries(['Text','Method','Function','Constructor','Field','Variable','Class','Interface','Module','Property','Unit','Value','Enum','Keyword','Snippet','Color','File','Reference','Folder','EnumMember','Constant','Struct','Event','Operator','TypeParameter','User','Issue'].map((x,i)=>[x,i])),
   commands:strict('commands',{
     registerCommand(id,fn,thisArg){if(registrations.has(id))throw new Error(`Duplicate command: ${id}`);registrations.set(id,(...args)=>fn.apply(thisArg,args));return new Disposable(()=>registrations.delete(id));},
@@ -205,6 +207,7 @@ const vscode=strict('vscode',{
     async getCommands(){return [...new Set([...registrations.keys(),...config.extensions.flatMap(e=>e.manifest.contributes?.commands?.map(c=>c.command)||[])])];}
   }),
   window:strict('window',{
+    createTerminal:terminalAPI.create,get terminals(){return terminalAPI.terminals;},get activeTerminal(){return terminalAPI.active;},onDidOpenTerminal:terminalAPI.events.open.event,onDidCloseTerminal:terminalAPI.events.close.event,onDidChangeActiveTerminal:terminalAPI.events.active.event,onDidChangeTerminalState:terminalAPI.events.state.event,
     get activeTextEditor(){return activeEditor;},get visibleTextEditors(){return [...visibleEditors];},onDidChangeActiveTextEditor:events.active.event,onDidChangeTextEditorSelection:events.selection.event,onDidChangeVisibleTextEditors:events.visible.event,onDidChangeTextEditorViewColumn:events.column.event,onDidChangeTextEditorVisibleRanges:events.ranges.event,
     showInformationMessage:message('information'),showWarningMessage:message('warning'),showErrorMessage:message('error'),
     createOutputChannel(name){return {name,append:text=>emit({type:'output',channel:name,text:String(text)}),appendLine:text=>emit({type:'output',channel:name,text:String(text)+'\n'}),clear:()=>emit({type:'clear',channel:name,text:''}),show:()=>emit({type:'panel',channel:name,text:''}),hide(){},dispose(){}};},
@@ -250,12 +253,14 @@ async function handle(request){
     let result;
     if(request.method==='initialize'){
       clientCapabilities=request.params?.clientCapabilities||{};storageRoot=request.params?.storageRoot;
+      if(clientCapabilities.terminals)terminalAPI.sync(request.params?.terminals||{generation:0,terminals:[],closed:[]});
       for(const d of request.params?.documents||[])syncDocument(d,'open');if(clientCapabilities.editorGroups)syncEditors(request.params?.editors);else if(request.params?.active)syncDocument(request.params.active,'focus');
       for(const e of config.extensions)if((e.manifest.activationEvents||[]).some(x=>x==='*'||x==='onStartupFinished'))await activate(e);
       result=await vscode.commands.getCommands();
     }else if(request.method==='execute')result=await vscode.commands.executeCommand(request.params.command,...(request.params.args||[]));
     else if(request.method==='syncDocument'){syncDocument(request.params.document,request.params.kind,request.params.changes||[],request.params.editors);if(request.params.document && request.params.kind!=='close')await activateLanguage(document(Uri.file(request.params.document.path)));result=true;}
     else if(request.method==='syncEditors'){syncEditors(request.params);result=true;}
+    else if(request.method==='syncTerminals'){if(!clientCapabilities.terminals)throw Error('Native terminal capability is unavailable');terminalAPI.sync(request.params);result=true;}
     else if(['provideCompletionItems','provideHover','provideDefinition'].includes(request.method)){
       const doc=document(Uri.parse(request.params.uri));await activateLanguage(doc);
       const kind=request.method==='provideCompletionItems'?'completion':request.method==='provideHover'?'hover':'definition';

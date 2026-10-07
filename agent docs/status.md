@@ -1,5 +1,19 @@
 # Verified status
 
+2026-10-07 terminal extension candidate: stable process-backed Terminal objects,
+optional native capability, ordered acknowledged actions, monotonic/atomic
+snapshots, lifecycle/state events and bounded queues now have three-repeat actual
+Node protocol tests. gocode's real temporary VSIX passes native Windows process
+PID/cwd/strict environment/Unicode input, ANSI/intrinsic emoji pixels, show/hide/
+preserveFocus, extension disposal, natural exit 7, actual user close and owned
+process reaping with unchanged source. Raw Windows quoted Unicode/empty arguments,
+env deletion and unchanged snapshot generations pass. Full local Windows core
+strict-cgo/three-repeat races/vet/fuzz/native/PE/GUI checks pass, root coverage
+96.7% (7d21aef810cc4137a58c7b9be4f61f1a). Workflow lint and diff checks pass.
+Full source CI, public core
+v0.13.0/application v0.20.0 packages and installation remain pending. Current
+public/installed v0.12.0/v0.19.0 stays authoritative. See extension-terminals.md.
+
 2026-10-07 gocode v0.19.0 is public and installed: immutable source/package
 4616656105b0b0222b03524f207ee9d53ca335bb imports public core v0.12.0 with
 GOWORK=off/no replace and passes all five jobs in application CI 37590651597.

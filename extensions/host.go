@@ -16,6 +16,9 @@ import (
 //go:embed host.cjs
 var hostSource string
 
+//go:embed terminals.cjs
+var terminalSource string
+
 type Event struct {
 	Type    string          `json:"type"`
 	Text    string          `json:"text"`
@@ -61,7 +64,7 @@ func Start(ctx context.Context, workspace string, installed []Extension) (*Host,
 		return nil, err
 	}
 	sourcePath, configPath := filepath.Join(runtimeRoot, "host.cjs"), filepath.Join(runtimeRoot, "config.json")
-	if err := errors.Join(os.WriteFile(sourcePath, []byte(hostSource), 0600), os.WriteFile(configPath, config, 0600)); err != nil {
+	if err := errors.Join(os.WriteFile(sourcePath, []byte(hostSource), 0600), os.WriteFile(filepath.Join(runtimeRoot, "terminals.cjs"), []byte(terminalSource), 0600), os.WriteFile(configPath, config, 0600)); err != nil {
 		os.RemoveAll(runtimeRoot)
 		return nil, err
 	}
