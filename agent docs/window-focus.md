@@ -1,5 +1,12 @@
 # Native window activation
 
+Public v0.16.0 is final immutable source
+5178f551a179351391af6eaab62f3f5cf150350e; all five jobs in corrected exact
+CI 37667772124 pass on attempt 1. It includes the independent minimized/hidden
+UIWake fix, queue/admission bounds and native scheduler acceptance recorded in
+ui-dispatch.md. gocode now fetches this public version with GOWORK=off/no replace
+for independent application verification; its installed version remains v0.22.0.
+
 2026-10-08 diagnostics-only source 21feee2de0b05e7424dd6297d6e818638df45bfc
 in CI 37662570658 attempt 1 passes Windows 2022/2025, ARM and Ubuntu. ARM
 includes the complete bitmap -recovery and 1.5/2-density checks; that successful

@@ -1,5 +1,15 @@
 # Verified status
 
+2026-10-08 public core v0.16.0 is immutable source
+5178f551a179351391af6eaab62f3f5cf150350e. All five exact-source jobs pass
+on first attempt in CI 37667772124: Windows 2022/2025, Metal Intel/ARM and
+Ubuntu. Existing coalescing/idle/90-frame/recovery/pixel guards pass, including
+three-repeat strict-cgo/race and actual GPU/device ownership. The initial
+7e1e61d/37666610679 has four native counter-contract failures after earlier
+gates pass, and is not tagged; logs/source remain retained. Public module
+fetch and independent gocode application validation/promotion are underway.
+The user's installed application remains verified v0.22.0. See ui-dispatch.md.
+
 2026-10-08 minimized/hidden UI dispatch candidate fixes an actual source defect:
 background receipts no longer require Draw or a visible drawable. Private native
 UIWake drains at most 64 callbacks without View/Input/Present; 1024 queued slots
@@ -16,8 +26,9 @@ Metal exact-source CI/public-module/release/install checks remain pending.
 Published core v0.15.0 and installed gocode v0.22.0 remain unchanged. See ui-dispatch.md.
 
 Initial UI dispatch source 7e1e61d85c405f2b330a4da7262f81fc269cc39a /
-CI 37666610679 passes Ubuntu and both Windows full repeated/native scripts;
-later Windows steps remain pending. Both Macs then fail the native coalescing
+CI 37666610679 ends with Ubuntu success and all four native jobs failing their
+native counter guard; both Windows full repeated/native scripts and earlier
+DXIL/viewport/bitmap/color gates pass first. Both Macs fail the native coalescing
 floor because Go now coalesces Invalidate calls before the native ABI. The fixture
 now sends its redundant requests to the native scheduler directly, preserving
 all native/idle/wake/90-frame guards. All five actual Windows normal/reuse/eviction/

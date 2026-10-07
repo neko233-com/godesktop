@@ -1,5 +1,15 @@
 # UI dispatch without an available drawable
 
+Final public core v0.16.0 is exact source
+5178f551a179351391af6eaab62f3f5cf150350e; all five jobs in CI 37667772124
+attempt 1 pass, including both Windows and Metal architectures' complete native
+coalescing/idle/ownership/device/bitmap/glyph/density gates. It is published with
+an immutable tag; application-independent public-module validation follows.
+The initial 7e1e61d/37666610679 ends with Ubuntu success and all four native
+platforms failing the original counter floor as described below. Windows earlier
+full script/DXIL/viewport/bitmap/color gates pass before that same stress failure.
+All four logs are retained; neither a retry nor a reduced guard is used.
+
 2026-10-08 source audit finds an actual backend defect: Context.Dispatch only
 drains inside the Draw event. Windows wake_message requests a frame but the
 event loop refuses draws for hidden/minimized windows; AppKit requestFrame has
@@ -41,8 +51,8 @@ recovery bitmap fixtures pass, preserving all pixels/128 assets/eviction/upload/
 two-Run/recovery/watchdog assertions. Reports reuse .cache/dispatch-windows-final.log,
 windows-validation/current and ui-dispatch-bitmap/{native,recovery}. Full no-cgo/
 vet also passes. Shared Metal regression/source CI and
-public application-module validation remain pending. Public core v0.15.0 and
-installed application v0.22.0 remain the verified distribution.
+public application-module validation remained pending at that candidate point.
+Public core then remained v0.15.0; the installed application remains v0.22.0.
 
 First full Windows candidate run fails only the old interactive fixture shutdown
 in three repeats (root 130.256s): probe replies now arrive without a drawable,
@@ -55,8 +65,9 @@ the initial failure is in .cache/dispatch-windows-first.log. FIFO acceptance now
 drains two bounded turns and checks all 100 callbacks rather than a partial list.
 
 Initial exact source 7e1e61d85c405f2b330a4da7262f81fc269cc39a /
-CI 37666610679 passes Ubuntu and both Windows full repeated/native scripts;
-later Windows steps are still pending. Both Macs pass race/vet/smoke/close/
+CI 37666610679 ends with Ubuntu success and four native counter-guard failures.
+Windows earlier full repeated/native scripts/DXIL/viewport/bitmap/color pass;
+both Macs pass race/vet/smoke/close/
 viewport, then the glyph reuse fixture fails its original native coalescing
 floor: CoalescedRequests=2 (ARM) or 1 (Intel), while Submitted=Completed=92.
 Context now combines repeated invalidations before the native ABI, so that
