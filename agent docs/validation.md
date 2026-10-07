@@ -4,6 +4,10 @@
    cancellation and cleanup behavior. Race checks cover asynchronous boundaries.
 2. Windows amd64 uses GOAMD64=v1, strict cgo, owned HWND messages/GPU pixels,
    PE/system-DLL checks and native clipboard only on disposable CI runners.
+   Color glyph acceptance adds whole-layout Direct2D reference RGB/mask, tint,
+   alpha/clipping, mixed one-draw batching, actual window resize, two cache
+   evictions, actual device removal and a fresh Run at 100/150/200% density.
+   The diagnostic density flag requires readback and does not change global DPI.
 3. macOS Intel/ARM builds native code and verifies real Metal/AppKit submissions,
    pixels, resource lifetime and same-window recovery.
    Color glyph acceptance compares intrinsic RGB with whole-line CoreText,

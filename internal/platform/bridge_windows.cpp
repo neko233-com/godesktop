@@ -33,7 +33,9 @@ std::wstring wide(const char *text, size_t length) {
     MultiByteToWideChar(CP_UTF8,0,text,static_cast<int>(length),result.data(),count);
     return result;
 }
+thread_local float diagnostic_dpi=0;
 float dpi(HWND window) {
+    if(diagnostic_dpi) return diagnostic_dpi;
     using GetDpi = UINT(WINAPI *)(HWND);
     auto fn=reinterpret_cast<GetDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetDpiForWindow"));
     return fn ? static_cast<float>(fn(window)) : 96.0f;
@@ -77,8 +79,8 @@ struct Window {
         surface->stats.glyph_cache_hits=atlas.hits;
         surface->stats.glyph_cache_entries=atlas.entries();
         surface->stats.glyph_atlas_pages=atlas.accounting->pages;
-        surface->stats.glyph_atlas_bytes=atlas.accounting->pages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
-        surface->stats.glyph_atlas_peak_bytes=atlas.accounting->peakPages*gd_dx12::AtlasPage::edge*gd_dx12::AtlasPage::edge;
+        surface->stats.glyph_atlas_bytes=atlas.accounting->bytes;
+        surface->stats.glyph_atlas_peak_bytes=atlas.accounting->peakBytes;
         surface->stats.glyph_atlas_epochs=atlas.epochs;
         surface->stats.bitmap_cache_entries=gd_image_entries();surface->stats.bitmap_cache_bytes=gd_image_bytes;
         std::lock_guard<std::mutex> lock(stats_mutex);
@@ -101,7 +103,7 @@ struct Window {
         // submission. Account for abandoned work separately from GPU completion.
         saved.dropped_frames=saved.submitted-saved.completed;
         saved.in_flight=0; saved.device_recoveries++;
-        scene=gd_dx12::Scene{}; atlas.clear();bitmaps.clear();
+        scene=gd_dx12::Scene{}; atlas.clear(); atlas.resetColorDevice(); bitmaps.clear();
         surface.reset(); // Releases the old swapchain and all device resources.
         surface=std::make_unique<gd_dx12::Surface>();
         surface->stats=saved;
@@ -362,6 +364,19 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
 extern "C" const char *gd_run(const char *title,float width,float height,GDColor background,int custom_titlebar) {
     static std::string last_error;
     last_error.clear();
+    struct DiagnosticDensity {
+        ~DiagnosticDensity() { diagnostic_dpi=0; }
+    } densityScope;
+    diagnostic_dpi=0;
+    wchar_t density[16]{},readback[2]{};
+    DWORD densityLength=GetEnvironmentVariableW(L"GODESKTOP_TEST_DRAWABLE_SCALE",density,16);
+    if(densityLength) {
+        wchar_t *end=nullptr; double value=wcstod(density,&end);
+        GetEnvironmentVariableW(L"GODESKTOP_READBACK",readback,2);
+        if(densityLength>=16 || !end || *end || (value!=1 && value!=1.5 && value!=2) || readback[0]!=L'1')
+            return "Diagnostic drawable scale requires GPU readback and a value of 1, 1.5 or 2";
+        diagnostic_dpi=float(value*96);
+    }
     rendered_frames.store(0);
     { std::lock_guard<std::mutex> lock(stats_mutex); latest_stats={}; latest_stats.backend=3; latest_stats.frame_slots=3; latest_stats.frame_clock=3; }
     HRESULT initialized=CoInitializeEx(nullptr,COINIT_APARTMENTTHREADED);
@@ -387,7 +402,7 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
             else {
                 using GetSystemDpi=UINT(WINAPI *)();
                 auto get_dpi=reinterpret_cast<GetSystemDpi>(GetProcAddress(GetModuleHandleW(L"user32.dll"),"GetDpiForSystem"));
-                UINT initial_dpi=get_dpi?get_dpi():96;
+                UINT initial_dpi=diagnostic_dpi?UINT(diagnostic_dpi):(get_dpi?get_dpi():96);
                 RECT bounds{0,0,static_cast<LONG>(width*initial_dpi/96),static_cast<LONG>(height*initial_dpi/96)};
                 // Keep the overlapped-window style for DWM composition and
                 // system affordances; NCCALCSIZE removes the native caption.
@@ -411,6 +426,13 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                 if(!handle) window.error="CreateWindowExW failed";
                 else {
                     active_window.store(handle);
+                    if(diagnostic_dpi) {
+                        RECT outer{},client{}; GetWindowRect(handle,&outer); GetClientRect(handle,&client);
+                        // The OS caption still uses the monitor's DPI. Correct
+                        // only the owned fixture's client size before submission.
+                        SetWindowPos(handle,nullptr,0,0,LONG(width*diagnostic_dpi/96)+(outer.right-outer.left-client.right),
+                            LONG(height*diagnostic_dpi/96)+(outer.bottom-outer.top-client.bottom),SWP_NOMOVE|SWP_NOZORDER|SWP_NOACTIVATE);
+                    }
                     RECT client{}; GetClientRect(handle,&client);
                     wchar_t adapter[32]{},debug[2]{};
                     GetEnvironmentVariableW(L"GODESKTOP_GPU_ADAPTER",adapter,32);

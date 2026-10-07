@@ -71,4 +71,6 @@ Windows 的 `internal/inputlatency` 在当前进程的已核验 HWND 注入 40 �
 
 `gocode` 子仓库有自己的五平台 CI 和 Windows 脚本：真实窗口测试文件选择、中文/emoji 输入、保存、扩展命令、标题栏命中、窗口缩放/关闭和 PE amd64；原生 smoke 同时要求真实绘制和已安装 VSIX 命令执行。截图和构建产物保存在其 Actions artifacts。父仓库 `go test ./...` 不会自动进入独立子模块，应分别验证两个仓库。
 
+Windows 彩色字形新增 `CGO_ENABLED=1 go run ./internal/colortest`：通过已核验的 HWND 读取完成后的 GPU 像素，与独立 Direct2D 整段文字参考图比较颜色与位置；检查普通前景色、透明度、裁剪、混合一次绘制、真实窗口 resize、两次容量淘汰、实际设备移除以及下一次 Run 的缓存清理。CI 在两种 Windows 上分别设置 `GODESKTOP_TEST_DRAWABLE_SCALE=1/1.5/2`。该诊断要求 GPU readback，只调整当前 fixture 的绘制密度，不修改系统 DPI。格式支持与未验证字体范围见 [字形契约](../agent%20docs/color-glyphs.md)。
+
 原生像素测试需要可用桌面会话。自动化通过 Win32 消息进入真实 WindowProc，不覆盖物理键鼠驱动、IME、所有字体、所有缩放比例、所有显卡或所有 Windows 客户端版本。Windows 10/11 的真实设备和多显示器测试仍应按发行版本补充；CI 的 Server 内核验证不等同于每台客户端设备验证。

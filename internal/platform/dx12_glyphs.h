@@ -7,9 +7,10 @@
 #include <tuple>
 #include "dx12_device.h"
 #include "image_store.h"
+#include "dwrite_color.h"
 
 namespace gd_dx12 {
-struct AtlasAccounting { uint64_t pages=0,peakPages=0; };
+struct AtlasAccounting { uint64_t pages=0,peakPages=0,bytes=0,peakBytes=0; };
 struct AtlasPage {
     static constexpr unsigned edge=1024;
     std::vector<unsigned char> pixels;
@@ -20,18 +21,21 @@ struct AtlasPage {
     ID3D12Resource *texture=nullptr;
     bool shaderState=false;
     std::shared_ptr<AtlasAccounting> accounting;
-    explicit AtlasPage(std::shared_ptr<AtlasAccounting> usage):pixels(edge*edge,0),accounting(std::move(usage)) {
-        pixels[0]=255; accounting->pages++;
+    explicit AtlasPage(std::shared_ptr<AtlasAccounting> usage,unsigned size=edge,unsigned components=1):
+        pixels(size_t(size)*size*components,0),width(size),height(size),channels(components),accounting(std::move(usage)) {
+        for(unsigned i=0;i<channels;i++) pixels[i]=255;
+        accounting->pages++; accounting->bytes+=pixels.size();
         accounting->peakPages=std::max(accounting->peakPages,accounting->pages);
+        accounting->peakBytes=std::max(accounting->peakBytes,accounting->bytes);
     }
     explicit AtlasPage(const GDImage &image):width(image.width),height(image.height),channels(4),bitmapID(image.id) {}
-    ~AtlasPage() { drop(texture); if(accounting) accounting->pages--; }
-    bool pack(unsigned width,unsigned height,unsigned *left,unsigned *top) {
-        if(width+2>edge || height+2>edge) return false;
-        if(x+width+2>edge) { x=1; y+=rowHeight; rowHeight=0; }
-        if(y+height+2>edge) return false;
+    ~AtlasPage() { drop(texture); if(accounting) { accounting->pages--; accounting->bytes-=pixels.size(); } }
+    bool pack(unsigned glyphWidth,unsigned glyphHeight,unsigned *left,unsigned *top) {
+        if(glyphWidth+2>width || glyphHeight+2>height) return false;
+        if(x+glyphWidth+2>width) { x=1; y+=rowHeight; rowHeight=0; }
+        if(y+glyphHeight+2>height) return false;
         *left=x+1; *top=y+1;
-        x+=width+2; rowHeight=std::max(rowHeight,height+2);
+        x+=glyphWidth+2; rowHeight=std::max(rowHeight,glyphHeight+2);
         return true;
     }
 };
@@ -42,9 +46,10 @@ struct Glyph {
 };
 class GlyphAtlas {
     // Font faces stay retained while their identity is part of a cache key.
-    using Key=std::tuple<IDWriteFontFace *,float,float,UINT16,bool,unsigned,float,DWRITE_MEASURING_MODE>;
+    using Key=std::tuple<IDWriteFontFace *,float,float,UINT16,bool,unsigned,float,DWRITE_MEASURING_MODE,bool,float,float,float>;
     std::map<Key,Glyph> glyphs;
     std::map<IDWriteFontFace *,IDWriteFontFace *> faces;
+    ColorRasterizer colors;
 public:
     static constexpr unsigned maxPages=16,maxGlyphs=16384;
     std::shared_ptr<AtlasAccounting> accounting=std::make_shared<AtlasAccounting>();
@@ -54,6 +59,8 @@ public:
     std::string error;
     ~GlyphAtlas() { clear(); }
     size_t entries() const { return glyphs.size(); }
+    void resetColorDevice() { colors.reset(); }
+    uint64_t activeBytes() const { uint64_t total=0; for(const auto &page:pages) total+=page->pixels.size(); return total; }
     void clear() {
         glyphs.clear(); pages.clear();
         for(auto &face:faces) drop(face.second);
@@ -63,44 +70,64 @@ public:
         if(pages.empty()) pages.push_back(std::make_shared<AtlasPage>(accounting));
         return pages[0];
     }
-    const Glyph *get(IDWriteFactory *factory,const DWRITE_GLYPH_RUN *run,unsigned index,float scale,DWRITE_MEASURING_MODE mode) {
+    const Glyph *get(IDWriteFactory *factory,const DWRITE_GLYPH_RUN *run,unsigned index,float scale,DWRITE_MEASURING_MODE mode,GDColor foreground) {
         float advance=run->glyphAdvances?run->glyphAdvances[index]:0;
-        auto key=Key{run->fontFace,run->fontEmSize,scale,run->glyphIndices[index],run->isSideways!=FALSE,run->bidiLevel&1u,(run->bidiLevel&1)?advance:0,mode};
+        auto key=Key{run->fontFace,run->fontEmSize,scale,run->glyphIndices[index],run->isSideways!=FALSE,run->bidiLevel&1u,(run->bidiLevel&1)?advance:0,mode,false,0,0,0};
         auto existing=glyphs.find(key);
+        if(existing!=glyphs.end()) { hits++; return &existing->second; }
+        auto coloredKey=key;
+        std::get<8>(coloredKey)=true; std::get<9>(coloredKey)=foreground.r; std::get<10>(coloredKey)=foreground.g; std::get<11>(coloredKey)=foreground.b;
+        existing=glyphs.find(coloredKey);
         if(existing!=glyphs.end()) { hits++; return &existing->second; }
         if(glyphs.size()>=maxGlyphs) { full=true; return nullptr; }
         DWRITE_GLYPH_RUN single=*run;
         single.glyphCount=1; single.glyphIndices=run->glyphIndices+index;
         single.glyphAdvances=run->glyphAdvances?&advance:nullptr;
         single.glyphOffsets=nullptr;
+        ColorGlyph color;
+        HRESULT hr=colors.rasterize(factory,single,scale,mode,foreground,color);
+        if(FAILED(hr)) { error="Native color glyph rasterization failed (HRESULT="+std::to_string(uint32_t(hr))+")"; return nullptr; }
+        bool rgba=hr==S_OK;
         IDWriteGlyphRunAnalysis *analysis=nullptr;
-        HRESULT hr=factory->CreateGlyphRunAnalysis(&single,scale,nullptr,DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,mode,0,0,&analysis);
         Glyph glyph;
-        if(SUCCEEDED(hr)) hr=analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_CLEARTYPE_3x1,&glyph.bounds);
+        if(rgba) glyph.bounds=color.bounds;
+        else {
+            hr=factory->CreateGlyphRunAnalysis(&single,scale,nullptr,DWRITE_RENDERING_MODE_NATURAL_SYMMETRIC,mode,0,0,&analysis);
+            if(SUCCEEDED(hr)) hr=analysis->GetAlphaTextureBounds(DWRITE_TEXTURE_CLEARTYPE_3x1,&glyph.bounds);
+        }
         if(FAILED(hr)) { drop(analysis); error="DirectWrite glyph analysis failed"; return nullptr; }
         glyph.width=std::max(0L,glyph.bounds.right-glyph.bounds.left);
         glyph.height=std::max(0L,glyph.bounds.bottom-glyph.bounds.top);
         if(glyph.width && glyph.height) {
             if(glyph.width+2>AtlasPage::edge || glyph.height+2>AtlasPage::edge) { drop(analysis); error="Glyph exceeds the 1024-pixel atlas page"; return nullptr; }
             white();
-            for(auto &page:pages) if(page->pack(glyph.width,glyph.height,&glyph.x,&glyph.y)) { glyph.page=page; break; }
+            unsigned channels=rgba?4:1;
+            for(auto &page:pages) if(page->channels==channels && page->pack(glyph.width,glyph.height,&glyph.x,&glyph.y)) { glyph.page=page; break; }
             if(!glyph.page) {
-                if(pages.size()>=maxPages) { full=true; drop(analysis); return nullptr; }
-                glyph.page=std::make_shared<AtlasPage>(accounting); pages.push_back(glyph.page);
+                unsigned edge=rgba && glyph.width+2<=512 && glyph.height+2<=512?512:AtlasPage::edge;
+                if(pages.size()>=maxPages || activeBytes()+uint64_t(edge)*edge*channels>16*1024*1024) { full=true; drop(analysis); return nullptr; }
+                glyph.page=std::make_shared<AtlasPage>(accounting,edge,channels); pages.push_back(glyph.page);
                 glyph.page->pack(glyph.width,glyph.height,&glyph.x,&glyph.y);
             }
-            std::vector<BYTE> coverage(glyph.width*glyph.height*3);
-            hr=analysis->CreateAlphaTexture(DWRITE_TEXTURE_CLEARTYPE_3x1,&glyph.bounds,coverage.data(),coverage.size());
+            std::vector<BYTE> coverage;
+            if(!rgba) {
+                coverage.resize(glyph.width*glyph.height*3);
+                hr=analysis->CreateAlphaTexture(DWRITE_TEXTURE_CLEARTYPE_3x1,&glyph.bounds,coverage.data(),coverage.size());
+            }
             if(FAILED(hr)) { drop(analysis); error="DirectWrite glyph rasterization failed"; return nullptr; }
             for(unsigned y=0;y<glyph.height;y++) for(unsigned x=0;x<glyph.width;x++) {
-                size_t source=(y*glyph.width+x)*3;
-                glyph.page->pixels[(glyph.y+y)*AtlasPage::edge+glyph.x+x]=static_cast<unsigned char>((unsigned(coverage[source])+coverage[source+1]+coverage[source+2]+1)/3);
+                size_t dest=(size_t(glyph.y+y)*glyph.page->width+glyph.x+x)*channels;
+                if(rgba) std::memcpy(glyph.page->pixels.data()+dest,color.pixels.data()+(size_t(y)*glyph.width+x)*4,4);
+                else {
+                    size_t source=(y*glyph.width+x)*3;
+                    glyph.page->pixels[dest]=static_cast<unsigned char>((unsigned(coverage[source])+coverage[source+1]+coverage[source+2]+1)/3);
+                }
             }
             glyph.page->version++;
         }
         drop(analysis); rasterized++;
         if(!faces.count(run->fontFace)) { run->fontFace->AddRef(); faces.emplace(run->fontFace,run->fontFace); }
-        return &glyphs.emplace(std::move(key),std::move(glyph)).first->second;
+        return &glyphs.emplace(color.foreground?std::move(coloredKey):std::move(key),std::move(glyph)).first->second;
     }
 };
 struct Batch { unsigned start=0,count=0,page=0; };
@@ -113,10 +140,17 @@ struct Scene {
         instances.clear(); batches.clear(); pages.clear(); pages.push_back(std::move(white)); currentPage=0;
     }
     void append(GDGPUInstance instance,std::shared_ptr<AtlasPage> page=nullptr) {
-        if(page && pages[currentPage]!=page) {
+        if(page) {
             auto existing=std::find(pages.begin(),pages.end(),page);
-            if(existing==pages.end()) { pages.push_back(page); currentPage=pages.size()-1; }
-            else currentPage=existing-pages.begin();
+            unsigned index;
+            if(existing==pages.end()) { index=pages.size(); pages.push_back(page); }
+            else index=existing-pages.begin();
+            if(page->bitmapID) currentPage=index;
+            else {
+                unsigned slot=0;
+                for(unsigned i=0;i<index;i++) if(!pages[i]->bitmapID) slot++;
+                instance.padding[0]=float(slot); currentPage=0;
+            }
         }
         if(batches.empty() || batches.back().page!=currentPage) batches.push_back(Batch{static_cast<unsigned>(instances.size()),0,currentPage});
         instances.push_back(instance); batches.back().count++;
@@ -146,7 +180,7 @@ public:
         float advance=0;
         bool rtl=(run->bidiLevel&1)!=0;
         for(unsigned i=0;i<run->glyphCount;i++) {
-            auto glyph=atlas.get(factory,run,i,scale,mode);
+            auto glyph=atlas.get(factory,run,i,scale,mode,command.color);
             if(!glyph) return E_FAIL;
             if(glyph->page) {
                 auto offset=run->glyphOffsets?run->glyphOffsets[i]:DWRITE_GLYPH_OFFSET{};
@@ -154,7 +188,8 @@ public:
                 float y=originY-offset.ascenderOffset;
                 GDGPUInstance v=gd_gpu_instance(&command);
                 v.bounds={x+glyph->bounds.left/scale,y+glyph->bounds.top/scale,glyph->width/scale,glyph->height/scale};
-                v.uv={glyph->x/float(AtlasPage::edge),glyph->y/float(AtlasPage::edge),glyph->width/float(AtlasPage::edge),glyph->height/float(AtlasPage::edge)};
+                v.uv={glyph->x/float(glyph->page->width),glyph->y/float(glyph->page->height),glyph->width/float(glyph->page->width),glyph->height/float(glyph->page->height)};
+                if(glyph->page->channels==4) v.kind=6;
                 scene.append(v,glyph->page);
             }
             if(run->glyphAdvances) advance+=run->glyphAdvances[i];

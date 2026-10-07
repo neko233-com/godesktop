@@ -83,7 +83,7 @@ class Surface {
     }
     bool upload_page(WindowFrame &frame,const std::shared_ptr<AtlasPage> &page) {
         if(page->uploaded==page->version) return true;
-        auto desc=texture_desc(page->width,page->height,page->bitmapID?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R8_UNORM,D3D12_RESOURCE_FLAG_NONE);
+        auto desc=texture_desc(page->width,page->height,page->channels==4?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R8_UNORM,D3D12_RESOURCE_FLAG_NONE);
         if(!page->texture && !resource(desc,D3D12_HEAP_TYPE_DEFAULT,D3D12_RESOURCE_STATE_COPY_DEST,&page->texture)) return false;
         D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{}; UINT64 bytes=0;
         engine.native()->GetCopyableFootprints(&desc,0,1,0,&footprint,nullptr,nullptr,&bytes);
@@ -104,7 +104,7 @@ class Surface {
         list->CopyTextureRegion(&dest,0,0,0,&source,nullptr);
         auto b=barrier(page->texture,D3D12_RESOURCE_STATE_COPY_DEST,D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE); list->ResourceBarrier(1,&b);
         page->shaderState=true; page->uploaded=page->version;
-        if(!page->bitmapID) stats.glyph_uploaded_bytes+=AtlasPage::edge*AtlasPage::edge;
+        if(!page->bitmapID) stats.glyph_uploaded_bytes+=uint64_t(page->width)*page->height*page->channels;
         else {stats.bitmap_uploads++;stats.bitmap_uploaded_bytes+=uint64_t(page->width)*page->height*4;}
         return true;
     }
@@ -140,7 +140,7 @@ public:
         if(!latency) { error="DXGI frame latency object is unavailable"; return false; }
         D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; heap.NumDescriptors=3;
         if(!ok(engine.native()->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&rtvs)),"Create window RTV descriptors")) return false;
-        heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=GlyphAtlas::maxPages+GDImageLimit; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=2*GlyphAtlas::maxPages+GDImageLimit; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         for(auto &frame:frames) {
             if(!ok(engine.native()->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,IID_PPV_ARGS(&frame.allocator)),"Create window command allocator") || !ok(engine.native()->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&frame.descriptors)),"Create frame glyph descriptors")) return false;
         }
@@ -231,13 +231,25 @@ public:
         if(!scene.instances.empty()) std::memcpy(frame.mapped,scene.instances.data(),scene.instances.size()*sizeof(GDGPUInstance));
         frame.pages=scene.pages;
         list->EndQuery(queries,D3D12_QUERY_TYPE_TIMESTAMP,index*2);
-        auto descriptor=frame.descriptors->GetCPUDescriptorHandleForHeapStart();
+        auto descriptorBase=frame.descriptors->GetCPUDescriptorHandleForHeapStart();
         UINT descriptorSize=engine.native()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
-        for(const auto &page:frame.pages) {
+        unsigned glyphSlot=0;
+        for(unsigned i=0;i<frame.pages.size();i++) {
+            const auto &page=frame.pages[i];
             if(!upload_page(frame,page)) return false;
-            D3D12_SHADER_RESOURCE_VIEW_DESC srv{}; srv.Format=page->bitmapID?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R8_UNORM; srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
+            D3D12_SHADER_RESOURCE_VIEW_DESC srv{}; srv.Format=page->channels==4?DXGI_FORMAT_R8G8B8A8_UNORM:DXGI_FORMAT_R8_UNORM; srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
             srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; srv.Texture2D.MipLevels=1;
-            engine.native()->CreateShaderResourceView(page->texture,&srv,descriptor); descriptor.ptr+=descriptorSize;
+            auto descriptor=descriptorBase;
+            descriptor.ptr+=(page->bitmapID?GlyphAtlas::maxPages+i:glyphSlot++)*descriptorSize;
+            engine.native()->CreateShaderResourceView(page->texture,&srv,descriptor);
+        }
+        if(glyphSlot>GlyphAtlas::maxPages) { error="Scene exceeds the glyph descriptor table"; return false; }
+        D3D12_SHADER_RESOURCE_VIEW_DESC white{}; white.Format=DXGI_FORMAT_R8_UNORM; white.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
+        white.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; white.Texture2D.MipLevels=1;
+        // Every declared slot is valid, including the unused default bitmap slot.
+        for(unsigned i=glyphSlot;i<=GlyphAtlas::maxPages;i++) {
+            auto descriptor=descriptorBase; descriptor.ptr+=i*descriptorSize;
+            engine.native()->CreateShaderResourceView(frame.pages[0]->texture,&white,descriptor);
         }
         auto render=barrier(frame.target,D3D12_RESOURCE_STATE_PRESENT,D3D12_RESOURCE_STATE_RENDER_TARGET); list->ResourceBarrier(1,&render);
         list->OMSetRenderTargets(1,&frame.rtv,FALSE,nullptr);
@@ -245,12 +257,14 @@ public:
         list->SetGraphicsRootSignature(engine.signature());
         float viewport[4]={dipWidth,dipHeight,0,0}; list->SetGraphicsRoot32BitConstants(1,4,viewport,0);
         ID3D12DescriptorHeap *heaps[]={frame.descriptors}; list->SetDescriptorHeaps(1,heaps);
+        list->SetGraphicsRootDescriptorTable(2,frame.descriptors->GetGPUDescriptorHandleForHeapStart());
         D3D12_VIEWPORT vp{0,0,float(pixelWidth),float(pixelHeight),0,1}; D3D12_RECT scissor{0,0,LONG(pixelWidth),LONG(pixelHeight)};
         list->RSSetViewports(1,&vp); list->RSSetScissorRects(1,&scissor); list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         for(const auto &batch:scene.batches) {
             list->SetGraphicsRootShaderResourceView(0,frame.instances->GetGPUVirtualAddress()+batch.start*sizeof(GDGPUInstance));
-            auto texture=frame.descriptors->GetGPUDescriptorHandleForHeapStart(); texture.ptr+=batch.page*descriptorSize;
-            list->SetGraphicsRootDescriptorTable(2,texture); list->DrawInstanced(6,batch.count,0,0);
+            auto texture=frame.descriptors->GetGPUDescriptorHandleForHeapStart();
+            texture.ptr+=(GlyphAtlas::maxPages+batch.page)*descriptorSize;
+            list->SetGraphicsRootDescriptorTable(3,texture); list->DrawInstanced(6,batch.count,0,0);
         }
         list->EndQuery(queries,D3D12_QUERY_TYPE_TIMESTAMP,index*2+1);
         if(diagnostic) {

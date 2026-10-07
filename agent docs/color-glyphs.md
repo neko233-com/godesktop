@@ -79,5 +79,52 @@ VSIX, actual GiB split/source hash and ConPTY pass with unchanged settings/PATH.
 Child color-glyphs.md/status.md record exact scope, image counts and asset hashes.
 Color glyph support does not establish general editor grapheme/bidi/IME,
 full VS Code UI parity or official Copilot VSIX compatibility.
-Windows currently retains DirectWrite monochrome glyph coverage; native Windows
-color-font rendering is a separate unimplemented rendering contract.
+Published core v0.11.0 retains DirectWrite monochrome coverage on Windows.
+The following candidate adds Windows color rendering; promotion is separate.
+
+## Windows candidate
+
+DirectWrite retains shaping, fallback and the already selected glyph indices.
+Actual font image formats select color handling, including SVG/bitmap fonts
+without COLR. Color cache misses use TranslateColorGlyphRun and a lazy native
+Direct2D/D3D11 WARP rasterizer. COLR palette layers, SVG and bitmap formats have
+explicit native drawing paths. Newer systems additionally query Factory8 and
+Context7 at runtime for COLRv1 paint trees. Private compatibility declarations
+record the exact Microsoft SDK source revision; no guessed vtable indices or
+full SDK headers are vendored. Systems without the newer interfaces use Factory4.
+
+Native command-list bounds provide bounded per-glyph raster rectangles. RGBA
+copies are premultiplied and cached; D3D12 applies label alpha without replacing
+intrinsic RGB. Palette foreground entries/SVG currentColor and paint text-color
+attributes use foreground-specific keys; intrinsic COLR/paint colors reuse cache
+entries across label colors. Ordinary glyphs retain R8 and normal foreground tint.
+The lazy rasterizer is rebuilt on actual device recovery and released at shutdown.
+
+D3D12 now has a fixed 16-slot glyph table plus a separate bitmap binding, with
+static slot dispatch/explicit LOD. The 80-byte instance/public command ABI stays
+unchanged. Mixed R8/RGBA/geometry preserves painter order in one draw; 128 distinct
+user bitmap/frame residency remains separate. Active glyph pixels retain the
+16 MiB/16-page/16,384-entry cap; actual live/in-flight page sizes and upload bytes
+are counted. R8 uses 1024-square pages, RGBA uses 512 or bounded 1024 square.
+
+The owned-HWND colortest checks 😀, skin-tone/ZWJ and heart/variation selection
+against independent whole-layout Direct2D ENABLE_COLOR_FONT rendering, which
+bypasses the atlas/translation/shader. RGB comparison allows one DIP of raster
+phase, requires 95% matches within 24 channel units and separate 85% mask IoU.
+Intrinsic red/blue label differences and half-opacity error are at most two units.
+Ordinary red glyphs, strict clipping, one draw, real window resize, two capacity
+evictions, one actual D3D12 RemoveDevice recovery and a second Run are required.
+The existing Unicode fixture additionally requires actual yellow emoji pixels
+and precisely two pages/2 MiB, replacing its old grayscale-only 1 MiB contract.
+
+Local 100/150/200% candidate pixels pass; the native 150% PNG and independent
+reference were inspected. Tint difference is zero, half-opacity error is one;
+reference matches are 95.36/98.89/98.45%. Modern local Segoe UI Emoji uses the
+COLRv1 path; its gradients/details remain visible. These are renderer-density
+diagnostic HWND fixtures, not proof of physical monitor hot-plug or every font.
+Windows 2022/2025 CI will retain all three densities' PNG/JSON evidence.
+
+Exact-source full regression, five-platform CI, immutable core publication,
+independent gocode/public-module/editor/ConPTY/release and installed upgrades are
+pending. Dedicated SVG/bitmap/currentColor font fixtures and arbitrary third-party
+font coverage remain open; enum/API paths alone do not prove those formats.

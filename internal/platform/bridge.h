@@ -86,6 +86,7 @@ const char *gd_metal_test_wheel(int dx, int dy, float x, float y, int modifiers,
 const char *gd_metal_test_pointer(int pressed, float x, float y, int modifiers);
 const char *gd_metal_test_key(int key, int modifiers, int pressed);
 const char *gd_metal_text_reference(const char *text,size_t length,const char *font,size_t font_length,float size,float scale,uint32_t width,uint32_t height,GDGPUSnapshot *result);
+const char *gd_dx12_text_reference(const char *text,size_t length,const char *font,size_t font_length,float size,float scale,uint32_t width,uint32_t height,GDGPUSnapshot *result);
 void gd_go_event(int kind, float x, float y, int key, int modifiers);
 void gd_go_scroll(float x, float y, float pointer_x, float pointer_y, int modifiers);
 int gd_go_should_close(void);

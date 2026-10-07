@@ -7,11 +7,13 @@
 
 应用逻辑、状态和布局使用 Go；小型 C ABI 桥接系统窗口、文本引擎和图形 API。UI 不依赖 WebView、浏览器或 Rust。可选的 VSIX 扩展宿主使用独立 Node.js 进程，核心窗口不需要 Node.js。
 
-**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)；Windows 默认窗口使用 D3D12/DXIL、DXGI flip swapchain 和 DirectWrite R8 字形图集。
+**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)；Windows 默认窗口使用 D3D12/DXIL、DXGI flip swapchain 和 DirectWrite 字形缓存。
 
 v0.4 增加版本化编辑缓冲区、原生选区/剪贴板接口、LSP 和 VSIX 编辑/语言提供者。gocode 接入官方 Copilot Language Server 与 Go SDK。API 见 [编辑与 LSP](docs/editor-and-lsp.md)，完整 VS Code 目标的当前覆盖见 [gocode 功能矩阵](https://github.com/neko233-com/gocode/blob/main/docs/vscode-parity.md)。
 
 v0.10.0 将可选 VSIX 宿主接到真实原生编辑视图，支持共享文档、独立视图身份、可见编辑器/列/范围/选区事件和有序的原生打开、显示、选区、reveal。关闭重开与异步焦点回执保护旧引用；Node 的来源/配置文件有界并在退出时清理。已通过 Windows amd64、macOS Intel/ARM 和 Ubuntu 五个平台 CI，具体范围见 [扩展编辑器契约](agent%20docs/extension-editors.md)。
+
+v0.11.0 已验证两种 Mac 的原生彩色字体。Windows 的后续实现保留 DirectWrite 整形，彩色字形缓存为原生预乘 RGBA，普通文字使用 R8；16 个字形纹理槽保持混合文字的一次绘制。实际颜色、透明度、独立原生参考图、缓存与恢复的验证范围见 [彩色字形记录](agent%20docs/color-glyphs.md)。Windows 候选的发布和 gocode 独立升级仍需完成。
 
 gocode 的安装与更新通过独立的 [发布入口](https://github.com/neko233-com/gocode/releases)
 提供 Windows x64 MSI／ZIP 和 macOS Intel／ARM 包，并维护免费 CLI、winget manifest、
@@ -34,8 +36,8 @@ gocode v0.14.0 使用公开 godesktop v0.8.0 的后台预备事务，增加原�
 
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
 | --- | --- | --- | --- | --- |
-| Windows 10+ | Win32 | Direct3D 12 / SM6，三帧 fence、DXGI 显示同步；无合适硬件时 WARP | DirectWrite，共享 R8 字形图集 | amd64 |
-| macOS 13+ | AppKit | Metal，实例化合批、三帧异步环；14+ CAMetalDisplayLink | CoreText，R8 字形图集 | arm64 / amd64 |
+| Windows 10+ | Win32 | Direct3D 12 / SM6，三帧 fence、DXGI 显示同步；无合适硬件时 WARP | DirectWrite，普通 R8／彩色 RGBA 缓存 | amd64 |
+| macOS 13+ | AppKit | Metal，实例化合批、三帧异步环；14+ CAMetalDisplayLink | CoreText，普通 R8／彩色 RGBA 缓存 | arm64 / amd64 |
 
 Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/doc/go1.27)。macOS 必须具备 Metal 设备。Linux 仅能构建和测试可移植核心；调用 `Run` 会明确返回不支持错误。
 
@@ -43,7 +45,7 @@ Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/d
 
 需要 Go 1.27+ 和 `CGO_ENABLED=1`。Go 1.27 已发布，见 [Go 官方公告](https://go.dev/blog/go1.27)。
 
-Windows：安装带 `gcc` / `g++` 的 64 位 MinGW-w64（例如 WinLibs 或 MSYS2 UCRT64），并将其 `bin` 目录加入 `PATH`。仅安装 Visual Studio 的 `cl.exe` 不够。原生桥接静态链接 MinGW 支持库，使用系统 D3D12/DXGI/DirectWrite DLL；需要支持 Shader Model 6.0 的硬件或系统 WARP，运行时不需要 DXC。
+Windows：安装带 `gcc` / `g++` 的 64 位 MinGW-w64（例如 WinLibs 或 MSYS2 UCRT64），并将其 `bin` 目录加入 `PATH`。仅安装 Visual Studio 的 `cl.exe` 不够。原生桥接静态链接 MinGW 支持库，使用系统 D3D12/DXGI/DirectWrite DLL；彩色字形缓存使用系统 Direct2D／D3D11 WARP。需要支持 Shader Model 6.0 的硬件或系统 WARP，运行时不需要 DXC。
 
 ```powershell
 git clone https://github.com/neko233-com/godesktop.git
@@ -171,7 +173,7 @@ CI 在 Windows Server 2022 / 2025 上运行完整 amd64 检查，macOS arm64 / a
 
 [架构](docs/architecture.md) · [现代绘制验收](docs/rendering-modernization.md) · [路线图](docs/roadmap.md) · [贡献说明](CONTRIBUTING.md)
 
-以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。两种后端使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制遇到在途资源时延后重绘。DirectWrite 与 CoreText 均按字形缓存 R8 覆盖率。两种后端提供有界的 GPU 资源恢复；Windows 实际 RemoveDevice 和 Metal 真实提交后的诊断恢复已通过 CI。实际 eGPU 故障场景和大列表虚拟化仍需补充。
+以原生 GPU API 和事件驱动渲染为基础，逐步建设能承载大型桌面软件的框架。两种后端使用 80 字节 GPU 实例、着色器裁剪、相邻命令合批和三个独立上传缓冲；GPU 完成后才复用缓冲，正常绘制遇到在途资源时延后重绘。DirectWrite 与 CoreText 按字形缓存普通 R8 覆盖率与彩色预乘 RGBA。两种后端提供有界的 GPU 资源恢复；Windows 实际 RemoveDevice 和 Metal 真实提交后的诊断恢复已通过 CI。实际 eGPU 故障场景和大列表虚拟化仍需补充。
 
 macOS 可运行 `CGO_ENABLED=1 go run ./internal/renderstress -require-backend metal`，检查真实 GPU 提交、三组缓冲复用、2048 个圆角矩形和 32 个共享文本命令的合批及上传量，并输出 CPU 帧编码 P50/P95。计数来自原生渲染器；没有 GPUI 同机对比，也不把 CI 虚拟环境中的数字当作真实设备性能保证。布局 benchmark 只测 Go 核心。
 

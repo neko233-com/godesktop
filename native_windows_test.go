@@ -252,9 +252,23 @@ func TestWindowsAMD64NativeIntegration(t *testing.T) {
 				}
 			}
 		}
+		// The emoji row must retain intrinsic yellow, rather than the label's
+		// white foreground. Mixed ordinary/color glyphs still share one draw.
+		colorPixels := 0
+		for y := physical(160); y < physical(208); y++ {
+			for x := physical(16); x < physical(80); x++ {
+				pixel := captured.RGBAAt(x, y)
+				if pixel.R > 150 && pixel.G > 110 && pixel.B < 70 {
+					colorPixels++
+				}
+			}
+		}
+		if colorPixels < 20 {
+			t.Fatalf("emoji lost intrinsic color: %d yellow pixels", colorPixels)
+		}
 		mustNative(t, w.Close())
 		closed := p.await(t, func(r testprotocol.Report) bool { return r.Event == "closed" })
-		if closed.Error != "" || closed.Renderer.Backend != "direct3d12" || closed.Renderer.GlyphRasterizations < 10 || closed.Renderer.GlyphAtlasBytes != 1024*1024 {
+		if closed.Error != "" || closed.Renderer.Backend != "direct3d12" || closed.Renderer.GlyphRasterizations < 10 || closed.Renderer.GlyphAtlasBytes != 2*1024*1024 || closed.Renderer.GlyphAtlasPages != 2 || closed.Renderer.DrawCalls != 1 {
 			t.Fatalf("Unicode atlas shutdown: %+v", closed)
 		}
 		p.exit(t)

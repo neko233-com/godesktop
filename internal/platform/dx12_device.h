@@ -103,20 +103,23 @@ class Device {
         return true;
     }
     bool make_pipeline() {
-        D3D12_DESCRIPTOR_RANGE range{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,1,0,D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND};
-        D3D12_ROOT_PARAMETER parameters[3]{};
+        D3D12_DESCRIPTOR_RANGE range{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,16,1,0,D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND};
+        D3D12_DESCRIPTOR_RANGE bitmapRange{D3D12_DESCRIPTOR_RANGE_TYPE_SRV,1,17,0,D3D12_DESCRIPTOR_RANGE_OFFSET_APPEND};
+        D3D12_ROOT_PARAMETER parameters[4]{};
         parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;
         parameters[0].Descriptor={0,0}; parameters[0].ShaderVisibility=D3D12_SHADER_VISIBILITY_VERTEX;
         parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
         parameters[1].Constants={0,0,4}; parameters[1].ShaderVisibility=D3D12_SHADER_VISIBILITY_VERTEX;
         parameters[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         parameters[2].DescriptorTable={1,&range}; parameters[2].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
+        parameters[3].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        parameters[3].DescriptorTable={1,&bitmapRange}; parameters[3].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
         D3D12_STATIC_SAMPLER_DESC sampler{};
         sampler.Filter=D3D12_FILTER_MIN_MAG_MIP_LINEAR;
         sampler.AddressU=sampler.AddressV=sampler.AddressW=D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
         sampler.ComparisonFunc=D3D12_COMPARISON_FUNC_ALWAYS;
         sampler.MaxLOD=D3D12_FLOAT32_MAX; sampler.ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
-        D3D12_ROOT_SIGNATURE_DESC signature{3,parameters,1,&sampler,D3D12_ROOT_SIGNATURE_FLAG_NONE};
+        D3D12_ROOT_SIGNATURE_DESC signature{4,parameters,1,&sampler,D3D12_ROOT_SIGNATURE_FLAG_NONE};
         ID3DBlob *serialized=nullptr,*messages=nullptr;
         HRESULT hr=D3D12SerializeRootSignature(&signature,D3D_ROOT_SIGNATURE_VERSION_1,&serialized,&messages);
         if(FAILED(hr)) {
@@ -246,7 +249,7 @@ public:
         if(!fixture) return true;
         D3D12_DESCRIPTOR_HEAP_DESC heap{}; heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_RTV; heap.NumDescriptors=slots;
         if(!ok(device->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&rtvs)),"Create RTV heap")) return false;
-        heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=1; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
+        heap.Type=D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV; heap.NumDescriptors=17; heap.Flags=D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
         if(!ok(device->CreateDescriptorHeap(&heap,IID_PPV_ARGS(&textures)),"Create texture heap")) return false;
         D3D12_QUERY_HEAP_DESC query{}; query.Type=D3D12_QUERY_HEAP_TYPE_TIMESTAMP; query.Count=slots*2;
         if(!ok(device->CreateQueryHeap(&query,IID_PPV_ARGS(&queries)),"Create timestamp heap")) return false;
@@ -285,7 +288,9 @@ public:
         if(!ok(queue->Signal(fence,++sequence),"Signal mask upload") || !wait(sequence,false)) return false;
         D3D12_SHADER_RESOURCE_VIEW_DESC srv{}; srv.Format=DXGI_FORMAT_R8_UNORM; srv.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
         srv.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; srv.Texture2D.MipLevels=1;
-        device->CreateShaderResourceView(mask,&srv,textures->GetCPUDescriptorHandleForHeapStart());
+        auto descriptor=textures->GetCPUDescriptorHandleForHeapStart();
+        auto descriptorSize=device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        for(unsigned i=0;i<17;i++) { device->CreateShaderResourceView(mask,&srv,descriptor); descriptor.ptr+=descriptorSize; }
         return true;
     }
     // Returns false with an empty error when the caller must defer submission.
@@ -309,6 +314,9 @@ public:
         list->SetGraphicsRoot32BitConstants(1,4,viewport,0);
         ID3D12DescriptorHeap *heaps[]={textures}; list->SetDescriptorHeaps(1,heaps);
         list->SetGraphicsRootDescriptorTable(2,textures->GetGPUDescriptorHandleForHeapStart());
+        auto bitmap=textures->GetGPUDescriptorHandleForHeapStart();
+        bitmap.ptr+=16*device->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
+        list->SetGraphicsRootDescriptorTable(3,bitmap);
         D3D12_VIEWPORT vp{0,0,static_cast<float>(width),static_cast<float>(height),0,1}; D3D12_RECT scissor{0,0,width,height};
         list->RSSetViewports(1,&vp); list->RSSetScissorRects(1,&scissor);
         list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);

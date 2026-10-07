@@ -32,6 +32,8 @@ Zed 的 [Windows 报告](https://zed.dev/blog/windows-progress-report) 说明了
 
 ## 预编译 Windows 着色器
 
+后续彩色字体实现让普通 R8 和原生预乘 RGBA 字形共用固定 16 槽纹理表，混合文字与几何保持一次绘制，用户 bitmap 使用独立绑定。Windows 彩色 cache miss 使用 DirectWrite 枚举和原生 Direct2D 光栅化，D3D12 仍负责窗口绘制；较新系统运行时查询 COLRv1 paint API。缓存以实际 R8/RGBA 页字节计费。Mac 的公开 v0.11.0 已通过两种架构三种密度，Windows 候选的实际颜色／参考图／缩放／淘汰／恢复范围与发布状态见 [工程记录](../agent%20docs/color-glyphs.md)。
+
 HLSL 为 `internal/platform/shaders/ui.hlsl`，实例 ABI 为 `gpu_scene.h`。DXIL 使用微软 DXC 1.9.2609.5，以 Shader Model 6.0 作为现代 Direct3D 12 的兼容基线；不要求应用运行时存在编译器。生成头文件记录两份源码的 SHA256。
 
 ```powershell

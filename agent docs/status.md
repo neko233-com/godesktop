@@ -1,5 +1,21 @@
 # Verified status
 
+2026-10-07 Windows color-font candidate: DirectWrite-shaped native COLR/paint
+glyphs retain premultiplied RGBA and label opacity, with ordinary R8, one mixed
+D3D12 draw and actual bounded byte accounting. Owned HWND 100/150/200% reference/
+color/clip/resize/two eviction/actual recovery/restart pixels pass locally.
+DXIL reproducibility and actionlint/ShellCheck pass. The first full three-repeat
+race run only fails the prior Unicode fixture's exact 1 MiB grayscale assertion;
+it now requires precise 2 MiB/two pages/one draw plus actual yellow emoji pixels.
+Final local full strict-cgo/three-repeat race/vet/fuzz/PE/console/GUI pass; merged
+root coverage is 96.7% (289661ba13fc4d79a191c9b616cc10c9). Native color at all
+three densities, bitmap reuse/128-entry and byte eviction/actual recovery,
+hardware/WARP DXIL ownership/pixels and regular glyph stress/recovery pass.
+Final actual font-format detection passes three-repeat Unicode integration and
+all density color checks. No-cgo fallback also passes. Source CI/public-module/
+release/install remain pending.
+color-glyphs.md records format scope and remaining SVG/bitmap/font coverage.
+
 2026-10-07 gocode v0.18.0 promotion: immutable source/package
 10bebade1495f234d8bf52cba72491ad598421c9 independently imports public core v0.11.0
 with GOWORK=off/no replace and passes all five jobs in

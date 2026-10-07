@@ -10,7 +10,8 @@ struct Instance {
 };
 
 StructuredBuffer<Instance> instances : register(t0);
-Texture2D<float4> glyphs : register(t1);
+Texture2D<float4> glyphs[16] : register(t1);
+Texture2D<float4> bitmap : register(t17);
 SamplerState glyphSampler : register(s0);
 cbuffer Frame : register(b0) { float2 viewport; float2 framePadding; };
 
@@ -24,6 +25,7 @@ struct Out {
     nointerpolation float4 clip : TEXCOORD4;
     nointerpolation float radius : TEXCOORD5;
     nointerpolation uint kind : TEXCOORD6;
+    nointerpolation uint glyphSlot : TEXCOORD7;
 };
 
 Out vertex_main(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_InstanceID) {
@@ -51,18 +53,44 @@ Out vertex_main(uint vertexIndex : SV_VertexID, uint instanceIndex : SV_Instance
     o.color = v.color;
     o.clip = v.clip;
     o.kind = v.kind;
+    o.glyphSlot = uint(v.padding.x);
     return o;
+}
+
+float4 glyphSample(uint slot, float2 uv) {
+    // Static slots and explicit LOD also preserve derivatives across mixed runs.
+    switch (slot) {
+        case 0: return glyphs[0].SampleLevel(glyphSampler,uv,0);
+        case 1: return glyphs[1].SampleLevel(glyphSampler,uv,0);
+        case 2: return glyphs[2].SampleLevel(glyphSampler,uv,0);
+        case 3: return glyphs[3].SampleLevel(glyphSampler,uv,0);
+        case 4: return glyphs[4].SampleLevel(glyphSampler,uv,0);
+        case 5: return glyphs[5].SampleLevel(glyphSampler,uv,0);
+        case 6: return glyphs[6].SampleLevel(glyphSampler,uv,0);
+        case 7: return glyphs[7].SampleLevel(glyphSampler,uv,0);
+        case 8: return glyphs[8].SampleLevel(glyphSampler,uv,0);
+        case 9: return glyphs[9].SampleLevel(glyphSampler,uv,0);
+        case 10: return glyphs[10].SampleLevel(glyphSampler,uv,0);
+        case 11: return glyphs[11].SampleLevel(glyphSampler,uv,0);
+        case 12: return glyphs[12].SampleLevel(glyphSampler,uv,0);
+        case 13: return glyphs[13].SampleLevel(glyphSampler,uv,0);
+        case 14: return glyphs[14].SampleLevel(glyphSampler,uv,0);
+        default: return glyphs[15].SampleLevel(glyphSampler,uv,0);
+    }
 }
 
 float4 fragment_main(Out input) : SV_Target {
     if (any(input.pixelPosition<input.clip.xy) || any(input.pixelPosition>=input.clip.xy+input.clip.zw)) discard;
     float alpha;
+    if (input.kind == 6) {
+        return glyphSample(input.glyphSlot,input.uv)*input.color.a;
+    }
     if (input.kind == 5) {
-        float4 rgba = glyphs.Sample(glyphSampler,input.uv);
+        float4 rgba = bitmap.SampleLevel(glyphSampler,input.uv,0);
         return float4(rgba.rgb*input.color.rgb*input.color.a,rgba.a*input.color.a);
     }
     if (input.kind == 2) {
-        alpha = glyphs.Sample(glyphSampler,input.uv).r*input.color.a;
+        alpha = glyphSample(input.glyphSlot,input.uv).r*input.color.a;
     } else {
         float2 q = abs(input.local-input.size*0.5)-(input.size*0.5-input.radius);
         float distance = length(max(q,0.0))+min(max(q.x,q.y),0.0)-input.radius;
