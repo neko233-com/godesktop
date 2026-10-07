@@ -19,6 +19,11 @@
   Critical native edits use acknowledged RPC rather than droppable notifications.
 - gocode consumes published framework versions, remains a public independent
   repository, and is pinned by a reproducible parent gitlink.
+- Its bounded native split tree shares canonical document/history/service
+  ownership while keeping per-group selection/scroll/tabs and large-file page
+  state. Shared reader/index lifetime extends beyond the original view; close
+  prompts cover unique dirty resources and late open/captured clicks retain
+  group identity. Exact scope and remaining API/layout gaps are in child groups.md.
 - Its native startup opens documents and scans Explorer on bounded workers,
   transferring private buffers/indexes to the UI once. Navigation/closed-path
   tickets preserve newer focus and unsaved identity. Commands/providers await

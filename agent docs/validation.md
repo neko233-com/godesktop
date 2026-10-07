@@ -17,6 +17,14 @@
 7. Visual checks read only the owned application's GPU output. Pin upstream UI
    source revision and record dimensions, DPI, theme, font and meaningful states.
 
+Native group acceptance adds shared UTF-16/CRLF edits, independent carets/scroll,
+actual group focus and horizontal sash drag, nested right/down geometry, stale
+held toolbar click and scoped Cancel/Save. Large split acceptance streams actual
+first/tail pages, closes the original view, reads its survivor and hashes unchanged
+bytes; Windows 2025 includes a real GiB. Both Mac architectures run normal/1.5/2.
+Release bytes, installed GUI and exact CI/source evidence remain separate gates;
+child groups.md records the eight-group bound and incomplete VSIX/layout scope.
+
 Workflow changes: scripts/validate-github-actions.ps1 (actionlint/ShellCheck),
 appropriate Go checks and git diff --check. Paid Copilot requests use isolated
 synthetic workspaces; ordinary CI performs real process handshake without prompts.

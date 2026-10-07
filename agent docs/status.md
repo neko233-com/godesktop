@@ -1,5 +1,35 @@
 # Verified status
 
+2026-10-07 gocode v0.16.0 promotion: immutable application/package source
+38f7d15533361ffc0b7a6e0c9b74d0dc21839962 passed all five jobs in
+[CI 37561829837](https://github.com/neko233-com/gocode/actions/runs/37561829837),
+independently importing public core v0.9.0/cb8b077 with GOWORK=off/no replace.
+Native right/down groups share canonical text/history/service identity and keep
+independent caret/scroll/tabs/pages. Group close protects shared dirty resources;
+held toolbar actions and background opens retain group review/origin identity.
+Actual shared-index GiB first/tail pixels, original-view close, survivor read and
+whole-file SHA256 pass on Windows 2025 and the installed GUI. Full local three-repeat
+race/strict-cgo/vet/console/GUI and all-five native/protocol/installer/package gates
+pass; both Mac architectures run normal/1.5/2. Windows 100%, ARM 200%, Intel 150%
+and installed 150% captures were inspected. Mac emoji's solid monochrome appearance
+remains a framework rendering gap. Separate actual GiB race search measured
+16.7425142 s / 811,864 new Go allocation bytes / 2,147,492,044 I/O bytes in that run.
+
+[Publication 37562709833](https://github.com/neko233-com/gocode/actions/runs/37562709833)
+reuses tested artifacts and tags exact source 38f7d15. Seven metadata files at
+5664fde pass two policy tests. Actual signed automatic gh-proxy.com, separate
+GitHub and manual ghfast.top ZIP bodies pass integrity; all released native gates
+and actual old v0.4.0/cfcd3513 GUI rollback pass. User v0.15→v0.16 updates through
+the existing stable launcher via direct GitHub. Installed GUI/both icons/Settings,
+native groups/actual GiB split and highlighted terminal pass. ConPTY is verified;
+Settings shows Up to date (0.16.0), automatic route and gopls ready. Update-config
+and user-PATH hashes match before/after; both mirrors and desktop/nested Start Menu
+stable targets remain, with MSI/launcher baseline 0.5.1. Copilot authenticated/
+LSP/SDK=true, networkPromptSent=false. Child documentation-only evidence/gitlink
+9aeedac5caf724cd937293c1283bc82caa4954bf retains exact tested source/metadata.
+Limits, hashes and incomplete persistence/VSIX groups/docking/multi-window,
+production/GPUI/VS Code/official Copilot VSIX scope remain in child groups.md/status.md.
+
 2026-10-07 gocode v0.15.0 promotion: immutable application/package source
 9ba89081f8aea463853c58a6c0955a9a91c950af passed all five jobs in
 [CI 37557043933](https://github.com/neko233-com/gocode/actions/runs/37557043933),
