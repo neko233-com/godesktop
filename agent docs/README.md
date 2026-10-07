@@ -19,5 +19,5 @@ agent documentation. Full production/VS Code parity remains an active objective.
 Native VSIX editor identity/visibility/columns, runtime/receipt bounds and evidence
 are in [extension editors](extension-editors.md).
 
-Intrinsic Mac emoji rendering, mixed GPU batches and cache/recovery pixel checks
+Intrinsic Windows/Mac emoji rendering, mixed GPU batches and cache/recovery pixel checks
 are in [color glyphs](color-glyphs.md).

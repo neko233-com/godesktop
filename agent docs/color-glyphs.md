@@ -175,3 +175,29 @@ two-channel/two-eviction/recovery deadlines and assertions remain unchanged.
 Actual local normal/150/200% color/reference/opacity/clip/resize/eviction/restart
 passes: reference color matches are 100%, tint/half-opacity differences are zero.
 Exact Windows source CI, published module and gocode promotion remain pending.
+
+## Published Windows color milestone
+
+Public v0.12.0 tags immutable c42b4b43f0a27452937850871681f26746e39d7f after
+all five jobs pass in [CI 37587610645](https://github.com/neko233-com/godesktop/actions/runs/37587610645).
+Both Windows 2022/2025 normal/150/200% RGB and mask matches are 100%; tint
+difference is zero and half-opacity error at most one channel unit. Their actual
+2022 normal and 2025 200% PNGs were inspected: legacy COLRv0 and modern COLRv1
+faces/details/skin-tone/ZWJ/heart, opacity, red ordinary text and strict clipping
+are correct. Fixed fixture dimensions retain the intended 640/960/1280-pixel
+client widths on small CI monitors. Normal mixed residency is 2 MiB/one draw.
+Both Windows full race/strict-cgo/native/bitmap/PE/WARP/recovery and both Mac/
+Ubuntu gates pass. Mac ARM's first 150% viewport timeout passed same-source retry;
+there is no weakened gate or established hardware cause. Local final full
+three-repeat validation is 3d68d6baff4d4a75b41980086a5c54f0 (root 96.7%).
+Independent gocode v0.19.0 public-module/source/package/release/install validation
+now passes at immutable 4616656 in all-five CI 37590651597/publication 37592393163.
+Actual Windows 2022/2025 terminal and shared split PNGs show intrinsic colors;
+native real decoded ANSI emoji gates retain resize/interrupt/exit/source checks.
+The first application's `??` output regression is fixed by owned PowerShell UTF-8
+startup, with real OEM-437/ASCII PowerShell 7/5.1 tests. Signed direct/mirror bodies,
+old-source GUI rollback and installed actual GiB/native/VSIX/terminal/settings/
+PATH checks pass. Mac three-density gates remain required. Child color-glyphs.md
+and status.md retain exact PNG counts, hashes and the unchanged Linux retry scope.
+Dedicated SVG/bitmap/currentColor font fixtures and the previously recorded full
+editor/VS Code/GPUI/official Copilot VSIX limits remain open.

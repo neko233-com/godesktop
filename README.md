@@ -13,7 +13,7 @@ v0.4 增加版本化编辑缓冲区、原生选区/剪贴板接口、LSP 和 VSI
 
 v0.10.0 将可选 VSIX 宿主接到真实原生编辑视图，支持共享文档、独立视图身份、可见编辑器/列/范围/选区事件和有序的原生打开、显示、选区、reveal。关闭重开与异步焦点回执保护旧引用；Node 的来源/配置文件有界并在退出时清理。已通过 Windows amd64、macOS Intel/ARM 和 Ubuntu 五个平台 CI，具体范围见 [扩展编辑器契约](agent%20docs/extension-editors.md)。
 
-v0.11.0 已验证两种 Mac 的原生彩色字体。Windows 的后续实现保留 DirectWrite 整形，彩色字形缓存为原生预乘 RGBA，普通文字使用 R8；16 个字形纹理槽保持混合文字的一次绘制。实际颜色、透明度、独立原生参考图、缓存与恢复的验证范围见 [彩色字形记录](agent%20docs/color-glyphs.md)。Windows 候选的发布和 gocode 独立升级仍需完成。
+v0.12.0 已发布并通过五平台 CI，支持 Windows 与 Mac 的原生彩色字体。Windows 保留 DirectWrite 整形，彩色字形按物理基线相位缓存为原生预乘 RGBA，普通文字使用 R8；16 个字形纹理槽保持混合文字的一次绘制。实际颜色、透明度、独立原生参考图、缓存与恢复的验证范围见 [彩色字形记录](agent%20docs/color-glyphs.md)。gocode v0.19.0 已使用公开模块，通过独立五平台、正式发行字节与本机安装验收。
 
 gocode 的安装与更新通过独立的 [发布入口](https://github.com/neko233-com/gocode/releases)
 提供 Windows x64 MSI／ZIP 和 macOS Intel／ARM 包，并维护免费 CLI、winget manifest、
@@ -66,7 +66,7 @@ CGO_ENABLED=1 go run ./examples/counter
 在已有应用中添加：
 
 ```sh
-go get github.com/neko233-com/godesktop@v0.8.0
+go get github.com/neko233-com/godesktop@v0.12.0
 ```
 
 ```go

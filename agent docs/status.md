@@ -1,5 +1,45 @@
 # Verified status
 
+2026-10-07 gocode v0.19.0 is public and installed: immutable source/package
+4616656105b0b0222b03524f207ee9d53ca335bb imports public core v0.12.0 with
+GOWORK=off/no replace and passes all five jobs in application CI 37590651597.
+Both Windows native/race/strict-cgo/ConPTY/VSIX/gopls/Copilot and Windows 2025
+actual GiB/MSI plus Mac Intel/ARM native/services/three-density/packages pass.
+Linux's first no-cgo descendant-close failure passes on unchanged same-source
+job retry; cause is unestablished and recurrence needs observer diagnostics.
+Earlier b69e9cf/37589544875 is not promoted: real Windows Console.WriteLine
+loses emoji as `??`. Owned PowerShell startup now selects UTF-8 after profiles;
+actual PowerShell 7/5.1 OEM-437/ASCII regression and console/GUI terminal gates
+pass without altered pixel/output/resize/interrupt/exit guards.
+Publication 37592393163 reuses tested artifacts, preserves the immutable source
+tag and maintains exactly seven free channel files at d6cd857. Actual signed
+automatic/direct GitHub/manual ghfast.top ZIP bodies, released native gates and
+real v0.4.0 GUI rollback pass. The user's stable launcher upgrades v0.18→v0.19;
+installed GUI/icons/Settings/groups/VSIX/actual GiB whole-source hash/highlighted
+terminal/shortcuts pass with unchanged config/PATH. Copilot reports
+authenticated/LSPInitialized/SDKConnected=true and networkPromptSent=false. Actual Windows
+2022/2025 terminal/shared split, ARM terminal, Intel split and installed Settings/
+terminal/GiB PNGs were inspected. Child status.md/color-glyphs.md record exact
+hashes and color counts. Full VS Code/UI/GPUI/official Copilot VSIX parity and
+previously recorded font/editor/services gaps remain active.
+
+2026-10-07 public core v0.12.0: immutable source
+c42b4b43f0a27452937850871681f26746e39d7f passes all five jobs in
+[CI 37587610645](https://github.com/neko233-com/godesktop/actions/runs/37587610645).
+Both Windows 100/150/200% actual COLRv0/COLRv1 reference RGB and masks match
+100%, tint difference zero and half-opacity error at most one. Actual 2022 normal
+and 2025 200% PNGs were inspected; pixel phase/direct rendering and exact readback
+fixture sizes retain original gates. Both Windows full race/native/bitmap/PE/
+WARP/device recovery and both Mac/Ubuntu pass. Mac ARM first 150% viewport timeout
+passes same-source retry without changed assertions/deadlines or claimed cause.
+Local final strict-cgo/three-repeat race/vet/fuzz/console/GUI/PE passes; merged
+root coverage is 96.7% (3d68d6baff4d4a75b41980086a5c54f0). Actual hardware/WARP
+and no-cgo regressions pass. Generation now tracks DXIL via HFiles, with explicit
+nonuniform glyph sampling; two-OS validation/readback diagnosis 37585540569 passes.
+Public module is published; independent gocode v0.19.0/source/package/release/
+installed promotion now passes as recorded above. Format/full parity scope
+remains in color-glyphs.md.
+
 2026-10-07 compiler compatibility: 7e26d21/37587262996 Windows 2022's older
 MinGW header lacks DrawTextOptions enum OR overloads; compilation rejects the
 combined reference options. The candidate casts the documented option bits to
