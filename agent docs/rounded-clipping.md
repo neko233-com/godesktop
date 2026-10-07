@@ -34,6 +34,17 @@ gates and fuzzing; merged root coverage is 94.0%. Exact source CI/public v0.15
 promotion follows. Native caption drag regions still use rectangular hit regions;
 the new rounded hit masks apply to Go element pointer activation.
 
+Initial exact source 896161ab23532cb61762b25591f0c6b721bed844 / CI 37640824870
+passes Ubuntu and both Windows full race/native/pixel/shader/PE gates, then all
+four native platforms reject renderstress's stale 80-byte upload assertion.
+The actual logs report 2336 instances and 373760 uploaded bytes, exactly 160
+bytes per instance; submission/slot/cache guards pass up to that assertion.
+The independent expected upload stride is updated to 160. The offscreen probe
+now reports 8*sizeof(GDGPUInstance) instead of a hardcoded 640, and its independent
+Go guard requires 1280. Local actual hardware DXIL passes 1440 pixel checks;
+native default/glyph eviction/completion-before-idle/device-removal recovery pass.
+The failed source is not tagged or published. Final corrected source CI follows.
+
 Application full-suite failures are retained in its ignored Windows logs. Its
 owned input trace confirms unexpected desktop move/click/focus events reached the
 visible native fixtures between replayed commands. GODESKTOP_TEST_INPUT_ISOLATION=1

@@ -111,7 +111,7 @@ extern "C" const char *gd_dx12_probe(uint32_t flags,uint32_t frameCount,GDGPUPro
         << ",\"ownership_deferrals\":" << renderer.ownershipDeferrals
         << ",\"diagnostic_readback_waits\":" << renderer.readbackWaits
         << ",\"stale_completion_checks\":1,\"diagnostic_queue_hold_ms\":100"
-        << ",\"instances_per_frame\":8,\"draw_calls_per_frame\":1,\"instance_bytes_per_frame\":640"
+        << ",\"instances_per_frame\":8,\"draw_calls_per_frame\":1,\"instance_bytes_per_frame\":" << 8*sizeof(GDGPUInstance)
         << ",\"cpu_samples_nanos\":" << numbers(cpuTimes) << ",\"gpu_samples_nanos\":" << numbers(gpuTimes) << '}';
     result->json=strdup(report.str().c_str());
     if(!result->json) return "D3D12 report allocation failed";

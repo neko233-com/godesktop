@@ -68,7 +68,7 @@ func validate(probe platform.GPUProbe, report nativeReport) (int, error) {
 	if report.VendorID == 0x1414 && report.DeviceID == 0x8c && !report.Software {
 		return 0, errors.New("Microsoft Basic Render Driver was incorrectly reported as hardware")
 	}
-	if report.FrameSlots != 3 || report.UsedSlots != 7 || report.MaxInFlight != 3 || report.OwnershipDeferrals != 1 || report.Instances != 8 || report.DrawCalls != 1 || report.InstanceBytes != 640 {
+	if report.FrameSlots != 3 || report.UsedSlots != 7 || report.MaxInFlight != 3 || report.OwnershipDeferrals != 1 || report.Instances != 8 || report.DrawCalls != 1 || report.InstanceBytes != 1280 {
 		return 0, fmt.Errorf("GPU instance or in-flight ownership validation failed: %+v", report)
 	}
 	if report.StaleCompletionChecks != 1 || report.DiagnosticQueueHoldMS != 100 {

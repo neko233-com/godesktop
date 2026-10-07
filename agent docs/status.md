@@ -13,6 +13,14 @@ merged root coverage is 94.0%. Pinned shader/workflow lint/vet/diff checks pass.
 Exact source CI/public tag and application promotion remain pending. Public
 v0.14.0 and installed gocode v0.21.0 remain unchanged. See rounded-clipping.md.
 
+Initial rounded source 896161a / CI 37640824870 fails all four native platforms
+at the old 80-byte renderstress upload assertion after earlier native checks pass.
+Actual 2336 instances/373760 bytes confirms the new 160-byte layout. The guard
+and offscreen expected bytes now match that layout, while the C probe derives its
+reported bytes from the real structure size. Local hardware DXIL (1440 samples),
+default/glyph eviction/idle completion/device recovery pass. Corrected source CI
+is required before v0.15 publication; this failure is retained as evidence.
+
 2026-10-07 core v0.14.0 is public at immutable
 08c8e355110b8e7241411e36781c2a1919d81eb5. All five exact-source jobs in
 CI 37624236198 pass, including Windows 2022/2025 native input/menu events,

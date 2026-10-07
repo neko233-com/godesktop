@@ -211,7 +211,7 @@ func run() error {
 	if stats.FrameSlots != 3 || stats.UsedSlotsMask != 7 || stats.MaxInFlight == 0 || stats.MaxInFlight > 3 || stats.BufferWaits != 0 {
 		return fmt.Errorf("three-slot asynchronous ownership failed: %+v", stats)
 	}
-	if stats.Instances < 2000 || stats.DrawCalls == 0 || (!*glyphEviction && stats.DrawCalls > 2) || stats.UploadedBytes != stats.Instances*80 {
+	if stats.Instances < 2000 || stats.DrawCalls == 0 || (!*glyphEviction && stats.DrawCalls > 2) || stats.UploadedBytes != stats.Instances*160 {
 		return fmt.Errorf("instancing/batching failed: %+v", stats)
 	}
 	if len(samples) < 3 || percentile(samples, 95) == 0 {
