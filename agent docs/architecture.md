@@ -30,6 +30,11 @@
   traversal and virtual visible rows avoid whole large-file or result-tree copies.
   Navigation verifies matched bytes/UTF-16 coordinates, document version/instance,
   focus and query generation before native selection or file-backed byte movement.
+- Replacement prepares complete immutable sources off UI, validates all disk and
+  buffer states, runs open hooks before final preflight, then commits all buffers
+  without interleaved callbacks. Per-file background saves follow, retaining dirty
+  undoable text on late conflicts. Captured click identity protects the reviewed
+  plan. This does not provide filesystem-wide atomicity or grouped global undo.
 - Immutable Go bitmaps transfer premultiplied RGBA copies to a UI-owned native
   128-entry / 64 MiB cache. Current-frame assets are pinned before any eviction;
   completed GPU frames own texture/staging lifetime. Device recovery retains

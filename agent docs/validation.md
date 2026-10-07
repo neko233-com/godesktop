@@ -43,4 +43,13 @@ source writes. Actual Windows 2025 GiB scan/native results are distinct from the
 and fuzz/held-receipt cancellation/identity tests; record I/O, allocation, race
 mode and hardware/run scope with timings. Public released bytes and the user's
 installed GUI must pass before claiming promotion. Exact v0.13.0 evidence is in
-the child search.md/status.md; PCRE2/workspace replace/full parity remain open.
+the child search.md/status.md; PCRE2/full parity remain open.
+
+Replacement adds real query/capture/field input, before/after GPU pixels, actual
+external disk-stale rejection, pointer-down/new-preview/pointer-up refusal, real
+per-file saves and blank-editor/native Undo. Worker/model gates hold receipts
+and use Node JavaScript capture oracles. Public v0.8.0 prepared transactions retain
+old history and reject identity/version/caret changes. Both Mac normal/1.5/2 and
+Windows console/GUI pass; released bytes/rollback/user install are separate gates.
+Exact v0.14.0 source/hash/evidence and global-undo/diff/regex/size gaps are in child
+replace.md/status.md. No narrow native gate establishes full VS Code parity.

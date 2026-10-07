@@ -1,5 +1,37 @@
 # Verified status
 
+2026-10-07 gocode v0.14.0 promotion: immutable source/package
+de2a98fb0a041cd88c0ec5ac658bb2fd41a62f9b passed all five jobs in
+[CI 37552538844](https://github.com/neko233-com/gocode/actions/runs/37552538844),
+independently importing public godesktop v0.8.0 with GOWORK=off/no replace.
+Native workspace replacement prepares complete snapshots off UI, preflights all
+targets, commits the buffer batch and uses existing per-file saves. Earlier
+unsaved text/history/EOL survive, stale query/edit/caret/reopen/disk and changed
+captured reviews reject, late save conflicts retain dirty undoable source. The
+real blank-editor focus bug found by native Undo is fixed. Local full strict-cgo/
+race/vet/console/GUI and new Node oracle/held-receipt tests pass. Mac Intel/ARM
+normal/1.5/2 actual events/Metal pixels pass. Windows 100% preview, ARM 200%
+changed-review and Intel 150% Undo PNGs were visually reviewed. Windows 2025 actual
+GiB race search remains green (32.0390007 s / 748,656 new Go allocation bytes in
+this scoped run); native GiB and existing tabs/VSIX/editor/gopls/watch/opener/
+terminal/MSI/package gates stay green.
+
+[Publication 37553566847](https://github.com/neko233-com/gocode/actions/runs/37553566847)
+reuses tested packages and tags v0.14.0 at de2a98f. Metadata 7749adf changes seven
+known files and passes policy tests. Real signed automatic/direct/manual ghfast.top
+ZIP bodies, released new/existing native gates and actual original v0.4.0 GUI
+rollback pass. The user's actual v0.13.0 updater selected 0.14.0/source de2a98f;
+stable MSI/launcher remains 0.5.1. Installed GUI/icons/Settings, replacement/
+search/tabs/caption/highlighted terminal, embedded ConPTY and update checks pass.
+Actual 1920×1230 / 150% preview/Settings PNGs were visually reviewed: Up to date
+(0.14.0), automatic route and gopls ready. Auto=true/mode=auto, both mirrors,
+desktop/nested Start Menu stable targets and normalized user PATH are preserved.
+Copilot authenticated/LSP/SDK=true; no AI prompt was sent. Public child gitlink
+advances to evidence c5af3fba393d33d7bb140de0e6973ab28f0a56a3. Per-file disk saves
+are not filesystem-wide atomicity; full global undo/individual/diff/JS/PCRE2 and
+production/GPUI/VS Code/official Copilot VSIX parity remain active. Exact limits,
+package hashes and source evidence are in child replace.md/status.md.
+
 2026-10-07 framework v0.8.0 promotion: immutable source
 d5d139dd365733e494589df8d471e2346c7a1729 passed all five jobs in
 [CI 37549368977](https://github.com/neko233-com/godesktop/actions/runs/37549368977)
