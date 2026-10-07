@@ -5,7 +5,12 @@ Public v0.16.0 is final immutable source
 CI 37667772124 pass on attempt 1. It includes the independent minimized/hidden
 UIWake fix, queue/admission bounds and native scheduler acceptance recorded in
 ui-dispatch.md. gocode now fetches this public version with GOWORK=off/no replace
-for independent application verification; its installed version remains v0.22.0.
+for independent application verification. Public/installed gocode v0.23.0 is
+now exact 47623823dd88fbb45422d096b545631be7e6b77b: all five source jobs in
+CI 37678679723 and publication 37682493872 pass. Released and installed
+console/GUI native four-mode Auto Save, Revert and actual minimized receipts
+pass with real disk/didSave and idle View/GPU proof. Owned-modal/capture/focus
+negative controls remain intact; child autosave.md records the precise scope.
 
 2026-10-08 diagnostics-only source 21feee2de0b05e7424dd6297d6e818638df45bfc
 in CI 37662570658 attempt 1 passes Windows 2022/2025, ARM and Ubuntu. ARM

@@ -1,10 +1,19 @@
 # UI dispatch without an available drawable
 
+Application promotion is now verified: public/installed gocode v0.23.0 is
+47623823dd88fbb45422d096b545631be7e6b77b on this independent public core.
+All five exact-source jobs in CI 37678679723 and publication 37682493872 pass.
+Local three-repeat Windows, released console/GUI and installed console/GUI
+actual minimized Auto Save pass: real IsIconic, Unicode/CRLF disk/didSave 1/2,
+dirty=false, Views 2->2 and Submitted 2->2, followed by restoration. Fixed
+current.json reports and source-bound released native marker are recorded in
+the child autosave.md/status.md; no drawable/render is needed for the receipts.
+
 Final public core v0.16.0 is exact source
 5178f551a179351391af6eaab62f3f5cf150350e; all five jobs in CI 37667772124
 attempt 1 pass, including both Windows and Metal architectures' complete native
 coalescing/idle/ownership/device/bitmap/glyph/density gates. It is published with
-an immutable tag; application-independent public-module validation follows.
+an immutable tag; application-independent public-module validation now passes.
 The initial 7e1e61d/37666610679 ends with Ubuntu success and all four native
 platforms failing the original counter floor as described below. Windows earlier
 full script/DXIL/viewport/bitmap/color gates pass before that same stress failure.

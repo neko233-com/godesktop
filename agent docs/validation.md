@@ -71,3 +71,16 @@ old history and reject identity/version/caret changes. Both Mac normal/1.5/2 and
 Windows console/GUI pass; released bytes/rollback/user install are separate gates.
 Exact v0.14.0 source/hash/evidence and global-undo/diff/regex/size gaps are in child
 replace.md/status.md. No narrow native gate establishes full VS Code parity.
+
+The 2026-10-08 public/installed application milestone is v0.23.0/source
+47623823dd88fbb45422d096b545631be7e6b77b on independently fetched public
+core v0.16.0. Exact-source CI 37678679723 passes all five jobs; publication
+37682493872 reuses those packages. Real signed full direct and mirror archives,
+all 25 ordered released native gates, real prior-version GUI/VSIX rollback,
+installed console/GUI Auto Save/minimized/native controls and real GiB shared
+split pass before advancing the submodule. The atomic native-success marker
+binds both payload SHA256s, source, version and ordered complete gates; resume
+is rejected after incomplete or changed native evidence. Tests reuse fixed
+ignored PNG/JSON/log paths and remove owned scratch. User config/PATH/shortcut
+bytes/targets/icons are independently checked unchanged. See child status.md,
+autosave.md and worker-receipts.md for exact logs and original failure evidence.

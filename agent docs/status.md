@@ -1,5 +1,45 @@
 # Verified status
 
+2026-10-08 gocode v0.23.0 is public and actually installed at immutable
+47623823dd88fbb45422d096b545631be7e6b77b. Independent GOWORK=off/no-replace
+validation consumes public core v0.16.0/5178f551 before this gitlink advances.
+Local default-three race/strict-cgo Windows passes (main 423.075s/33.6%); all
+five source jobs in CI 37678679723 attempt 1 pass, including Windows 2022/2025
+main 442.628s/512.883s and original native/GiB/services/MSI guards. Publication
+37682493872 succeeds and seven channel metadata files are at
+05404af95162921c89617d314b7ff6edb7feb60e. Child evidence is pinned at
+bad4e20f9b59a833e0e00bfd9288758925f4c5b8; only Markdown changes follow the
+release source. Published tags and assets are unchanged.
+The earlier bd2f48c/37676083407 cumulative 8m package alarm is retained in the
+child ledger; only aggregate budgets change, not product/per-scenario guards.
+
+Actual signed automatic update and full manual direct GitHub/ghfast.top Windows
+ZIP downloads match 19,129,156 bytes and SHA256
+05cff9bb4179f4316c28bfa8cd76f9eb28bd37e5e22cda02a2332ed86e4fe9e3.
+All 25 ordered released console/GUI native gates and genuine v0.4.0/cfcd351
+GUI/VSIX rollback pass. A bounded atomic proof marker binds exact source, both
+payload hashes and every gate; incomplete runs cannot be resumed as native
+success. Previous v0.22 direct-route failures remain historical evidence.
+The user's stable launcher now selects v0.23.0/47623823 by an actual reachable
+direct automatic route. Installed native File/Settings/icons/two keymaps/VSIX,
+actual 1,073,741,824-byte shared split/identical SHA256, terminal/Git/Auto Save/
+Revert and separate GUI executable gates pass. Both actual minimized console
+and GUI save reports show IsIconic=true, saves/didSave 1 and 2, dirty=false,
+Views 2->2 and GPU Submitted 2->2 until verified restoration. Actual 150% File,
+Settings, rounded Revert and extension-detail GPU captures are inspected.
+User update config/PATH and both stable Desktop/Start Menu shortcut bytes,
+targets and MSI icons match baseline; keyboard.json/autosave.json stay absent.
+Installed official Copilot SDK/LSP are authenticated/connected/initialized with
+networkPromptSent=false. See child status.md/autosave.md/worker-receipts.md.
+
+True ancestor rounding is verified, but overlay shadows and richer extension
+detail layout remain active UI gaps; the new local shadow candidate is not yet
+published or installed. Full VS Code UI/API/debug/tasks/official Copilot VSIX
+parity remains unfinished. Microsoft's FAQ is rechecked on 2026-10-08:
+alternative products cannot access the official Marketplace without separate
+authorization. Default live Open VSX/native authorized Gallery/local VSIX are
+the implemented scope; no live official Marketplace access is claimed.
+
 2026-10-08 public core v0.16.0 is immutable source
 5178f551a179351391af6eaab62f3f5cf150350e. All five exact-source jobs pass
 on first attempt in CI 37667772124: Windows 2022/2025, Metal Intel/ARM and
