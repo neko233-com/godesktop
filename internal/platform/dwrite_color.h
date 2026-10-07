@@ -149,7 +149,8 @@ public:
             context->SetTarget(target); context->SetTransform(D2D1::Matrix3x2F::Scale(scale,scale));
             brush->SetColor(D2D1::ColorF(1,0,0,1));
             context->BeginDraw(); context->Clear(D2D1::ColorF(0,0,0,1));
-            context->DrawTextLayout(D2D1::Point2F(0,0),layout,brush,D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT|D2D1_DRAW_TEXT_OPTIONS_NO_SNAP);
+            context->DrawTextLayout(D2D1::Point2F(0,0),layout,brush,
+                static_cast<D2D1_DRAW_TEXT_OPTIONS>(D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT|D2D1_DRAW_TEXT_OPTIONS_NO_SNAP));
             hr=context->EndDraw(); context->SetTarget(nullptr);
         }
         if(SUCCEEDED(hr)) hr=readback->CopyFromBitmap(nullptr,target,nullptr);

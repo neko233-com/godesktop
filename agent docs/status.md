@@ -1,5 +1,12 @@
 # Verified status
 
+2026-10-07 compiler compatibility: 7e26d21/37587262996 Windows 2022's older
+MinGW header lacks DrawTextOptions enum OR overloads; compilation rejects the
+combined reference options. The candidate casts the documented option bits to
+their API enum explicitly. Local actual normal/150/200% reference and masks
+match 100%, tint/opacity error zero; three-repeat Unicode also passes.
+Exact-source CI/promotion remains pending.
+
 2026-10-07 native color phase/density candidate: fc1a57c/37585540976 passes
 both Windows repeated race/strict-cgo/native/PE/bitmap gates, both Macs and Ubuntu.
 Windows 2022 fails unchanged 95% reference RGB (92.62% at 100%); Windows 2025
