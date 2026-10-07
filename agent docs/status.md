@@ -1,5 +1,19 @@
 # Verified status
 
+2026-10-07 framework v0.8.0 promotion: immutable source
+d5d139dd365733e494589df8d471e2346c7a1729 passed all five jobs in
+[CI 37549368977](https://github.com/neko233-com/godesktop/actions/runs/37549368977)
+(Windows 2022/2025 amd64, Mac Intel/ARM, Ubuntu) and is tagged/published as v0.8.0.
+Snapshot.Prepare / CanCommit / CommitPrepared retain buffer identity, monotonic
+version, saved revision and older undo/redo history. Local full strict-cgo/race/
+native/fuzz/PE/GUI passed with merged root coverage 96.7%; actual 8 MiB worker
+preparation/commit and concurrent newer source tests pass. Local measured commit
+allocates 64 Go bytes, a scoped measurement rather than a universal guarantee.
+gocode candidate independently downloads/imports public v0.8.0 with GOWORK=off
+and no replace; replacement planner/JavaScript capture oracle/three-repeat held
+receipt race tests pass. Native replacement/source/package promotion is pending;
+the user's installed/released app remains v0.13.0 with its original v0.7.0 core.
+
 2026-10-07 prepared transaction candidate: Snapshot.Prepare computes private
 UTF-16/EOL/selection/undo/protocol state on a cancellable worker. UI CanCommit
 checks identity/version/selection; CommitPrepared adopts text without scanning
