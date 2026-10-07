@@ -157,9 +157,14 @@ func run() error {
 				}()
 			}
 		} else {
-			for range 3 {
-				cx.Invalidate()
-			}
+			cx.Invalidate()
+			// Context now coalesces logical invalidations before crossing the
+			// native ABI. This fixture's existing CoalescedRequests assertion
+			// exercises the native frame scheduler, so send its two redundant
+			// requests directly to that layer; Go queue coalescing has separate
+			// bounded/owned-window acceptance. Keep the native count threshold.
+			platform.Wake()
+			platform.Wake()
 		}
 		rows := make([]*ui.Element, 0, 32)
 		for y := 0; y < 32; y++ {
@@ -224,7 +229,7 @@ func run() error {
 		return fmt.Errorf("idle clock did not stop: before=%+v after=%+v", idleBefore, idleAfter)
 	}
 	if stats.Submitted <= idleAfter.Submitted || stats.FrameRequests <= idleAfter.FrameRequests || stats.CoalescedRequests < *frames {
-		return fmt.Errorf("frame coalescing or wake after idle failed: %+v", stats)
+		return fmt.Errorf("frame coalescing or wake after idle failed: minimum_coalesced=%d idle_after=%+v renderer=%+v", *frames, idleAfter, stats)
 	}
 	if *glyphAtlas && (stats.GlyphRasterizations < 5 || stats.GlyphRasterizations > 14 || stats.GlyphCacheEntries != stats.GlyphRasterizations || stats.GlyphCacheHits < *frames*32*3 || stats.GlyphAtlasPages != 1 || stats.GlyphAtlasBytes != 1024*1024 || stats.GlyphAtlasPeakBytes != 1024*1024 || stats.GlyphAtlasEpochs != 0 || stats.GlyphUploadedBytes == 0 || stats.GlyphUploadedBytes > 10*1024*1024) {
 		return fmt.Errorf("changing text did not reuse a bounded glyph atlas: %+v", stats)

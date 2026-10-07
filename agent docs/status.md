@@ -15,6 +15,15 @@ fixture failure and unchanged five-native-submission guard are in ui-dispatch.md
 Metal exact-source CI/public-module/release/install checks remain pending.
 Published core v0.15.0 and installed gocode v0.22.0 remain unchanged. See ui-dispatch.md.
 
+Initial UI dispatch source 7e1e61d85c405f2b330a4da7262f81fc269cc39a /
+CI 37666610679 passes Ubuntu and both Windows full repeated/native scripts;
+later Windows steps remain pending. Both Macs then fail the native coalescing
+floor because Go now coalesces Invalidate calls before the native ABI. The fixture
+now sends its redundant requests to the native scheduler directly, preserving
+all native/idle/wake/90-frame guards. All five actual Windows normal/reuse/eviction/
+device-removal/completion-race stress modes pass on the correction. New exact CI
+is required; the initial source is not tagged. See ui-dispatch.md for real counters.
+
 Diagnostics-only source 21feee2de0b05e7424dd6297d6e818638df45bfc /
 CI 37662570658 attempt 1 passes Windows 2022/2025, ARM and Ubuntu, including
 ARM's full bitmap recovery and fractional/double-density regressions. Intel

@@ -53,3 +53,23 @@ native submissions, explicitly requesting the needed frames. All input/click/
 pixel/three-Run/shutdown guards remain. Final full checks are still required;
 the initial failure is in .cache/dispatch-windows-first.log. FIFO acceptance now
 drains two bounded turns and checks all 100 callbacks rather than a partial list.
+
+Initial exact source 7e1e61d85c405f2b330a4da7262f81fc269cc39a /
+CI 37666610679 passes Ubuntu and both Windows full repeated/native scripts;
+later Windows steps are still pending. Both Macs pass race/vet/smoke/close/
+viewport, then the glyph reuse fixture fails its original native coalescing
+floor: CoalescedRequests=2 (ARM) or 1 (Intel), while Submitted=Completed=92.
+Context now combines repeated invalidations before the native ABI, so that
+native counter cannot observe the fixture's three logical Invalidate calls.
+The corrected fixture sends one Context.Invalidate plus two direct platform.Wake
+requests to exercise the native scheduler below Go's tested queue coalescer.
+The existing coalescing/idle/wake/ownership/pixel/90-completion guards remain.
+Failure diagnostics now retain idle_after and the actual counter floor too.
+
+Actual Windows normal/glyph reuse/glyph eviction/completion-race stress all pass
+with Submitted=Completed=92 and CoalescedRequests=181; idle before/after both
+retain 91 submissions. Actual device removal passes Submitted101/Completed100/
+Dropped1/Recoveries1/Coalesced199, with idle before/after100. Their five original
+30s guards remain; JSON reports reuse .cache/dispatch-{render-stress,glyph-reuse,
+glyph-eviction,device-recovery,completion-race}.json. Corrected exact-source CI
+and public module validation are required; the failed source is not tagged.
