@@ -234,6 +234,7 @@ public:
         auto descriptorBase=frame.descriptors->GetCPUDescriptorHandleForHeapStart();
         UINT descriptorSize=engine.native()->GetDescriptorHandleIncrementSize(D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
         unsigned glyphSlot=0;
+        if(!stats.submitted) trace_stage("window glyph upload begin");
         for(unsigned i=0;i<frame.pages.size();i++) {
             const auto &page=frame.pages[i];
             if(!upload_page(frame,page)) return false;
@@ -244,6 +245,7 @@ public:
             engine.native()->CreateShaderResourceView(page->texture,&srv,descriptor);
         }
         if(glyphSlot>GlyphAtlas::maxPages) { error="Scene exceeds the glyph descriptor table"; return false; }
+        if(!stats.submitted) trace_stage("window glyph upload built");
         D3D12_SHADER_RESOURCE_VIEW_DESC white{}; white.Format=DXGI_FORMAT_R8_UNORM; white.ViewDimension=D3D12_SRV_DIMENSION_TEXTURE2D;
         white.Shader4ComponentMapping=D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING; white.Texture2D.MipLevels=1;
         // Every declared slot is valid, including the unused default bitmap slot.
@@ -276,8 +278,11 @@ public:
         } else { auto present=barrier(frame.target,D3D12_RESOURCE_STATE_RENDER_TARGET,D3D12_RESOURCE_STATE_PRESENT); list->ResourceBarrier(1,&present); }
         list->ResolveQueryData(queries,D3D12_QUERY_TYPE_TIMESTAMP,index*2,2,frame.readback,frame.pixelBytes);
         if(!ok(list->Close(),"Close window submission")) return false;
+        if(!stats.submitted) trace_stage("window ExecuteCommandLists begin");
         ID3D12CommandList *commands[]={list}; engine.commands()->ExecuteCommandLists(1,commands);
+        if(!stats.submitted) trace_stage("window ExecuteCommandLists returned");
         HRESULT presented=swapchain->Present(1,0); latencyReady=false;
+        if(!stats.submitted) trace_stage("window Present returned");
         if(!ok(presented,"Present D3D12 swapchain")) return false;
         if(!engine.signal(&frame.fence)) { error=engine.error; return false; }
         lastFence=frame.fence; frame.collected=false; frame.serial=++stats.submitted;

@@ -17,6 +17,11 @@
 
 namespace gd_dx12 {
 template<class T> void drop(T *&value) { if(value) { value->Release(); value=nullptr; } }
+inline void trace_stage(const char *stage) {
+    static const bool enabled=[] { wchar_t value[2]{}; GetEnvironmentVariableW(L"GODESKTOP_GPU_TRACE_STAGES",value,2); return value[0]==L'1'; }();
+    static thread_local unsigned lines=0;
+    if(enabled && lines++<128) { std::fprintf(stderr,"godesktop DX12 stage: %s\n",stage); std::fflush(stderr); }
+}
 inline bool software_adapter(const DXGI_ADAPTER_DESC1 &description) {
     // DXGI's primary Basic Render adapter may have display outputs and omit
     // SOFTWARE. Microsoft documents its stable vendor/device identity:

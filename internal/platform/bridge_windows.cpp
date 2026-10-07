@@ -188,8 +188,10 @@ struct Window {
         if(client.right==0 || client.bottom==0) return true;
         uint64_t started=gd_dx12::monotonic_nanos();
         float scale=dpi(handle)/96.0f;
+        if(!surface->stats.submitted) gd_dx12::trace_stage("window scene begin");
         layout_for_client(client.right,client.bottom,scale);
         if(!error.empty() || !build_scene(scale)) return false;
+        if(!surface->stats.submitted) gd_dx12::trace_stage("window scene built");
         if(!surface->submit(scene,client.right/scale,client.bottom/scale,background,started,gd_dx12::monotonic_nanos())) { error=surface->error; return false; }
         publish_stats(); return true;
     }

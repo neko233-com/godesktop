@@ -1,5 +1,13 @@
 # Verified status
 
+2026-10-07 initial Windows color source 03ed1c7/CI 37581933475 passes Mac Intel/
+ARM and Ubuntu; both Windows jobs fail preexisting readiness/input gates before
+the first GPU submission. It is not published. Local WARP+GPU-validation close
+passes. A candidate uses bounded once-per-face base font-table probing instead
+of SDK overloaded FontFace4 declarations; first-frame traces and a manual two-OS
+WARP validation/readback matrix preserve existing readiness deadlines.
+Exact-source rechecks/CI and diagnostic evidence remain pending; no cause claimed.
+
 2026-10-07 Windows color-font candidate: DirectWrite-shaped native COLR/paint
 glyphs retain premultiplied RGBA and label opacity, with ordinary R8, one mixed
 D3D12 draw and actual bounded byte accounting. Owned HWND 100/150/200% reference/

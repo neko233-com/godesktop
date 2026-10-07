@@ -48,7 +48,8 @@ class GlyphAtlas {
     // Font faces stay retained while their identity is part of a cache key.
     using Key=std::tuple<IDWriteFontFace *,float,float,UINT16,bool,unsigned,float,DWRITE_MEASURING_MODE,bool,float,float,float>;
     std::map<Key,Glyph> glyphs;
-    std::map<IDWriteFontFace *,IDWriteFontFace *> faces;
+    struct Face { IDWriteFontFace *font=nullptr; bool color=false; };
+    std::map<IDWriteFontFace *,Face> faces;
     ColorRasterizer colors;
 public:
     static constexpr unsigned maxPages=16,maxGlyphs=16384;
@@ -63,7 +64,7 @@ public:
     uint64_t activeBytes() const { uint64_t total=0; for(const auto &page:pages) total+=page->pixels.size(); return total; }
     void clear() {
         glyphs.clear(); pages.clear();
-        for(auto &face:faces) drop(face.second);
+        for(auto &face:faces) drop(face.second.font);
         faces.clear(); full=false; epochs++;
     }
     std::shared_ptr<AtlasPage> white() {
@@ -80,12 +81,30 @@ public:
         existing=glyphs.find(coloredKey);
         if(existing!=glyphs.end()) { hits++; return &existing->second; }
         if(glyphs.size()>=maxGlyphs) { full=true; return nullptr; }
+        auto knownFace=faces.find(run->fontFace);
+        if(knownFace==faces.end()) {
+            // Base DirectWrite table APIs avoid SDK-specific overload/vtable
+            // declarations. Probe once per retained face, including SVG/bitmap.
+            trace_stage("font table probe begin");
+            bool color=false;
+            const UINT32 tags[]={DWRITE_MAKE_OPENTYPE_TAG('C','O','L','R'),DWRITE_MAKE_OPENTYPE_TAG('S','V','G',' '),
+                DWRITE_MAKE_OPENTYPE_TAG('s','b','i','x'),DWRITE_MAKE_OPENTYPE_TAG('C','B','D','T')};
+            for(auto tag:tags) {
+                const void *data=nullptr; UINT32 size=0; void *table=nullptr; BOOL exists=FALSE;
+                HRESULT probe=run->fontFace->TryGetFontTable(tag,&data,&size,&table,&exists);
+                if(table) run->fontFace->ReleaseFontTable(table);
+                if(FAILED(probe)) { error="DirectWrite color font table probe failed"; return nullptr; }
+                color=color || exists!=FALSE;
+            }
+            run->fontFace->AddRef(); knownFace=faces.emplace(run->fontFace,Face{run->fontFace,color}).first;
+            trace_stage(color?"color font tables found":"ordinary font tables found");
+        }
         DWRITE_GLYPH_RUN single=*run;
         single.glyphCount=1; single.glyphIndices=run->glyphIndices+index;
         single.glyphAdvances=run->glyphAdvances?&advance:nullptr;
         single.glyphOffsets=nullptr;
         ColorGlyph color;
-        HRESULT hr=colors.rasterize(factory,single,scale,mode,foreground,color);
+        HRESULT hr=knownFace->second.color?colors.rasterize(factory,single,scale,mode,foreground,color):S_FALSE;
         if(FAILED(hr)) { error="Native color glyph rasterization failed (HRESULT="+std::to_string(uint32_t(hr))+")"; return nullptr; }
         bool rgba=hr==S_OK;
         IDWriteGlyphRunAnalysis *analysis=nullptr;
@@ -126,7 +145,6 @@ public:
             glyph.page->version++;
         }
         drop(analysis); rasterized++;
-        if(!faces.count(run->fontFace)) { run->fontFace->AddRef(); faces.emplace(run->fontFace,run->fontFace); }
         return &glyphs.emplace(color.foreground?std::move(coloredKey):std::move(key),std::move(glyph)).first->second;
     }
 };

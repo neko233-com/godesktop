@@ -33,10 +33,12 @@ class ColorRasterizer {
         if(initialized) return context!=nullptr;
         initialized=true;
         if(FAILED(source->QueryInterface(IID_PPV_ARGS(&factory)))) return false;
+        trace_stage("color D3D11 WARP creation begin");
         ID3D11DeviceContext *immediate=nullptr;
         HRESULT hr=D3D11CreateDevice(nullptr,D3D_DRIVER_TYPE_WARP,nullptr,D3D11_CREATE_DEVICE_BGRA_SUPPORT,
             nullptr,0,D3D11_SDK_VERSION,&device,nullptr,&immediate);
         drop(immediate);
+        trace_stage("color D3D11 WARP creation returned");
         if(FAILED(hr)) return false;
         IDXGIDevice *dxgi=nullptr;
         ID2D1DeviceContext *base=nullptr;
@@ -104,14 +106,8 @@ public:
     // S_FALSE means a monochrome glyph. Failures must not silently discard color.
     HRESULT rasterize(IDWriteFactory *source,const DWRITE_GLYPH_RUN &run,float scale,
                       DWRITE_MEASURING_MODE mode,GDColor foreground,ColorGlyph &result) {
-        IDWriteFontFace4 *face=nullptr;
-        HRESULT hr=run.fontFace->QueryInterface(IID_PPV_ARGS(&face));
-        // Query actual image formats, including SVG/bitmap fonts without COLR.
-        unsigned formats=SUCCEEDED(hr)?unsigned(face->GetGlyphImageFormats()):0;
-        bool color=(formats&~unsigned(DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE|DWRITE_GLYPH_IMAGE_FORMATS_CFF))!=0;
-        drop(face);
-        if(!color) return S_FALSE;
         if(!init(source)) return E_FAIL;
+        HRESULT hr=S_OK;
         constexpr unsigned supported=DWRITE_GLYPH_IMAGE_FORMATS_TRUETYPE|DWRITE_GLYPH_IMAGE_FORMATS_CFF|
             DWRITE_GLYPH_IMAGE_FORMATS_COLR|DWRITE_GLYPH_IMAGE_FORMATS_SVG|DWRITE_GLYPH_IMAGE_FORMATS_PNG|
             DWRITE_GLYPH_IMAGE_FORMATS_JPEG|DWRITE_GLYPH_IMAGE_FORMATS_TIFF|DWRITE_GLYPH_IMAGE_FORMATS_PREMULTIPLIED_B8G8R8A8;

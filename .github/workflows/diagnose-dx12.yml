@@ -1,0 +1,78 @@
+name: Diagnose Windows native rendering
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-2022, windows-2025]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 10
+    env:
+      CGO_ENABLED: '1'
+      GOEXPERIMENT: cgocheck2
+      GOAMD64: v1
+      GOWORK: 'off'
+      GODESKTOP_GPU_ADAPTER: warp
+      GODESKTOP_GPU_TRACE_STAGES: '1'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Compiler and SDK provenance
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Path .cache/dx12-diagnosis -Force | Out-Null
+          git rev-parse HEAD > .cache/dx12-diagnosis/source.txt
+          gcc --version > .cache/dx12-diagnosis/compiler.txt
+          $taskBin = Split-Path -Parent (Get-Command gcc).Source
+          foreach ($taskSDK in @("$taskBin/../x86_64-w64-mingw32/include","$taskBin/../include")) {
+            if (Test-Path -LiteralPath "$taskSDK/dwrite_3.h") {
+              Select-String -LiteralPath "$taskSDK/dwrite_3.h" -Pattern 'IDWriteFontFace4 :','GetGlyphImageFormats' -Context 0,12 > .cache/dx12-diagnosis/dwrite-header.txt
+              Select-String -LiteralPath "$taskSDK/d2d1_3.h" -Pattern 'ID2D1DeviceContext4','ID2D1DeviceContext5' -Context 0,12 > .cache/dx12-diagnosis/d2d-header.txt
+              break
+            }
+          }
+          Get-Content .cache/dx12-diagnosis/compiler.txt
+      - name: Ordinary and readback WARP lifecycles with GPU validation
+        shell: powershell
+        run: |
+          go build -o .cache/dx12-diagnosis/closeguard.exe ./internal/closeguard
+          if ($LASTEXITCODE -ne 0) { throw 'Diagnosis build failed.' }
+          $taskFailures = 0
+          foreach ($taskDebug in @('0','1')) {
+            $env:GODESKTOP_GPU_DEBUG = $taskDebug
+            foreach ($taskReadback in @('0','1')) {
+              $env:GODESKTOP_READBACK = $taskReadback
+              $taskLog = ".cache/dx12-diagnosis/debug-$taskDebug-readback-$taskReadback.log"
+              $taskInfo = New-Object System.Diagnostics.ProcessStartInfo
+              $taskInfo.FileName = (Resolve-Path .cache/dx12-diagnosis/closeguard.exe).Path
+              $taskInfo.Arguments = '-mode guard'
+              $taskInfo.UseShellExecute = $false
+              $taskInfo.CreateNoWindow = $true
+              $taskInfo.RedirectStandardOutput = $true
+              $taskInfo.RedirectStandardError = $true
+              $taskProcess = [Diagnostics.Process]::Start($taskInfo)
+              $taskOutput = $taskProcess.StandardOutput.ReadToEndAsync()
+              $taskError = $taskProcess.StandardError.ReadToEndAsync()
+              try {
+                if (-not $taskProcess.WaitForExit(15000)) { $taskProcess.Kill(); $taskFailures++; continue }
+                [IO.File]::WriteAllText((Join-Path (Get-Location) $taskLog),$taskOutput.Result + $taskError.Result)
+                Get-Content -LiteralPath $taskLog
+                if ($taskProcess.ExitCode -ne 0) { $taskFailures++ }
+              } finally { $taskProcess.Dispose() }
+            }
+          }
+          if ($taskFailures) { throw "$taskFailures diagnostic lifecycles failed; deadlines are unchanged." }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: dx12-diagnosis-${{ matrix.os }}
+          path: .cache/dx12-diagnosis/
+          include-hidden-files: true
+          if-no-files-found: error

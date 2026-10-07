@@ -36,6 +36,7 @@ jobs:
         env:
           GODESKTOP_GPU_DEBUG: '1'
           GODESKTOP_CLIPBOARD_TEST: '1'
+          GODESKTOP_GPU_TRACE_STAGES: '1'
         run: ./scripts/test-windows-amd64.ps1
       - name: Verify reproducible Direct3D 12 DXIL
         shell: powershell

@@ -85,8 +85,9 @@ The following candidate adds Windows color rendering; promotion is separate.
 ## Windows candidate
 
 DirectWrite retains shaping, fallback and the already selected glyph indices.
-Actual font image formats select color handling, including SVG/bitmap fonts
-without COLR. Color cache misses use TranslateColorGlyphRun and a lazy native
+Base DirectWrite color-table presence selects color handling, including
+SVG/sbix/CBDT without COLR. This bounded once-per-retained-face probe avoids
+SDK-dependent overload declarations. Color cache misses use TranslateColorGlyphRun and a lazy native
 Direct2D/D3D11 WARP rasterizer. COLR palette layers, SVG and bitmap formats have
 explicit native drawing paths. Newer systems additionally query Factory8 and
 Context7 at runtime for COLRv1 paint trees. Private compatibility declarations
@@ -128,3 +129,13 @@ Exact-source full regression, five-platform CI, immutable core publication,
 independent gocode/public-module/editor/ConPTY/release and installed upgrades are
 pending. Dedicated SVG/bitmap/currentColor font fixtures and arbitrary third-party
 font coverage remain open; enum/API paths alone do not prove those formats.
+
+Initial source 03ed1c7/run 37581933475 passes both Mac architectures and Ubuntu,
+but both Windows jobs fail existing ordinary readiness/input gates before a first
+GPU submission. A local WARP+GPU-validation close gate passes. The subsequent
+candidate replaces FontFace4's overloaded format probe with the stable base
+TryGetFontTable API and retains each face/table classification within atlas bounds.
+Opt-in bounded first-frame stage traces and a manual Windows 2022/2025 diagnostic
+compare ordinary/readback and validation-off/on lifecycles with the same ten-second
+readiness guard. SDK overload declarations are a suspected difference; source CI
+and diagnostic evidence are pending, and no driver/ABI cause is yet established.
