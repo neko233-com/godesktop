@@ -69,6 +69,14 @@ promotion remains pending; v0.17.0 remains installed/public.
 Glyph byte counters measure one atlas representation's actual page sizes;
 CPU mirrors, GPU textures and per-submission staging also have their own storage
 and lifetimes. They are not total process resident memory measurements.
+
+Independent public/installed gocode v0.18.0 source 10bebad now passes all five
+jobs in CI 37575737909; publication 37576841022 reuses tested packages. Both Mac
+normal/1.5/2 verify actual editor and PTY color glyphs; ARM 200% terminal and
+Intel 150% split PNGs were inspected. Signed automatic/direct/mirror bodies,
+actual prior v0.4.0 rollback and user's installed v0.18.0 GUI/icons/Settings,
+VSIX, actual GiB split/source hash and ConPTY pass with unchanged settings/PATH.
+Child color-glyphs.md/status.md record exact scope, image counts and asset hashes.
 Color glyph support does not establish general editor grapheme/bidi/IME,
 full VS Code UI parity or official Copilot VSIX compatibility.
 Windows currently retains DirectWrite monochrome glyph coverage; native Windows

@@ -1,5 +1,27 @@
 # Verified status
 
+2026-10-07 gocode v0.18.0 promotion: immutable source/package
+10bebade1495f234d8bf52cba72491ad598421c9 independently imports public core v0.11.0
+with GOWORK=off/no replace and passes all five jobs in
+[CI 37575737909](https://github.com/neko233-com/gocode/actions/runs/37575737909).
+Both Mac normal/1.5/2 gates prove intrinsic editor/PTY emoji plus actual
+command/string/ANSI terminal pixels. Actual ARM 200% terminal and Intel 150%
+split PNGs were inspected; both 200% terminal reports have 717 color glyph pixels.
+Complete local strict-cgo/three-repeat race/vet and console/GUI regressions pass.
+Publication 37576841022 reuses tested packages, tags exact source and maintains
+seven free distribution files at da39222; two Python policy tests pass.
+
+Real signed automatic/direct GitHub/manual ghfast.top bodies, released native
+gates and actual old v0.4.0 GUI rollback pass. User stable 0.5.1 launcher applies
+v0.17→v0.18/source 10bebad. Installed GUI/icons/Settings/groups/VSIX, actual GiB
+independent split/source hash, highlighted ConPTY and unchanged config/PATH pass.
+Settings shows Up to date (0.18.0), auto route/updates and gopls ready. Copilot
+authenticated/LSPInitialized/SDKConnected=true; networkPromptSent=false.
+Child evidence/gitlink f8c83111a63089f3d0b49895caa110b38bdc4be4 retains immutable
+tested source and metadata. Child status.md records exact asset hashes, retained
+Windows color-font/Mac resize/editor/API/VS Code/GPUI/official VSIX gaps.
+The accepted official SDK/Language Server route and full parity goal stay active.
+
 2026-10-07 public core v0.11.0: immutable source
 6706e59bd83b07705eed1e2d378dc954dd2a2970 passes all five jobs in
 [CI 37574802922](https://github.com/neko233-com/godesktop/actions/runs/37574802922)
