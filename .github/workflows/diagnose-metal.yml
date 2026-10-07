@@ -1,0 +1,44 @@
+name: Diagnose native Intel Metal
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  intel:
+    runs-on: macos-15-intel
+    timeout-minutes: 10
+    env:
+      CGO_ENABLED: '1'
+      GOEXPERIMENT: cgocheck2
+      GOWORK: 'off'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache: false
+      - name: Compare ordinary and readback drawable lifecycles
+        run: |
+          mkdir -p .cache/metal-diagnosis
+          git rev-parse HEAD > .cache/metal-diagnosis/source.txt
+          go build -o .cache/metal-diagnosis/closeguard ./internal/closeguard
+          go build -o .cache/metal-diagnosis/metaltest ./internal/metaltest
+          set +e
+          .cache/metal-diagnosis/closeguard -mode guard > .cache/metal-diagnosis/ordinary.log 2>&1
+          echo "ordinary:$?" >> .cache/metal-diagnosis/status.txt
+          GODESKTOP_READBACK=1 .cache/metal-diagnosis/closeguard -mode guard > .cache/metal-diagnosis/readback.log 2>&1
+          echo "readback:$?" >> .cache/metal-diagnosis/status.txt
+          .cache/metal-diagnosis/metaltest -output .cache/metal-diagnosis/pixels > .cache/metal-diagnosis/pixels.log 2>&1
+          echo "pixels:$?" >> .cache/metal-diagnosis/status.txt
+          cat .cache/metal-diagnosis/status.txt .cache/metal-diagnosis/ordinary.log .cache/metal-diagnosis/readback.log
+          python3 -c 'from pathlib import Path; rows=Path(".cache/metal-diagnosis/status.txt").read_text().splitlines(); assert len(rows)==3 and all(row.endswith(":0") for row in rows), rows'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: intel-metal-diagnosis
+          path: .cache/metal-diagnosis/
+          include-hidden-files: true
+          if-no-files-found: error

@@ -2,13 +2,16 @@
 package main
 
 import (
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	ui "github.com/neko233-com/godesktop"
+	"github.com/neko233-com/godesktop/internal/platform"
 )
 
 func main() {
@@ -17,7 +20,12 @@ func main() {
 	requests, allow, started, finished := 0, false, false, false
 	ready := false
 	done := make(chan struct{})
-	watchdog := time.AfterFunc(10*time.Second, func() { fmt.Fprintln(os.Stderr, "close guard timed out"); os.Exit(2) })
+	var viewFrames atomic.Uint64
+	watchdog := time.AfterFunc(10*time.Second, func() {
+		stats, _ := json.Marshal(platform.RendererStats())
+		fmt.Fprintf(os.Stderr, "close guard timed out: view_frames=%d renderer=%s\n", viewFrames.Load(), stats)
+		os.Exit(2)
+	})
 	defer watchdog.Stop()
 	err := ui.Run(ui.WindowOptions{Title: "godesktop close guard", Width: 640, Height: 420, CloseRequested: func(*ui.Context) bool {
 		requests++
@@ -27,6 +35,7 @@ func main() {
 		}
 		return allow
 	}}, func(cx *ui.Context) *ui.Element {
+		viewFrames.Add(1)
 		if !started {
 			started = true
 			go func() {

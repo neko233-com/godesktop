@@ -8,6 +8,12 @@ independent CoreText, RGBA eviction and recovery checks are in color-glyphs.md.
 Local strict-cgo/three-repeat Windows race checks pass. Mac source CI and
 application/release promotion are pending; v0.10.0/v0.17.0
 remain the independently tested public/installed releases below.
+Candidate f723217's CI 37573206185 passes both Windows jobs, Ubuntu and ARM Mac
+including normal/1.5/2 color, eviction/recovery pixels. Actual ARM PNGs were
+inspected: exact intrinsic RGB, correct opacity/clipping and one mixed draw.
+Intel's existing close guard timed out twice before the new pixel gate. A
+diagnostic workflow compares ordinary/readback drawable lifecycles and records
+atomic timeout state without relaxing the 10-second readiness requirement.
 
 2026-10-07 native extension-editor release: core v0.10.0 adds per-view identity,
 shared documents, visible/column/range/selection events, optional native open/show/

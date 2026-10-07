@@ -34,9 +34,18 @@ in-flight residency at most 64 MiB. The same color pixels are verified after
 three diagnostic resource recoveries and a subsequent Run lifecycle.
 
 These checks run in the existing Intel and ARM Mac jobs at normal, 1.5 and 2
-drawable density. Windows cannot validate AppKit/Metal locally. Native Mac
-compilation, pixel evidence, public core promotion, independent gocode source
-CI and installed release verification are still pending for this candidate.
+drawable density. Windows cannot validate AppKit/Metal locally. Candidate
+f723217's ARM job passes all three densities; actual PNGs were inspected.
+Reference opaque RGB matched 100%, foreground tint difference was zero and
+half-opacity error at most one channel unit. Normal mixed residency is 2 MiB;
+2x pressure forces two evictions with 16 MiB peak and 5 MiB final residency.
+Both Windows jobs and Ubuntu also pass CI 37573206185. Intel failed the existing
+10-second close-guard readiness gate twice, before the new color pixel gate.
+Its timeout now logs atomic frame/renderer state; workflow_dispatch diagnosis
+compares ordinary/readback close lifecycles and actual Metal pixel checks.
+No timeout or assertion has been relaxed and no cause is claimed yet.
+Public core promotion, independent gocode source CI and installed release
+verification remain pending.
 Color glyph support does not establish general editor grapheme/bidi/IME,
 full VS Code UI parity or official Copilot VSIX compatibility.
 Windows currently retains DirectWrite monochrome glyph coverage; native Windows
