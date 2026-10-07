@@ -14,6 +14,9 @@ inspected: exact intrinsic RGB, correct opacity/clipping and one mixed draw.
 Intel's existing close guard timed out twice before the new pixel gate. A
 diagnostic workflow compares ordinary/readback drawable lifecycles and records
 atomic timeout state without relaxing the 10-second readiness requirement.
+Diagnosis 37574223528/e0c65ef also fails readback readiness and pixel recovery
+drain. Static texture-slot dispatch/level-zero sampling is the next candidate;
+it retains the mixed batching/atlas contracts and has no verified Intel result yet.
 
 2026-10-07 native extension-editor release: core v0.10.0 adds per-view identity,
 shared documents, visible/column/range/selection events, optional native open/show/

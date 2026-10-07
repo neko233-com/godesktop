@@ -44,6 +44,12 @@ Both Windows jobs and Ubuntu also pass CI 37573206185. Intel failed the existing
 Its timeout now logs atomic frame/renderer state; workflow_dispatch diagnosis
 compares ordinary/readback close lifecycles and actual Metal pixel checks.
 No timeout or assertion has been relaxed and no cause is claimed yet.
+Diagnostic source e0c65ef/run 37574223528 fails both ordinary and readback
+10-second close readiness. Ordinary reached three completed frames; readback
+had one in-flight submission. Its pixel run could not drain Metal recovery
+within five seconds. A candidate shader now uses explicit static texture-slot
+dispatch and level-zero sampling, retaining one mixed painter-order batch.
+Its exact Intel/ARM CI and diagnosis are pending; driver causality is unproven.
 Public core promotion, independent gocode source CI and installed release
 verification remain pending.
 Color glyph support does not establish general editor grapheme/bidi/IME,
