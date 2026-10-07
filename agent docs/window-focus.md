@@ -34,3 +34,18 @@ race repeats (root 145.240s), all existing native/PE/console+GUI checks and fuzz
 merged root coverage remains 94.0%. Log: .cache/windows-focus-final.log.
 Exact-source CI/public v0.16 promotion remain pending. Published/installed gocode
 v0.22.0 continues to use immutable public core v0.15.0.
+
+Source ab6f0c47ad7582e13bca7ba77721c61963465726 / CI 37658957528 passes both
+Windows jobs, Intel and Ubuntu. ARM's ordinary bitmap check passes, but the
+existing bitmap -recovery fixture reaches the unchanged 40-second timeout.
+Artifact 11500540562 has run-0-reuse.png with six correct GPU samples and
+Completed >=12 at that capture, but no later grid/recovery report. Exact stall
+phase/recoveries/cause cannot be inferred. The fixture has no Input callback;
+activation has no handler there and original key-window frame requests remain.
+Correlation is not proof that focus caused it. Incomplete source is not tagged.
+Bitmap acceptance now records bounded atomic phase/stage/UI-stats snapshots
+plus one independent native-stats sample per second. Existing watchdog/phase/
+pixel/recovery guards remain; timeout writes stderr and owned timeout.json.
+Sampler shutdown is explicit. Three race/strict-cgo diagnostics tests pass
+(1.167s); actual Windows bitmap/recovery and new exact-source CI follow.
+Logs/artifacts reuse ignored .cache/ci-37658957528-arm-*.

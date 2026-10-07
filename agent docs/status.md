@@ -10,6 +10,14 @@ coverage 94.0%. Mapping/no-cgo/vet pass. Exact-source CI/public-module applicati
 validation/promotion remain pending. Public core v0.15.0 and installed gocode
 v0.22.0 remain the verified distribution. See window-focus.md and child autosave.md.
 
+First source ab6f0c47ad7582e13bca7ba77721c61963465726 / CI 37658957528 passes
+Windows 2022/2025, Intel and Ubuntu. ARM's old bitmap recovery fixture times out
+after correct phase-0 reused pixels; later phase/native metrics are missing and
+cause is unconfirmed. It is not tagged. Real atomic progress/stats timeout
+diagnostics are added without changing its 40-second/pixel/phase/recovery guards.
+Three strict-cgo/race diagnostics tests pass (1.167s); actual Windows bitmap/
+recovery and new exact-source CI remain required.
+
 2026-10-08 Windows workbench/rounding/keymaps promotion is public and installed
 as gocode v0.22.0/source 0b5966171e5e183e74a9fecbeccce391cd1cf229. All five
 exact-source app jobs in CI 37651719075 and tested-package publication
