@@ -34,6 +34,7 @@ assert.equal(t.terminals.length,1);assert.equal(t.active,original);assert.equal(
 t.sync({generation:2,terminals:[record('native:1'),record('native:2')],closed:[],activeId:'native:2'});assert.equal(opened,2);
 assert.throws(()=>t.sync({generation:3,terminals:[record('native:1')],closed:[record('native:1')]}));assert.equal(t.terminals.length,2);
 (async()=>{
+assert.equal(await original,original);
 response=new Error('owned startup rejected');const failed=t.create('failure');assert.equal(await failed.processId,undefined);assert.equal(failed.exitStatus.reason,0);assert.equal(closed,1);assert.equal(t.terminals.length,2);assert.throws(()=>failed.sendText('late'));
 response={generation:3,terminals:[record('native:1'),record('native:2')],closed:[],activeId:'native:2'};
 for(let i=0;i<128;i++)original.hide();assert.throws(()=>original.hide(),/queue limit/);

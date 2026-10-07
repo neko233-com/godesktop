@@ -65,6 +65,7 @@ module.exports = ({native, strict, EventEmitter, Uri, enabled, report}) => {
       item.tail = pending.catch(error => report(error)).finally(() => {queued--;queuedBytes-=bytes;});
     }
     item.public = strict('Terminal',{
+      then:undefined,
       get name(){return item.name;},get processId(){return item.processId;},get creationOptions(){return item.creationOptions;},
       get exitStatus(){return item.exitStatus;},get state(){return item.state;},get shellIntegration(){return undefined;},
       sendText(text, shouldExecute = true){
