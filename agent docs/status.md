@@ -1,5 +1,14 @@
 # Verified status
 
+2026-10-07 core v0.14.0 is public at immutable
+08c8e355110b8e7241411e36781c2a1919d81eb5. All five exact-source jobs in
+CI 37624236198 pass, including Windows 2022/2025 native input/menu events,
+full strict-cgo/three-repeat races, GPU/PE/recovery gates. The counter smoke
+retains the two-completed-submission assertion and 20-second guard. Both Mac
+existing suites pass on this corrected source; no Mac feature development is
+added. Independent public-module gocode v0.22.0 acceptance/promotion is underway.
+Installed application remains verified v0.21.0 until its package checks pass.
+
 2026-10-07 initial Windows menu source d0c82c3/CI 37623080158: both Windows full
 race/native/event/PE/fuzz checks pass (root 96.8%), then console smoke quits on
 view callback 2 after only one actual GPU submission. The counter now waits for

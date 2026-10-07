@@ -28,6 +28,12 @@ also passes real native shell File Open/Save As/cancel and UTF-16/emoji disk sav
 against this checkout. That workspace-linked result is not independent public
 module proof. Exact source CI and immutable core v0.14.0 remain pending.
 
+Final immutable v0.14.0 is 08c8e355110b8e7241411e36781c2a1919d81eb5. All five
+jobs pass in https://github.com/neko233-com/godesktop/actions/runs/37624236198,
+including both Windows native events/strict-cgo/race/GPU/PE/recovery and existing
+Mac/Ubuntu suites. No assertions/deadlines are relaxed. Public application module
+acceptance and promotion are recorded separately in its Windows workbench record.
+
 Initial source d0c82c3/CI 37623080158 passes both Windows full strict-cgo/race/
 native/PE checks (root 96.8%), new event harness, Intel and Ubuntu. Both Windows
 console counter smokes expose an older callback-count assumption: unpressed
