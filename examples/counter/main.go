@@ -27,12 +27,13 @@ func main() {
 			if frames == 1 {
 				cx.Dispatch(func() { count++ })
 			}
-			if frames == 2 {
+			if cx.RenderedFrames() >= 2 {
 				if count != 1 {
 					panic("dispatched state update was lost")
 				}
 				cx.Quit()
 			}
+			cx.Invalidate()
 		}
 		return ui.Column(
 			ui.Text("godesktop").FontSize(42),

@@ -27,3 +27,13 @@ input/close, bitmap/text/editor/Node/process checks. The application candidate
 also passes real native shell File Open/Save As/cancel and UTF-16/emoji disk saves
 against this checkout. That workspace-linked result is not independent public
 module proof. Exact source CI and immutable core v0.14.0 remain pending.
+
+Initial source d0c82c3/CI 37623080158 passes both Windows full strict-cgo/race/
+native/PE checks (root 96.8%), new event harness, Intel and Ubuntu. Both Windows
+console counter smokes expose an older callback-count assumption: unpressed
+hover may request a layout before the first GPU submission, so view callback 2
+quits with only one native frame. The counter now waits for two actual completed
+submissions and explicitly invalidates while waiting; the assertion/deadline is
+retained. ARM's existing repeated Metal recovery gate reports submitted/completed
+4, recoveries 0 and times out; logs/artifacts are retained, cause unestablished.
+No Mac feature change or relaxed native assertion is made for the Windows task.

@@ -1,5 +1,13 @@
 # Verified status
 
+2026-10-07 initial Windows menu source d0c82c3/CI 37623080158: both Windows full
+race/native/event/PE/fuzz checks pass (root 96.8%), then console smoke quits on
+view callback 2 after only one actual GPU submission. The counter now waits for
+two completed native submissions instead; callback count is not render proof.
+Intel and Ubuntu pass. ARM's existing repeated Metal recovery guard times out
+with submitted/completed 4, recoveries 0; cause unestablished, artifacts retained.
+Candidate correction/source CI/public core/application promotion remain pending.
+
 2026-10-07 Windows priority correction: native normal mouse release no longer
 immediately cancels an opened popup; unpressed hover and Alt system keys reach
 the application while stolen capture/focus loss and guarded Alt+F4 remain.
