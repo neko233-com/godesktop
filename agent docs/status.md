@@ -1,5 +1,15 @@
 # Verified status
 
+2026-10-07 core v0.15.0 is public at immutable
+4d62ed73a5513d8cbc281e05fe9ea43a74fd61ea. All five exact-source jobs pass in
+CI 37642213032: both Windows amd64, Mac Intel/ARM and Ubuntu. Windows includes
+rounded descendant pixels/hits, strict-cgo/three-repeat races, root coverage,
+fuzzing, pinned shader, bitmap/color/device recovery and default/WARP native
+instancing/idle/wake/ownership. Metal ABI/native regressions pass on both Macs.
+Publication retains the 16MiB scene cap and immutable v0.15 tag; the earlier
+896161a stale-stride failure is retained below. Independent public-module gocode
+v0.22.0 validation is underway; installed gocode remains verified v0.21.0.
+
 2026-10-07 v0.15 candidate adds actual descendant rounded clipping (shapes,
 glyphs/intrinsic emoji/bitmaps), matching rounded hit areas and hover fills for
 the application's latest VS Code Modern UI correction. Three Windows native

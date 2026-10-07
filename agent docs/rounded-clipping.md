@@ -45,6 +45,13 @@ Go guard requires 1280. Local actual hardware DXIL passes 1440 pixel checks;
 native default/glyph eviction/completion-before-idle/device-removal recovery pass.
 The failed source is not tagged or published. Final corrected source CI follows.
 
+Final immutable v0.15.0 source 4d62ed73a5513d8cbc281e05fe9ea43a74fd61ea passes
+all five jobs in CI 37642213032, including both Windows full script and default/
+WARP native GPU ownership/idle/recovery, and both Macs' existing Metal gates.
+The public tag and GitHub source release are published at that exact source.
+The application must independently fetch this module with GOWORK=off before
+advancing its release and the parent gitlink. Installed gocode is still v0.21.
+
 Application full-suite failures are retained in its ignored Windows logs. Its
 owned input trace confirms unexpected desktop move/click/focus events reached the
 visible native fixtures between replayed commands. GODESKTOP_TEST_INPUT_ISOLATION=1
