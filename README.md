@@ -15,6 +15,12 @@ v0.10.0 将可选 VSIX 宿主接到真实原生编辑视图，支持共享文档
 
 v0.12.0 已发布并通过五平台 CI，支持 Windows 与 Mac 的原生彩色字体。Windows 保留 DirectWrite 整形，彩色字形按物理基线相位缓存为原生预乘 RGBA，普通文字使用 R8；16 个字形纹理槽保持混合文字的一次绘制。实际颜色、透明度、独立原生参考图、缓存与恢复的验证范围见 [彩色字形记录](agent%20docs/color-glyphs.md)。gocode v0.19.0 已使用公开模块，通过独立五平台、正式发行字节与本机安装验收。
 
+v0.13.0 将可选 VSIX Terminal API 接到真实 ConPTY/PTY，覆盖 PID、环境、Unicode
+输入、显示/隐藏/焦点与生命周期；gocode v0.20.0 已完成五平台和本机验收。
+gocode v0.21.0 增加真实 Git 状态、暂存/取消暂存、索引提交与原生左右差异，
+已通过五平台、发行字节/回滚和本机安装验收。能力、内存边界与合并/扩展 SCM 等缺口见
+[Git 工程记录](https://github.com/neko233-com/gocode/blob/main/agent%20docs/scm.md)。
+
 gocode 的安装与更新通过独立的 [发布入口](https://github.com/neko233-com/gocode/releases)
 提供 Windows x64 MSI／ZIP 和 macOS Intel／ARM 包，并维护免费 CLI、winget manifest、
 Scoop bucket 和 Homebrew cask。原生更新页支持自动路由、GitHub 直连和手动镜像；

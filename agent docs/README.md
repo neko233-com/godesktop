@@ -22,5 +22,10 @@ are in [extension editors](extension-editors.md).
 Native VSIX terminal identity/process/lifecycle, ordered operations and bounds
 are in [extension terminals](extension-terminals.md).
 
+The application uses the public framework to validate native Git/index/HEAD
+actions and bounded side-by-side diff; its
+[SCM contract](https://github.com/neko233-com/gocode/blob/main/agent%20docs/scm.md)
+records real process/native evidence and remaining merge/provider scope.
+
 Intrinsic Windows/Mac emoji rendering, mixed GPU batches and cache/recovery pixel checks
 are in [color glyphs](color-glyphs.md).

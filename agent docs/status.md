@@ -1,5 +1,34 @@
 # Verified status
 
+2026-10-07 gocode v0.21.0 native Git promotion: real repository status/initialization,
+index stage/unstage/commit, bounded read-only original/staged/worktree GPU diff
+and owned Git cancellation use public core v0.13.0 with GOWORK=off. Local strict-
+cgo/three-repeat race/vet, no-cgo and full Windows console/GUI regressions pass.
+Initial app source 626ad70/CI 37612073450 passes both Windows, ARM and Ubuntu;
+Intel race/vet/native SCM normal/1.5/2/Copilot protocol pass before the total
+15-minute job deadline cancels gopls installation. Actual four-platform SCM
+PNGs were inspected, logs retained and packages not promoted. Only Intel's
+total job budget becomes 20 minutes; per-test deadlines/assertions stay intact.
+Immutable source/package 7f722c05bf7df7ad7b3a5c4f2c906cad80237360 passes all five
+jobs in exact CI 37614173233; Intel finishes in 12 minutes 6 seconds. Publication
+37615680818 reuses tested packages, and exactly seven free channel files at
+311a0ed pass Python policies. Final-source Windows 100%, ARM 200% and Intel
+150% diff PNGs were inspected through validated ZIP/CRC range reads. Actual signed
+automatic/direct/manual ghfast full release bodies, all released native gates
+including SCM and actual prior v0.4.0/cfcd351 GUI rollback pass.
+
+The user's original stable 0.5.1 launcher applies real v0.20→v0.21 via direct
+GitHub and selects exact 7f722c0. Installed GUI/icon handles/Settings/groups/real
+VSIX, actual 1,073,741,824-byte split with identical whole SHA256, highlighted
+and VSIX terminals and native SCM stage/unstage/commit/diff all pass. Installed
+Settings/SCM PNGs were inspected at 150%: up to date (0.21.0), auto/automatic route,
+gopls ready and SCM syntax ink 1674. Config/user PATH hashes and actual Desktop/
+Start Menu stable shortcut targets remain unchanged. Official Copilot auth/LSP/
+SDK are true, networkPromptSent=false. Parent gitlink pins child evidence
+a95b1c4163227b6f444d95e74c8710a2d6fd4a3f. Git merge/history/remote/extension SCM
+and full VS Code/GPUI/official Copilot VSIX parity remain pending.
+See the child's agent docs/scm.md for actual bounds and remaining work.
+
 2026-10-07 native terminal promotion: gocode v0.20.0 immutable source/package
 05ae59a211ca6649553682ab609d938600c6a86a independently imports public core v0.13.0
 with GOWORK=off/no replace. All five source jobs in application CI 37602674156
