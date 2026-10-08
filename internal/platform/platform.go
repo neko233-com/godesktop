@@ -33,6 +33,7 @@ type Command struct {
 	Bounds, Clip     Rect
 	Color            Color
 	Radius, FontSize float32
+	ShadowSigma      float32
 	Text             string
 	FontFamily       string
 	Bitmap           *Bitmap
@@ -44,6 +45,7 @@ const (
 	Line        = 3
 	DragRegion  = 4
 	BitmapImage = 5
+	Shadow      = 7 // GPU kind 6 is reserved for intrinsic-color glyphs.
 	Draw        = 1
 	PointerDown = 2
 	PointerUp   = 3

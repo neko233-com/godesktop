@@ -30,8 +30,11 @@ type Element struct {
 	clipRadius                                          float32
 	background, foreground                              Color
 	hoverBackground                                     Color
+	shadow                                              ShadowStyle
 	bitmap                                              *Bitmap
 	scrollX, scrollY                                    float32
+	positioned                                          bool
+	positionX, positionY                                float32
 }
 
 func element(kind elementKind) *Element {
@@ -57,6 +60,19 @@ func Row(children ...*Element) *Element {
 func Stack(children ...*Element) *Element {
 	e := element(stackKind)
 	e.children = children
+	return e
+}
+
+// Position places a direct Stack child at an offset from the Stack's padded
+// origin, using the child's intrinsic/explicit dimensions. Positioned children
+// do not contribute to Stack measurement. Negative offsets are allowed; paint
+// and input still respect the Stack's real rectangular/rounded ancestor clips.
+// Other parent kinds ignore Position. Offsets are bounded to [-1e6, 1e6] DIP;
+// non-finite values become zero. Position does not expand the child's hit area.
+func (e *Element) Position(x, y float32) *Element {
+	e.positioned = true
+	e.positionX = boundedFinite(x, -1e6, 1e6)
+	e.positionY = boundedFinite(y, -1e6, 1e6)
 	return e
 }
 

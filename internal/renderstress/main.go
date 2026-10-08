@@ -34,7 +34,7 @@ func percentile(samples []uint64, percentile int) uint64 {
 func run() error {
 	frames := flag.Uint64("frames", 90, "minimum completed native GPU frames")
 	requireBackend := flag.String("require-backend", "metal", "required renderer; refuses a different rendering path")
-	requireClock := flag.String("require-frame-clock", "cametaldisplaylink", "required native frame clock")
+	requireClock := flag.String("require-frame-clock", "cametaldisplaylink", "required exact clock; windows-native requires the actual owned HWND's D3D12 presentation/clock pair")
 	glyphAtlas := flag.Bool("glyph-atlas", false, "vary text every frame and require bounded per-glyph reuse")
 	glyphEviction := flag.Bool("glyph-eviction", false, "vary large font sizes to exercise atlas eviction and GPU lifetime")
 	deviceRecovery := flag.Bool("device-recovery", false, "remove this Windows renderer's actual D3D12 device and require recovery")
@@ -44,6 +44,9 @@ func run() error {
 	flag.Parse()
 	if *frames < 6 || *frames > 10000 {
 		return errors.New("frames must be between 6 and 10000")
+	}
+	if *requireClock == "windows-native" && (runtime.GOOS != "windows" || *requireBackend != "direct3d12") {
+		return errors.New("windows-native frame clock requires the Windows direct3d12 renderer")
 	}
 	if *glyphAtlas && *glyphEviction {
 		return errors.New("choose glyph reuse or glyph eviction validation")
@@ -87,6 +90,7 @@ func run() error {
 	var recoveryObserved bool
 	var completedBeforeRecovery uint64
 	var windowIdentity uint64
+	var windowPresentation string
 	var modelState int
 	var modelInitialized, dispatchedAfterRecovery bool
 	var idleBefore, idleAfter platform.RenderStats
@@ -123,8 +127,17 @@ func run() error {
 			cx.Quit()
 			return nil
 		}
-		if stats.FrameClock != *requireClock {
-			mismatch = fmt.Errorf("required %s frame clock, got %s", *requireClock, stats.FrameClock)
+		if *requireClock == "windows-native" {
+			presentation, identity, err := windowsWindowPresentation()
+			if err != nil || identity == 0 || (windowIdentity != 0 && windowIdentity != identity) {
+				mismatch = fmt.Errorf("owned Windows native presentation identity: before=%d after=%d: %v", windowIdentity, identity, err)
+				cx.Quit()
+				return nil
+			}
+			windowIdentity, windowPresentation = identity, presentation
+		}
+		if err := validateRequiredFrameClock(stats, *requireClock, windowPresentation); err != nil {
+			mismatch = err
 			cx.Quit()
 			return nil
 		}
@@ -259,7 +272,8 @@ func run() error {
 		MetalRecovery  bool                 `json:"diagnostic_metal_recovery,omitempty"`
 		WindowIdentity uint64               `json:"native_window_identity,omitempty"`
 		ModelState     int                  `json:"go_model_state_after_recovery,omitempty"`
-	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter, BeforeRecovery: completedBeforeRecovery, SinceRecovery: completedSinceRecovery, CompletionRace: *completionRace, MetalRecovery: *metalRecovery, WindowIdentity: windowIdentity, ModelState: modelState}
+		Presentation   string               `json:"windows_presentation,omitempty"`
+	}{Renderer: stats, Scene: fmt.Sprintf("2048 rounded quads + 32 text commands; changing colors; native GPU; glyph reuse=%t, eviction=%t", *glyphAtlas, *glyphEviction), Samples: len(samples), CPU50: percentile(samples, 50), CPU95: percentile(samples, 95), Scene95: percentile(sceneSamples, 95), Acquire95: percentile(acquireSamples, 95), Encode95: percentile(encodeSamples, 95), Elapsed: time.Since(started).Seconds(), IdleBefore: idleBefore, IdleAfter: idleAfter, BeforeRecovery: completedBeforeRecovery, SinceRecovery: completedSinceRecovery, CompletionRace: *completionRace, MetalRecovery: *metalRecovery, WindowIdentity: windowIdentity, ModelState: modelState, Presentation: windowPresentation}
 	data, err := json.MarshalIndent(report, "", "  ")
 	if err != nil {
 		return err

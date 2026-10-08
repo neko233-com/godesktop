@@ -41,6 +41,25 @@ jobs:
       - name: Verify reproducible Direct3D 12 DXIL
         shell: powershell
         run: ./scripts/validate-shaders.ps1
+      - name: Actual DX12 shadow pixels, inherited clips, positioned hits and idle recovery
+        shell: powershell
+        env:
+          CGO_ENABLED: '1'
+          GOEXPERIMENT: cgocheck2
+          GOAMD64: v1
+        run: |
+          New-Item -ItemType Directory -Path .cache/shadow-native -Force | Out-Null
+          go build -race -trimpath -o .cache/shadow-native/shadow-native.exe ./internal/shadownative
+          if ($LASTEXITCODE -ne 0) { throw 'Native shadow fixture build failed.' }
+          foreach ($taskDebug in @('0','1')) {
+            $env:GODESKTOP_GPU_DEBUG = $taskDebug
+            foreach ($taskAdapter in @('hardware','warp')) {
+              foreach ($taskDensity in @('1','1.5','2')) {
+                & ./.cache/shadow-native/shadow-native.exe -adapter $taskAdapter -density $taskDensity -recovery -output ".cache/shadow-native/debug$taskDebug-$taskAdapter-density$taskDensity"
+                if ($LASTEXITCODE -ne 0) { throw "Native shadow pixels/hits/idle/recovery failed: debug=$taskDebug $taskAdapter at $taskDensity density." }
+              }
+            }
+          }
       - name: Native viewport pixels, positioned horizontal wheel and clipped hit targets
         shell: powershell
         env:
@@ -88,7 +107,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 WARP validation failed' }
           go run ./internal/dx12test -frames 7 -debug=false -output .cache/dx12-uninstrumented
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 uninstrumented/remainder validation failed' }
-      - name: Default HWND D3D12, glyph reuse, DXGI pacing and idle wake
+      - name: Default HWND D3D12, glyph reuse, native presentation and idle wake
         shell: powershell
         env:
           CGO_ENABLED: '1'
@@ -96,23 +115,29 @@ jobs:
           GOEXPERIMENT: cgocheck2
           GODESKTOP_GPU_DEBUG: '1'
         run: |
-          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-default.json
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -glyph-atlas -output .cache/dx12-window-default.json
           if ($LASTEXITCODE -ne 0) { throw 'Default D3D12 HWND validation failed' }
-          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -completion-race -output .cache/dx12-window-completion-race.json
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -glyph-atlas -completion-race -output .cache/dx12-window-completion-race.json
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 completion-before-idle-wait race validation failed' }
-          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-eviction -output .cache/dx12-window-eviction.json
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -glyph-eviction -output .cache/dx12-window-eviction.json
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 glyph eviction/lifetime validation failed' }
-          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -device-recovery -output .cache/dx12-window-recovery.json
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -device-recovery -output .cache/dx12-window-recovery.json
           if ($LASTEXITCODE -ne 0) { throw 'D3D12 actual device removal/recovery validation failed' }
           $env:GODESKTOP_GPU_DEBUG = '0'
           go run -race ./internal/inputlatency -output .cache/dx12-input-latency.json
           if ($LASTEXITCODE -ne 0) { throw 'Native input to completed GPU pixel validation failed' }
           $env:GODESKTOP_GPU_DEBUG = '1'
           $env:GODESKTOP_GPU_ADAPTER = 'warp'
-          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -glyph-atlas -output .cache/dx12-window-warp.json
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -glyph-atlas -output .cache/dx12-window-warp.json
           if ($LASTEXITCODE -ne 0) { throw 'WARP D3D12 HWND validation failed' }
-          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock dxgi -device-recovery -output .cache/dx12-window-recovery-warp.json
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -device-recovery -output .cache/dx12-window-recovery-warp.json
           if ($LASTEXITCODE -ne 0) { throw 'WARP actual device removal/recovery validation failed' }
+          $env:GODESKTOP_GPU_DEBUG = '0'
+          go run ./internal/renderstress -require-backend direct3d12 -require-frame-clock windows-native -device-recovery -output .cache/dx12-window-recovery-warp-uninstrumented.json
+          if ($LASTEXITCODE -ne 0) { throw 'Uninstrumented WARP actual device removal/recovery validation failed' }
+          go run -race ./internal/dx12timeout | Tee-Object -FilePath .cache/dx12-healthy-timeout.json
+          if ($LASTEXITCODE -ne 0) { throw 'Actual pending WARP timeout/cancellation/terminal shutdown validation failed' }
+          $env:GODESKTOP_GPU_DEBUG = '1'
           go test -race -run '^TestWindowsAMD64NativeIntegration$' -count=1 -timeout=3m .
           if ($LASTEXITCODE -ne 0) { throw 'WARP native input/Unicode/pixel validation failed' }
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -125,6 +150,7 @@ jobs:
             .cache/bitmap-recovery/
             .cache/color-native-*/
             .cache/viewport-native/
+            .cache/shadow-native/
             bin/counter*.exe
             testdata/fuzz/
             .cache/dx12-default/
@@ -133,6 +159,9 @@ jobs:
             .cache/dx12-window-*.json
             .cache/dx12-window-*.json.png
             .cache/dx12-input-latency.json
+            .cache/dx12-healthy-timeout.json
+            .cache/software-presentation/
+            .cache/shutdown-failure/
           include-hidden-files: true
           if-no-files-found: warn
 
@@ -175,6 +204,14 @@ jobs:
           go run ./internal/closeguard -mode panic
       - name: Native monospace grid metrics
         run: go run ./internal/textmetric
+      - name: Actual Metal shadow pixels, inherited clips, positioned hits and idle recovery
+        shell: bash
+        run: |
+          mkdir -p bin/shadow-native
+          go build -race -trimpath -o bin/shadow-native/shadow-native ./internal/shadownative
+          for density in 1 1.5 2; do
+            bin/shadow-native/shadow-native -adapter hardware -density "$density" -recovery -output "bin/shadow-native/hardware-density$density"
+          done
       - name: Actual Metal viewport and owned native wheel/pointer events
         run: |
           go run ./internal/viewporttest -output bin/viewport-native
@@ -219,6 +256,7 @@ jobs:
             bin/viewport-native/
             bin/viewport-native-150/
             bin/viewport-native-200/
+            bin/shadow-native/
           if-no-files-found: warn
 
   core:

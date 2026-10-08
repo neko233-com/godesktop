@@ -7,8 +7,14 @@ package platform
 // DeviceRecoveries counts resource rebuilds. DroppedFrames counts old submissions
 // abandoned without confirmed GPU completion; after draining, Submitted equals
 // Completed plus DroppedFrames. Ordinary rendering has no dropped frames.
-// CPUTimeNanos is elapsed wall time through commit/present, including drawable waits;
-// SceneTimeNanos, AcquireTimeNanos and EncodeTimeNanos split that interval.
+// CPUTimeNanos is elapsed wall time through commit/present, including drawable
+// waits. For committed-dib it ends at GPU submission: later fence polling,
+// readback/frontbuffer copies and WM_PAINT blits are not included, so it is not
+// end-to-end visible-present latency. SceneTimeNanos, AcquireTimeNanos and
+// EncodeTimeNanos split that measured interval.
+// FrameClock distinguishes DXGI presentation from the Windows committed-target
+// path's asynchronous D3D12 completion fence (d3d12-fence). Both render with
+// D3D12; an owned HWND's presentation property identifies the actual path.
 type RenderStats struct {
 	Backend             string `json:"backend"`
 	FrameClock          string `json:"frame_clock"`
@@ -45,4 +51,19 @@ type RenderStats struct {
 	BitmapCacheBytes    uint64 `json:"bitmap_cache_bytes"`
 	BitmapUploads       uint64 `json:"bitmap_uploads"`
 	BitmapUploadedBytes uint64 `json:"bitmap_uploaded_bytes"`
+}
+
+func nativeFrameClock(value uint32) string {
+	switch value {
+	case 1:
+		return "mtkview"
+	case 2:
+		return "cametaldisplaylink"
+	case 3:
+		return "dxgi"
+	case 4:
+		return "d3d12-fence"
+	default:
+		return "unavailable"
+	}
 }

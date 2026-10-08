@@ -1,1 +1,4 @@
 * text=auto eol=lf
+
+# Immutable native producer bytes retain their recorded SHA256 on every OS.
+internal/dx12timeout/testdata/timeout-native-20261008.json -text -diff

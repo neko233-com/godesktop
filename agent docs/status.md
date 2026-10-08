@@ -1,5 +1,70 @@
 # Verified status
 
+2026-10-08 the child extension-editor source
+1549cac2d112bb8050b663f18c9e3cc9cc56760d fails both Windows jobs in
+CI 37698299244 attempt 1; Ubuntu and both Macs pass. Its preserved failures
+(GPU capture resize lag and geometry-mailbox sharing) are corrected within the
+original bounds. Default-three local Windows regression passes in 837.634s.
+The exact correction source 2d136492229d22fa502be4749d3048c1f256fbee
+then fails CI 37703702524 attempt 1: Windows 2022 reads the keymap file before
+the existing settings writer drains; Windows 2025 passes complete Windows and
+actual GiB model search, but its native GiB search/navigation times out. Ubuntu
+and both Macs pass. The new keymap acceptance closes/drains the actual writer
+and checks a bounded regular file off UI, instead of treating GPU completion or
+the default preset as disk evidence. Three targeted strict-cgo/race repetitions
+pass at actual 96 DPI/1024x728 client pixels (83.711s). Its default-three full
+Windows regression passes in 819.360s (main 487.831s/34.7%), with original
+console/GUI gates and unchanged public16 dependency. Frozen source hashes stay
+exact and owned processes/private temporary directories are empty afterward.
+CI's last real GiB checkpoint is the correct single large-file search result;
+the subsequent native click/open/navigation timeout remains under audit.
+The independent native GiB failure and new exact-source CI remain required.
+The later real-file negative control proves that the old void stop can return
+at 3s while an old write remains blocked behind coincidentally correct bytes.
+Those 819s results remain normal-path evidence only. The additive shared writer
+and keyboard binding now expose the existing writerDone channel; acceptance
+requires actual closure before checking the file. The writer body, queue,
+goroutines and original 3s limit stay unchanged. New strict-cgo/race CPU count3
+passes in 10.656s, no-cgo count3 in 0.457s, and both full vets pass. New-source
+native/default-three and independent GiB diagnosis remain pending.
+No v0.24.0 tag or installed promotion is made; this gitlink stays at the verified
+v0.23.0 evidence. Public core v0.16.0 is the independent child dependency.
+
+The earlier swapchain shadow/position candidate's six ordinary pixel cases and
+six hardware-preferred recovery cases pass, but forced WARP/debug=0 recovery
+crashes and also fails an exact immutable public16 control without Shadow.
+Nine minimal real-device SDK/WARP controls show committed offscreen targets
+close cleanly while swapchain buffers fail, including without Present and with
+actual process-local Agility 1.619.6 and newer developer WARP 1.0.21. This narrows
+the observed path, not the OS/driver root cause. The unpublished software
+presentation candidate keeps D3D12 GPU rendering with committed targets and
+fenced native DIB presentation. Its final r3 source passes three owned native
+critical groups in 12.495s: forced WARP/debug0 recovery at density1 (original
+removeAfter8, three Runs, all pixels/idle/context guards), non-diagnostic visible
+client presentation across three Runs, and actual exceptional window shutdown.
+The shutdown fixture holds the fifth real frame: Submitted5/Completed4/InFlight1;
+Run returns the original five-second error in 5022ms, with Completed4/Dropped1/
+InFlight0, a destroyed HWND and rejected old context. MAX is not completion.
+Client GetDC/BitBlt/GdiFlush verifies background and top/bottom orientation,
+independent resize/restore, idle FrameTicks and minimized close. All owned PIDs
+and private temps are absent; 155 source hashes stay byte-exact. This is local
+candidate evidence. The later r4 density/debug/adapter-policy matrix passes all
+24 cases and 72 real Window Runs in 99.093s, with actual DXGI/committed-DIB paths
+and maximum RGB error 1 against threshold 4. Its 157-source stamp stays exact;
+the separate strict-receipt CLI observes an actual 5000ms held offscreen drain,
+zero counted completion at MAX, and bounded terminal rejection/retirement.
+The initial default-three package alarm at 300.591s is retained; only its
+aggregate limit changes from 5m to 8m. The next run passes the root's three
+repetitions in 295.252s, then fails shared coverage metadata replacement in
+testing/winprobe. The harness now serializes packages sharing that directory
+with p=1, preserving race/repetitions/per-fixture bounds/90% combined coverage.
+The corrected full Windows default-three script passes in 383.171s: root
+291.625s, merged root coverage 95.1%, all original fuzz/PE/console+GUI gates,
+strict-cgo/race, and both private TMP directories empty. Source hashes stay
+exact; pinned DXC reproduces the shader bytes. Metal/exact-source CI and
+public-module promotion remain mandatory.
+See windows-device-removal.md and shadows.md; no v0.17.0 is published.
+
 2026-10-08 gocode v0.23.0 is public and actually installed at immutable
 47623823dd88fbb45422d096b545631be7e6b77b. Independent GOWORK=off/no-replace
 validation consumes public core v0.16.0/5178f551 before this gitlink advances.

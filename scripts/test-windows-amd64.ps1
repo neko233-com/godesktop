@@ -41,7 +41,9 @@ try {
     $env:GODESKTOP_NATIVE_COVERDIR = $taskNativeDir
     Write-Output "Windows amd64 / GOAMD64=v1 / compiler=$taskCompiler / strict cgo checking"
     Invoke-CheckedGo version
-    Invoke-CheckedGo test -race -shuffle=on "-count=$Repeat" -timeout=5m '-coverpkg=github.com/neko233-com/godesktop,github.com/neko233-com/godesktop/internal/platform' "-coverprofile=$taskReportDir/core.out" ./... -args "-test.gocoverdir=$taskCoreDir"
+    # Packages share native/root coverage metadata; Windows atomic replacement
+    # must not race another package emitting the same metadata filename.
+    Invoke-CheckedGo test -p=1 -race -shuffle=on "-count=$Repeat" -timeout=8m '-coverpkg=github.com/neko233-com/godesktop,github.com/neko233-com/godesktop/internal/platform' "-coverprofile=$taskReportDir/core.out" ./... -args "-test.gocoverdir=$taskCoreDir"
     Invoke-CheckedGo vet ./...
     foreach ($taskFuzz in @('FuzzRectIntersection', 'FuzzLayoutClipsToViewport')) {
         Invoke-CheckedGo test -run '^$' -fuzz "^${taskFuzz}$" "-fuzztime=${FuzzSeconds}s" -parallel=4 .

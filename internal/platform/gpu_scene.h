@@ -28,6 +28,17 @@ static inline GDGPUInstance gd_gpu_instance(const GDCommand *command) {
     result.color=command->color; result.radius=command->radius;
     result.kind=(uint32_t)command->kind;
     result.uv.w=1; result.uv.h=1;
+    if(command->kind==7) {
+        // One quad covers a truncated Gaussian mask blur. The unused texture
+        // rectangle carries its caster, and padding[1] carries DIP sigma.
+        // padding[0] remains the glyph texture slot; neither ABI grows.
+        const float sigma=command->font_size>0?command->font_size:0;
+        const float extent=4*sigma+1;
+        result.uv=command->bounds;
+        result.padding[1]=sigma;
+        result.bounds.x-=extent; result.bounds.y-=extent;
+        result.bounds.w+=2*extent; result.bounds.h+=2*extent;
+    }
     for(int i=0;i<4;i++) { result.rounded_bounds[i]=command->rounded_bounds[i]; result.rounded_radii[i]=command->rounded_radii[i]; }
     return result;
 }

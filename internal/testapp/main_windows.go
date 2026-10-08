@@ -141,7 +141,7 @@ func run(iteration int, scenario string) {
 				cx.Quit()
 			}
 			active.Store(&probeTarget{cx, func() {
-				emit(testprotocol.Report{Event: "probe", Run: iteration, Frame: frames, Clicks: clicks, Async: async, Guard: guard, NativeFrames: platform.RenderedFrames()})
+				emit(testprotocol.Report{Event: "probe", Run: iteration, Frame: frames, Clicks: clicks, Async: async, Guard: guard, NativeFrames: platform.RenderedFrames(), Renderer: platform.RendererStats()})
 			}})
 			if scenario == "panic-view" {
 				panic("fixture-view-panic")

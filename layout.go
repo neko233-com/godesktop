@@ -71,6 +71,9 @@ func (f *frame) size(e *Element) dimensions {
 			if c == nil {
 				continue
 			}
+			if e.kind == stackKind && c.positioned {
+				continue
+			}
 			child := f.size(c)
 			if e.kind == stackKind {
 				d.w, d.h = max(d.w, child.w), max(d.h, child.h)
@@ -129,6 +132,9 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 	if e == nil || bounds.w <= 0 || bounds.h <= 0 {
 		return
 	}
+	// An outset shadow belongs behind this surface, outside its own clip. Its
+	// ancestors still constrain paint, and it never expands layout or hit bounds.
+	f.paintShadow(e, bounds, clip)
 	clip = clip.intersect(bounds)
 	if clip.w <= 0 || clip.h <= 0 {
 		return
@@ -222,10 +228,13 @@ func (f *frame) layout(e *Element, bounds, clip rect, path string) {
 				continue
 			}
 			child := inner
-			if c.width > 0 {
+			if c.positioned {
+				d := f.size(c)
+				child = rect{inner.x + c.positionX, inner.y + c.positionY, d.w, d.h}
+			} else if c.width > 0 {
 				child.w = min(child.w, c.width)
 			}
-			if c.height > 0 {
+			if !c.positioned && c.height > 0 {
 				child.h = min(child.h, c.height)
 			}
 			f.layout(c, child, clip.intersect(inner), fmt.Sprintf("%s/%d", path, i))

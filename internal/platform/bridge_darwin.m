@@ -521,7 +521,9 @@ static GDView *create_gpu_view(NSRect frame,id<MTLDevice> device,GDColor backgro
         id<MTLRenderCommandEncoder> encoder=[buffer renderCommandEncoderWithDescriptor:pass];
         if(!encoder) { atomic_store(&slot->busy,false); [self fail:@"Metal command encoding failed"]; return; }
         [encoder setRenderPipelineState:self.pipeline];
-        float viewport[2]={self.bounds.size.width,self.bounds.size.height};
+        // Private frame uniform: DIP width/height, actual pixels per DIP, pad.
+        // Positive Gaussian shadows use the physical fragment position.
+        float viewport[4]={self.bounds.size.width,self.bounds.size.height,scale,0};
         [encoder setVertexBytes:viewport length:sizeof(viewport) atIndex:1];
         for(NSUInteger i=0;i<GDAtlasMaxPages;i++) {
             GDAtlasPage *page=i<native.glyphPages.count?native.glyphPages[i]:native.glyphPages[0];

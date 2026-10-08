@@ -20,6 +20,7 @@ import (
 
 	"github.com/neko233-com/godesktop/internal/testprotocol"
 	"github.com/neko233-com/godesktop/internal/winprobe"
+	renderprobe "github.com/neko233-com/godesktop/testing/winprobe"
 )
 
 type lockedOutput struct {
@@ -138,6 +139,12 @@ func fixtureWindow(t *testing.T, p *nativeProcess, run int) winprobe.Window {
 	if dpi := window.DPI(); dpi < 96 || dpi > 768 {
 		t.Fatalf("invalid DPI %d", dpi)
 	}
+	presentation, err := renderprobe.NativePresentation(window, uint32(p.command.Process.Pid))
+	mustNative(t, err)
+	// The diagnostic actor is a separate process. Only its own UI-thread probe
+	// receipt can report its renderer; the parent's statistics are unrelated.
+	actual := p.snapshot(t, run)
+	mustNative(t, renderprobe.ValidateWindowsPresentation(actual.Renderer, presentation))
 	return window
 }
 

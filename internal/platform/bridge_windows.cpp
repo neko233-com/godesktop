@@ -70,7 +70,8 @@ struct Window {
     uint64_t removeAfter=0;
     bool removalInjected=false;
     bool completionRace=false;
-    bool dirty=true,idle=false;
+    bool shutdownTimeout=false,shutdownHeld=false;
+    bool dirty=true,idle=false,closing=false;
     LONG layoutWidth=0,layoutHeight=0;
     bool layoutValid=false;
     std::vector<GDCommand> commands;
@@ -78,7 +79,14 @@ struct Window {
     std::map<std::tuple<std::string,float,std::string>,IDWriteTextLayout *> layouts;
     std::string error;
 
-    ~Window() { surface->finish(); clear_text(); release(text_factory); }
+    ~Window() {
+        close_surface();
+        // Command storage is retired while the window's atlas/bitmap caches
+        // still retain their resources; member destruction otherwise reverses
+        // that order. Cache cleanup below never submits more work.
+        surface.reset();
+        clear_text(); release(text_factory);
+    }
     void clear_text() { for(auto &item:layouts) release(item.second); layouts.clear(); }
     void publish_stats() {
         surface->stats.glyph_rasterizations=atlas.rasterized;
@@ -94,12 +102,26 @@ struct Window {
         rendered_frames.store(surface->stats.completed);
     }
     void request_frame() {
+        if(closing || !surface) return;
         surface->stats.frame_requests++;
         if(dirty) surface->stats.coalesced_requests++;
         dirty=true; idle=false;
     }
+    bool close_surface() {
+        closing=true;
+        if(!surface) return error.empty();
+        bool closed=surface->close();
+        if(!closed && error.empty()) error=surface->error.empty()?"GPU window shutdown failed":surface->error;
+        // Final failure/cancellation and counters are visible before releasing
+        // the HWND/current window. Surface retirement is idempotent.
+        publish_stats();
+        return closed && error.empty();
+    }
     bool open_surface(UINT width,UINT height) {
-        return surface->open(handle,width,height,readback?&capture:nullptr,hardwareOnly,warpOnly,debug);
+        if(!surface->open(handle,width,height,readback?&capture:nullptr,hardwareOnly,warpOnly,debug)) return false;
+        // The first Go View must observe the clock of this actual presentation
+        // path, including a selected software adapter before any submission.
+        publish_stats(); return true;
     }
     bool recover_surface() {
         if(!surface->deviceLost()) { error=surface->error; return false; }
@@ -109,8 +131,8 @@ struct Window {
         // submission. Account for abandoned work separately from GPU completion.
         saved.dropped_frames=saved.submitted-saved.completed;
         saved.in_flight=0; saved.device_recoveries++;
+        surface.reset(); // Retires command storage before clearing its caches.
         scene=gd_dx12::Scene{}; atlas.clear(); atlas.resetColorDevice(); bitmaps.clear();
-        surface.reset(); // Releases the old swapchain and all device resources.
         surface=std::make_unique<gd_dx12::Surface>();
         surface->stats=saved;
         RECT client{}; GetClientRect(handle,&client);
@@ -198,7 +220,7 @@ struct Window {
         layout_for_client(client.right,client.bottom,scale);
         if(!error.empty() || !build_scene(scale)) return false;
         if(!surface->stats.submitted) gd_dx12::trace_stage("window scene built");
-        if(!surface->submit(scene,client.right/scale,client.bottom/scale,background,started,gd_dx12::monotonic_nanos())) { error=surface->error; return false; }
+        if(!surface->submit(scene,client.right/scale,client.bottom/scale,scale,background,started,gd_dx12::monotonic_nanos())) { error=surface->error; return false; }
         publish_stats(); return true;
     }
     bool event_loop() {
@@ -208,10 +230,7 @@ struct Window {
             // still polls completions and lets visible GPU frames make progress.
             for(unsigned messages=0;messages<64 && PeekMessageW(&message,nullptr,0,0,PM_REMOVE);messages++) {
                 if(message.message==WM_QUIT) {
-                    bool finished=surface->finish();
-                    publish_stats();
-                    if(!finished) error=surface->error.empty()?"GPU window shutdown failed":surface->error;
-                    return finished;
+                    return close_surface();
                 }
                 TranslateMessage(&message); DispatchMessageW(&message);
             }
@@ -227,9 +246,18 @@ struct Window {
             bool visible=IsWindowVisible(handle) && !IsIconic(handle) && client.right>0 && client.bottom>0;
             if(dirty && visible) {
                 if(!surface->resize(client.right,client.bottom)) { if(recover_surface()) continue; return false; }
-                if(surface->ready()) {
+                // The owned shutdown fixture first collects four real frames,
+                // then gates the fifth actual submission. It waits on the
+                // existing completion event rather than polling or draining.
+                bool waitForShutdownBaseline=shutdownTimeout && !shutdownHeld && surface->stats.submitted>=4 && surface->stats.in_flight!=0;
+                if(surface->ready() && !waitForShutdownBaseline) {
+                    if(shutdownTimeout && !shutdownHeld && surface->stats.submitted>=4) {
+                        if(!surface->diagnosticHoldQueue()) { error=surface->error; return false; }
+                        shutdownHeld=true;
+                    }
                     dirty=false;
                     if(!draw()) { if(surface->deviceLost() && recover_surface()) continue; return false; }
+                    if(shutdownHeld && !SetPropW(handle,L"godesktop.shutdown-pending",reinterpret_cast<HANDLE>(uintptr_t(1)))) { error="Publish owned pending-shutdown submission failed"; return false; }
                     if(completionRace && !surface->diagnosticCompleteBeforeWatch()) { error=surface->error; return false; }
                     continue;
                 }
@@ -258,6 +286,12 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         SetWindowLongPtrW(handle,GWLP_USERDATA,reinterpret_cast<LONG_PTR>(window));
     }
     if(!window) return DefWindowProcW(handle,message,wparam,lparam);
+    if(window->closing && message!=WM_DESTROY) {
+        // Closing can produce focus/capture/paint messages. They must not
+        // reenter Go callbacks or schedule work against retired GPU storage.
+        if(message==WM_PAINT) { PAINTSTRUCT paint{}; BeginPaint(handle,&paint); EndPaint(handle,&paint); return 0; }
+        return DefWindowProcW(handle,message,wparam,lparam);
+    }
     // Opt-in native acceptance transport. USER32 marshals WM_COPYDATA across
     // processes; replay uses the original Win32 handler/GPU path. Physical
     // desktop input cannot alter a fixture while the user works elsewhere.
@@ -320,14 +354,22 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         }
         break;
     case WM_PAINT: {
-        PAINTSTRUCT paint{}; BeginPaint(handle,&paint); window->request_frame(); EndPaint(handle,&paint); return 0;
+        PAINTSTRUCT paint{}; HDC dc=BeginPaint(handle,&paint);
+        if(window->surface && window->surface->softwarePresentation()) {
+            // Expose only repaints the immutable completed software frontbuffer.
+            // It must not feed another Go View/submission back into WM_PAINT.
+            if(!window->surface->repaint(dc)) window->error=window->surface->error;
+        } else window->request_frame();
+        EndPaint(handle,&paint); return 0;
     }
     case WM_ERASEBKGND: return 1;
     case WM_SIZE:
         window->layoutValid=false;
+        if(window->surface && window->surface->softwarePresentation()) window->request_frame();
         InvalidateRect(handle,nullptr,FALSE); return 0;
     case WM_DPICHANGED: {
         window->layoutValid=false;
+        if(window->surface && window->surface->softwarePresentation()) window->request_frame();
         auto suggested=reinterpret_cast<RECT *>(lparam);
         SetWindowPos(handle,nullptr,suggested->left,suggested->top,suggested->right-suggested->left,suggested->bottom-suggested->top,SWP_NOZORDER|SWP_NOACTIVATE);
         InvalidateRect(handle,nullptr,FALSE); return 0;
@@ -425,9 +467,9 @@ LRESULT CALLBACK procedure(HWND handle,UINT message,WPARAM wparam,LPARAM lparam)
         if(wparam==1) ShowWindow(handle,SW_MINIMIZE);
         if(wparam==2) ShowWindow(handle,IsZoomed(handle)?SW_RESTORE:SW_MAXIMIZE);
         if(wparam==3) SendMessageW(handle,WM_CLOSE,0,0);
-        if(wparam==4) DestroyWindow(handle);
+        if(wparam==4) { window->close_surface(); DestroyWindow(handle); }
         return 0;
-    case WM_CLOSE: if(gd_go_should_close()) DestroyWindow(handle); return 0;
+    case WM_CLOSE: if(gd_go_should_close()) { window->close_surface(); DestroyWindow(handle); } return 0;
     case WM_DESTROY:
         active_window.store(nullptr); PostQuitMessage(0); return 0;
     }
@@ -518,13 +560,18 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                     window.removeAfter=_wcstoui64(removal,nullptr,10);
                     wchar_t completion[2]{}; GetEnvironmentVariableW(L"GODESKTOP_TEST_COMPLETION_RACE",completion,2);
                     window.completionRace=completion[0]==L'1';
-                    if(window.readback && !window.capture.open(handle)) window.error="GPU readback mapping creation failed";
+                    wchar_t shutdown[2]{}; GetEnvironmentVariableW(L"GODESKTOP_TEST_SHUTDOWN_TIMEOUT",shutdown,2);
+                    window.shutdownTimeout=shutdown[0]==L'1';
+                    if(window.shutdownTimeout && !window.test_input_isolation) window.error="Owned shutdown timeout probe requires isolated native input";
+                    else if(window.readback && !window.capture.open(handle)) window.error="GPU readback mapping creation failed";
                     else if(!window.open_surface(client.right,client.bottom)) window.error=window.surface->error;
                     else {
                         ShowWindow(handle,SW_SHOW); UpdateWindow(handle);
                         if(window.readback) SetWindowPos(handle,HWND_TOPMOST,0,0,0,0,SWP_NOMOVE|SWP_NOSIZE|SWP_NOACTIVATE);
                         window.event_loop();
                     }
+                    window.close_surface();
+                    RemovePropW(handle,L"godesktop.shutdown-pending");
                     RemovePropW(handle,L"godesktop.backend");
                     if(IsWindow(handle)) DestroyWindow(handle);
                     // An initialization/rendering error can leave the WM_QUIT
@@ -536,6 +583,7 @@ extern "C" const char *gd_run(const char *title,float width,float height,GDColor
                 current=nullptr;
             }
         }
+        window.close_surface();
         last_error=window.error;
     }
     CoUninitialize();

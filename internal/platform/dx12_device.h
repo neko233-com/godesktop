@@ -12,15 +12,34 @@
 #include <vector>
 #include <cstring>
 #include <cstdio>
+#include <exception>
 #include "gpu_scene.h"
 #include "gpu_shader_dx12.h"
 
 namespace gd_dx12 {
 template<class T> void drop(T *&value) { if(value) { value->Release(); value=nullptr; } }
-inline void trace_stage(const char *stage) {
+inline bool trace_enabled() {
     static const bool enabled=[] { wchar_t value[2]{}; GetEnvironmentVariableW(L"GODESKTOP_GPU_TRACE_STAGES",value,2); return value[0]==L'1'; }();
+    return enabled;
+}
+inline bool trace_admit() {
     static thread_local unsigned lines=0;
-    if(enabled && lines++<128) { std::fprintf(stderr,"godesktop DX12 stage: %s\n",stage); std::fflush(stderr); }
+    if(!trace_enabled() || lines>=128) return false;
+    lines++; return true;
+}
+inline void trace_stage(const char *stage) {
+    if(trace_admit()) { std::fprintf(stderr,"godesktop DX12 stage: %s\n",stage); std::fflush(stderr); }
+}
+template<class T> void drop_traced(T *&value,const char *stage) {
+    if(!value) return;
+    ULONG remaining=value->Release(); value=nullptr;
+    if(trace_admit()) { std::fprintf(stderr,"godesktop DX12 release: %s remaining=%lu\n",stage,static_cast<unsigned long>(remaining)); std::fflush(stderr); }
+}
+template<class T> void trace_reference(T *value,const char *stage) {
+    if(!value || !trace_admit()) return;
+    // Diagnostic counts are never used to admit reuse or infer GPU completion.
+    value->AddRef(); ULONG remaining=value->Release();
+    std::fprintf(stderr,"godesktop DX12 reference: %s count=%lu\n",stage,static_cast<unsigned long>(remaining)); std::fflush(stderr);
 }
 inline bool software_adapter(const DXGI_ADAPTER_DESC1 &description) {
     // DXGI's primary Basic Render adapter may have display outputs and omit
@@ -56,10 +75,12 @@ struct Frame {
     UINT64 pixelBytes=0;
     D3D12_CPU_DESCRIPTOR_HANDLE rtv{};
     void *mapped=nullptr;
-    ~Frame() {
+    void release() {
         if(instances && mapped) instances->Unmap(0,nullptr);
+        mapped=nullptr;
         drop(readback); drop(target); drop(instances); drop(allocator);
     }
+    ~Frame() { release(); }
     Frame()=default;
     Frame(const Frame&)=delete;
     Frame& operator=(const Frame&)=delete;
@@ -69,6 +90,7 @@ class Device {
     IDXGIFactory4 *factory=nullptr;
     IDXGIAdapter1 *adapter=nullptr;
     ID3D12Device *device=nullptr;
+    ID3D12Device5 *removalController=nullptr;
     ID3D12CommandQueue *queue=nullptr;
     ID3D12GraphicsCommandList *list=nullptr;
     ID3D12RootSignature *root=nullptr;
@@ -81,12 +103,22 @@ class Device {
     ID3D12InfoQueue *diagnostics=nullptr;
     HANDLE event=nullptr,waitEvent=nullptr;
     UINT64 sequence=0,frequency=0;
-    bool closed=false;
+    bool closed=false,terminal=false;
     bool ok(HRESULT value,const char *operation) {
         if(SUCCEEDED(value)) return true;
         char detail[192];
         std::snprintf(detail,sizeof(detail),"%s failed (HRESULT 0x%08lx)",operation,static_cast<unsigned long>(value));
         error=detail; return false;
+    }
+    bool removedFence() {
+        // UINT64_MAX denotes device removal, not a completed submission. The
+        // reason is diagnostic only; a transient S_OK must not admit reuse.
+        terminal=true; closed=true;
+        if(!error.empty()) return false;
+        HRESULT reason=device->GetDeviceRemovedReason();
+        if(SUCCEEDED(reason)) error="GPU fence reports device removal";
+        else ok(reason,"GPU device removed");
+        return false;
     }
     bool resource(const D3D12_RESOURCE_DESC &desc,D3D12_HEAP_TYPE type,D3D12_RESOURCE_STATES state,ID3D12Resource **out,const D3D12_CLEAR_VALUE *clear=nullptr) {
         D3D12_HEAP_PROPERTIES heap{}; heap.Type=type;
@@ -114,7 +146,7 @@ class Device {
         parameters[0].ParameterType=D3D12_ROOT_PARAMETER_TYPE_SRV;
         parameters[0].Descriptor={0,0}; parameters[0].ShaderVisibility=D3D12_SHADER_VISIBILITY_VERTEX;
         parameters[1].ParameterType=D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
-        parameters[1].Constants={0,0,4}; parameters[1].ShaderVisibility=D3D12_SHADER_VISIBILITY_VERTEX;
+        parameters[1].Constants={0,0,4}; parameters[1].ShaderVisibility=D3D12_SHADER_VISIBILITY_ALL;
         parameters[2].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
         parameters[2].DescriptorTable={1,&range}; parameters[2].ShaderVisibility=D3D12_SHADER_VISIBILITY_PIXEL;
         parameters[3].ParameterType=D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
@@ -166,38 +198,75 @@ public:
     Device(const Device&)=delete;
     Device& operator=(const Device&)=delete;
     ~Device() {
-        if(gate) gate->Signal(1);
-        if(queue && fence && waitEvent && !closed) drain();
+        if(!retireQueue()) std::terminate(); // Never release healthy in-use storage.
         // A completed fence is required before allocators, upload memory and
-        // descriptors can be destroyed. Normal draw/submit never waits.
+        // descriptors can be destroyed on a healthy device. On removal, drop
+        // queue ownership while every referenced object remains alive. Normal
+        // draw/submit never waits.
+        drop(list);
+        for(auto &frame:frames) drop(frame.allocator);
+        for(auto &frame:frames) frame.release();
         drop(diagnostics); drop(queries); drop(maskUpload); drop(mask);
-        drop(textures); drop(rtvs); drop(pipeline); drop(root); drop(list);
-        drop(gate); drop(fence); drop(queue); drop(adapter); drop(factory); drop(device);
+        drop(textures); drop(rtvs); drop(pipeline); drop(root);
+        drop(gate); drop(fence); drop(queue); drop(adapter); drop(factory); drop(removalController); drop_traced(device,"device final owner");
         if(event) CloseHandle(event);
         if(waitEvent) CloseHandle(waitEvent);
     }
     bool wait(UINT64 value,bool readback) {
+        if(terminal) { if(error.empty()) error="GPU device is terminal"; return false; }
         UINT64 done=fence->GetCompletedValue();
-        if(done==UINT64_MAX) return ok(device->GetDeviceRemovedReason(),"GPU device removed");
+        if(done==UINT64_MAX) return removedFence();
         if(done>=value) return true;
         if(readback) readbackWaits++;
         // UI completion watches may still have an older notification pending.
         // A drain/resize/readback waits on its own event and trusts the fence
         // value, never the identity or number of event wakeups.
-        if(!ok(fence->SetEventOnCompletion(value,waitEvent),"SetEventOnCompletion")) return false;
+        if(!ok(fence->SetEventOnCompletion(value,waitEvent),"SetEventOnCompletion")) { cancelAfterFailedDrain(); return false; }
         const ULONGLONG deadline=GetTickCount64()+5000;
         for(;;) {
             done=fence->GetCompletedValue();
-            if(done==UINT64_MAX) return ok(device->GetDeviceRemovedReason(),"GPU device removed");
+            if(done==UINT64_MAX) return removedFence();
             if(done>=value) return true;
             const ULONGLONG now=GetTickCount64();
-            if(now>=deadline) { error="GPU fence did not complete within five seconds"; return false; }
+            if(now>=deadline) { error="GPU fence did not complete within five seconds"; cancelAfterFailedDrain(); return false; }
             DWORD result=WaitForSingleObject(waitEvent,static_cast<DWORD>(deadline-now));
-            if(result!=WAIT_OBJECT_0 && result!=WAIT_TIMEOUT) { error="GPU fence wait failed"; return false; }
+            if(result!=WAIT_OBJECT_0 && result!=WAIT_TIMEOUT) { error="GPU fence wait failed"; cancelAfterFailedDrain(); return false; }
         }
     }
     ID3D12Device *native() const { return device; }
     ID3D12CommandQueue *commands() const { return queue; }
+    // Terminal only: a swapchain owner must release its queue reference first,
+    // retaining its frame resources during the release. A removed fence's
+    // UINT64_MAX is cancellation, never successful GPU completion; releasing
+    // a queue reference is not itself a completion or worker-join proof.
+    bool cancelAfterFailedDrain() {
+        if(terminal || !device) return true;
+        const std::string first=error;
+        // A removed fence is terminal even if the reason momentarily reports
+        // S_OK. Cancellation is never a completed-fence or worker-join proof.
+        if((fence && fence->GetCompletedValue()==UINT64_MAX) || FAILED(device->GetDeviceRemovedReason())) {
+            terminal=true; closed=true; return true;
+        }
+        if(!removalController) {
+            error=first.empty()?"GPU cancellation capability is unavailable":first;
+            return false;
+        }
+        terminal=true; closed=true;
+        removalController->RemoveDevice(); // Supported capability checked at open.
+        error=first;
+        return true;
+    }
+    bool retireQueue() {
+        if(gate) gate->Signal(1);
+        if(queue && fence && waitEvent && !closed && !terminal && device) {
+            if(fence->GetCompletedValue()==UINT64_MAX || FAILED(device->GetDeviceRemovedReason())) {
+                terminal=true; closed=true;
+            } else if(!drain() && !cancelAfterFailedDrain()) return false;
+        }
+        drop_traced(queue,"command queue owner");
+        closed=true; terminal=true;
+        return true;
+    }
     IDXGIFactory4 *dxgi() const { return factory; }
     ID3D12RootSignature *signature() const { return root; }
     ID3D12PipelineState *state() const { return pipeline; }
@@ -205,6 +274,7 @@ public:
     HANDLE completionEvent() const { return event; }
     UINT64 timestampFrequency() const { return frequency; }
     bool signal(UINT64 *value) {
+        if(terminal || !queue) { if(error.empty()) error="GPU device cannot accept another submission"; return false; }
         *value=++sequence; closed=false;
         return ok(queue->Signal(fence,*value),"Signal submission");
     }
@@ -243,6 +313,10 @@ public:
             if(!selected) { error="WARP does not support D3D12 / Shader Model 6.0"; return false; }
         }
         if(!device) { error="No hardware adapter supports D3D12 / Shader Model 6.0"; return false; }
+        // A bounded failed healthy drain must be able to cancel this exact
+        // device before command storage is released. Reject unsupported
+        // runtimes before any queue, frame allocation or user View is created.
+        if(!ok(device->QueryInterface(IID_PPV_ARGS(&removalController)),"Require terminal GPU cancellation capability")) return false;
         if(debugLayer) device->QueryInterface(IID_PPV_ARGS(&diagnostics));
         D3D12_COMMAND_QUEUE_DESC q{}; q.Type=D3D12_COMMAND_LIST_TYPE_DIRECT;
         if(!ok(device->CreateCommandQueue(&q,IID_PPV_ARGS(&queue)),"CreateCommandQueue") || !ok(queue->GetTimestampFrequency(&frequency),"GetTimestampFrequency")) return false;
@@ -302,10 +376,11 @@ public:
     // Reusing an allocator or writing its upload bytes before its fence completes
     // is forbidden, independently of command-list object reuse.
     bool submit(UINT slot,const GDGPUInstance *instances,UINT count,const float clear[4],UINT64 cpuStarted,UINT64 (*clock)()) {
+        if(terminal || !queue) { if(error.empty()) error="GPU device cannot accept another submission"; return false; }
         if(slot>=slots || !count || count>capacity) { error="Invalid D3D12 frame capacity"; return false; }
         auto &frame=frames[slot];
         UINT64 done=fence->GetCompletedValue();
-        if(done==UINT64_MAX) return ok(device->GetDeviceRemovedReason(),"GPU device removed");
+        if(done==UINT64_MAX) return removedFence();
         if(done<frame.fence) { ownershipDeferrals++; return false; }
         if(!ok(frame.allocator->Reset(),"Reset allocator") || !ok(list->Reset(frame.allocator,pipeline),"Reset command list")) return false;
         std::memcpy(frame.mapped,instances,count*sizeof(GDGPUInstance));
@@ -315,7 +390,7 @@ public:
         list->ClearRenderTargetView(frame.rtv,clear,0,nullptr);
         list->SetGraphicsRootSignature(root);
         list->SetGraphicsRootShaderResourceView(0,frame.instances->GetGPUVirtualAddress());
-        float viewport[4]={static_cast<float>(width),static_cast<float>(height),0,0};
+        float viewport[4]={static_cast<float>(width),static_cast<float>(height),1,0};
         list->SetGraphicsRoot32BitConstants(1,4,viewport,0);
         ID3D12DescriptorHeap *heaps[]={textures}; list->SetDescriptorHeaps(1,heaps);
         list->SetGraphicsRootDescriptorTable(2,textures->GetGPUDescriptorHandleForHeapStart());
@@ -333,9 +408,9 @@ public:
         list->CopyTextureRegion(&destination,0,0,0,&source,nullptr);
         list->ResolveQueryData(queries,D3D12_QUERY_TYPE_TIMESTAMP,slot*2,2,frame.readback,frame.pixelBytes);
         if(!ok(list->Close(),"Close frame")) return false;
+        closed=false; // A prior healthy drain does not cover this submission.
         ID3D12CommandList *commands[]={list}; queue->ExecuteCommandLists(1,commands);
-        frame.fence=++sequence;
-        if(!ok(queue->Signal(fence,frame.fence),"Signal frame")) return false;
+        if(!signal(&frame.fence)) return false;
         frame.cpuNanos=clock()-cpuStarted;
         submitted++; usedSlots|=1u<<slot;
         UINT flight=0; done=fence->GetCompletedValue();
@@ -357,13 +432,18 @@ public:
         completed++; return true;
     }
     bool drain() {
+        if(terminal) { if(error.empty()) error="GPU device is terminal"; return false; }
         if(!queue || !fence || !waitEvent) return false;
-        if(!ok(queue->Signal(fence,++sequence),"Signal shutdown") || !wait(sequence,false)) return false;
+        if(!ok(queue->Signal(fence,++sequence),"Signal shutdown")) { cancelAfterFailedDrain(); return false; }
+        if(!wait(sequence,false)) return false;
         closed=true; return true;
     }
     // Acceptance tests hold the queue briefly to prove that all three upload
     // buffers stay distinct and that a fourth submission cannot overwrite one.
     bool hold() {
+        if(terminal || !queue) { if(error.empty()) error="GPU device cannot hold another submission"; return false; }
+        if(gate) { error="GPU ownership test queue is already held"; return false; }
+        closed=false;
         return ok(device->CreateFence(0,D3D12_FENCE_FLAG_NONE,IID_PPV_ARGS(&gate)),"Create ownership test gate") && ok(queue->Wait(gate,1),"Hold ownership test queue");
     }
     bool resume() { return gate && ok(gate->Signal(1),"Release ownership test queue"); }

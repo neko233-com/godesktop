@@ -120,6 +120,11 @@ func Present(commands []Command) {
 			panic("native text buffer exceeds 4 GiB")
 		}
 		native[i] = C.GDCommand{kind: C.int(cmd.Kind), bounds: rectangle(cmd.Bounds), clip: rectangle(cmd.Clip), color: color(cmd.Color), radius: C.float(cmd.Radius), font_size: C.float(cmd.FontSize), text_offset: C.uint32_t(len(blob)), text_length: C.uint32_t(len(cmd.Text))}
+		if cmd.Kind == Shadow {
+			// This scalar is discriminated by kind: font size for labels,
+			// Gaussian sigma for shadows. Keep the pointer-free scene ABI intact.
+			native[i].font_size = C.float(cmd.ShadowSigma)
+		}
 		for j, mask := range cmd.RoundedClips {
 			native[i].rounded_bounds[j] = rectangle(mask.Bounds)
 			native[i].rounded_radii[j] = C.float(mask.Radius)
@@ -194,15 +199,7 @@ func RendererStats() RenderStats {
 	case 3:
 		name = "direct3d12"
 	}
-	clock := "unavailable"
-	switch s.frame_clock {
-	case 1:
-		clock = "mtkview"
-	case 2:
-		clock = "cametaldisplaylink"
-	case 3:
-		clock = "dxgi"
-	}
+	clock := nativeFrameClock(uint32(s.frame_clock))
 	return RenderStats{
 		Backend: name, FrameClock: clock, FrameSlots: uint32(s.frame_slots), UsedSlotsMask: uint32(s.used_slots_mask),
 		InFlight: uint32(s.in_flight), MaxInFlight: uint32(s.max_in_flight),

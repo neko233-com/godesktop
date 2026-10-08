@@ -11,10 +11,18 @@ The current Windows-only menu input and deferred IME record is in
 [Windows menus](windows-menus.md).
 Native descendant clipping, GPU ABI/budgets and isolated replay acceptance are in
 [rounded clipping](rounded-clipping.md).
+The local native shadow/positioned Stack candidate and independent numerical
+evidence are in [shadows](shadows.md). Forced non-debug WARP swapchain removal
+also fails in immutable public core v0.16.0. The unpublished committed-target
+software-presentation candidate passes the critical recovery/client/shutdown
+groups; the full Windows matrix and Metal/exact-source CI remain required.
 Native window activation and independent capture cancellation are in
 [window focus](window-focus.md).
 Background receipts while minimized/hidden, UI wake bounds and actual GPU-idle
 proof are in [UI dispatch](ui-dispatch.md).
+The independent non-debug WARP recovery controls and unpublished committed-target
+software presentation candidate are in
+[Windows device removal](windows-device-removal.md).
 
 A milestone is verified only after its real implementation and applicable
 platform checks pass. Distinguish model/transport tests, owned native-window

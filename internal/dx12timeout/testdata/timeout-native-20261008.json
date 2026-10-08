@@ -1,0 +1,2 @@
+{"schema":1,"pid":227032,"software":true,"debug":false,"initialDrain":true,"held":true,"actualSubmitted":1,"actualCompleted":0,"firstDrain":false,"drainMS":5000,"fenceBefore":2,"submittedFence":3,"fenceAfter":18446744073709551615,"removedReason":"0x887a0005","terminalDrain":false,"terminalWait":false,"terminalSignal":false,"terminalSubmit":false,"firstErrorPreserved":true,"terminalMS":0,"retired":true,"retireMS":0,"destructMS":15,"firstError":"GPU fence did not complete within five seconds","failure":"","pass":true}
+

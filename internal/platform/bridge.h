@@ -14,7 +14,7 @@ typedef struct {
     int kind;
     GDRect bounds, clip;
     GDColor color;
-    float radius, font_size;
+    float radius, font_size; // kind 7 uses font_size for Gaussian shadow sigma.
     uint32_t text_offset, text_length;
     uint32_t font_offset, font_length;
     uint64_t image_id;
