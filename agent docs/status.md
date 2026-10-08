@@ -1,5 +1,45 @@
 # Verified status
 
+The child settings-writer acknowledgement source now passes new native and
+full independent public16/GOWORK=off Windows checks: actual 96 DPI/1024x728
+targeted strict-cgo/race/count3 in 85.305s and default-three/debug0 full script
+in 829.761s (main 505.467s/34.8%). Actual writerDone closure precedes the exact
+file check; all owned processes and private TMP/config are absent afterward.
+The new receipt is a9c61a6aee0eeaf1048c4d4d45b7f8c2e5ca44558a9efc25c66bc9728dd618ad;
+the older 819s normal-path receipt and its pre-ack source archive stay unchanged.
+Root's separate r4 diagnostic GiB run passes all thirteen original phases in
+23.039s at actual HWND DPI96/client1024x720 and six real GPU captures1024x720/
+Scale1. PID228328 is gone, its job has zero processes and private scratch is
+absent. This fixes the r3 runner coordinate-domain error, whose failed small
+profile remains retained; it does not explain or repair the original CI timeout.
+Real-file CPU controls also prove the original phase12 ignores actual open and
+30-second Verify errors (deadline30.0015612s, receipt30.0125489s). A minimal
+acceptance-only current-request outcome/normal-cleanup correction is in progress.
+New exact-source CI and public/installed promotion remain required.
+
+Core shadow/software-presentation source d330f56111038a86b9b1186594006bee7dde8147
+is not published. Exact-source CI 37710675617 attempt 1 ends in failure: Ubuntu
+and native ARM Metal pass; Intel Metal passes density1, then the density1.5
+tiny-bottom-curve guard rejects actual RGB108 against independent RGB138
+(original maximum error4). Both Windows 2022/2025 pass the complete repeated
+race/strict-cgo/fuzz/coverage/EXE step, all twelve shadow recovery matrix cases,
+viewport/bitmap/color/offscreen gates and the actual held WARP drain receipt
+(5000ms, MAX not completion). Their final native-integration step is cancelled
+by the job's aggregate 15m limit; GitHub's original annotation confirms it.
+Neither cancelled job is a complete Windows CI pass. Only that aggregate job
+budget changes to 20m; package/fixture timeouts, repetitions and pixel guards
+stay unchanged. Original logs, Intel PNG/failed.json and cancellation records
+remain in .cache/software-presentation/core17-ci-37710675617-*.
+Intel precision diagnosis and new exact-source CI remain required. Public
+core v0.16.0 and installed gocode v0.23.0 remain unchanged.
+
+The subsequent local Metal candidate selects safe math/disabled contraction/
+precise division only inside the positive-sigma coordinate block, with unknown
+pragmas as errors. Global library options and all Windows shader/native sources
+stay unchanged. Three focused strict-cgo/race/shuffle CPU repeats pass in 18.331s,
+strict vet in 8.507s; these checks do not execute the new Metal fragment division.
+Actual Intel/ARM compilation/pixels and fresh exact-source CI remain required.
+
 2026-10-08 the child extension-editor source
 1549cac2d112bb8050b663f18c9e3cc9cc56760d fails both Windows jobs in
 CI 37698299244 attempt 1; Ubuntu and both Macs pass. Its preserved failures

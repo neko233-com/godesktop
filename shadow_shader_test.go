@@ -145,14 +145,38 @@ int main(void) { struct GDProbeFrame f={{480,320},{1.5f,0}}; return f.framePaddi
 		{"internal/platform/bridge_windows.cpp", "surface->submit(scene,client.right/scale,client.bottom/scale,scale,background,started,"},
 		{"internal/platform/bridge_darwin.m", "float viewport[4]={self.bounds.size.width,self.bounds.size.height,scale,0};"},
 		{"internal/platform/bridge_darwin.m", "[encoder setVertexBytes:viewport length:sizeof(viewport) atIndex:1];"},
+		{"internal/platform/bridge_darwin.m", "[device newLibraryWithSource:shader options:nil error:&error]"},
 		{"internal/platform/gpu_shader_metal.h", "constant float4 &frame [[buffer(1)]]"},
 		{"internal/platform/gpu_shader_metal.h", "o.density=frame.z;"},
 		{"internal/platform/gpu_shader_metal.h", "float2 shadowOrigin [[flat]]; float density [[flat]];"},
-		{"internal/platform/gpu_shader_metal.h", "in.uv.x>0?in.position.xy/in.density-in.shadowOrigin:in.local"},
 	}
 	for _, check := range checks {
 		if !strings.Contains(compact(read(check.path)), compact(check.expected)) {
 			t.Errorf("%s is missing frame/pixel contract %q", check.path, check.expected)
+		}
+	}
+	// Read the actual Metal source rather than its C string escapes. The safe
+	// controls must be scoped to positive-sigma coordinate reconstruction: the
+	// sharp-shadow derivative path and unrelated fragment arithmetic stay outside.
+	metal := decodeMetalShader(t, read("internal/platform/gpu_shader_metal.h"))
+	const coordinates = `if(in.kind==7) {
+#pragma clang fp reassociate(off) contract(off)
+    float2 local=in.local;
+    if(in.uv.x>0) {
+#pragma clang diagnostic push
+#pragma clang diagnostic error "-Wunknown-pragmas"
+#pragma METAL fp math_mode(safe)
+#pragma METAL fp contract(off)
+      local=precise::divide(in.position.xy,float2(in.density))-in.shadowOrigin;
+#pragma clang diagnostic pop
+    }
+    float alpha=shadowCoverage(local,in.size,in.radius,in.uv.x)*in.color.a;`
+	if !strings.Contains(compact(metal), compact(coordinates)) {
+		t.Error("Metal physical coordinates must use guarded, scoped safe/precise math only for positive sigma")
+	}
+	for _, directive := range []string{"#pragma METAL fp math_mode(", "#pragma METAL fp contract("} {
+		if count := strings.Count(metal, directive); count != 1 {
+			t.Errorf("Metal coordinate control %q occurs %d times; it must not alter other shader paths", directive, count)
 		}
 	}
 }
@@ -185,6 +209,24 @@ static float2 fwidth(float2){return float2(shadowPixelSpan,shadowPixelSpan);}
 #define abs shader_abs
 `
 
+func decodeMetalShader(t *testing.T, source string) string {
+	t.Helper()
+	var decoded strings.Builder
+	for _, line := range strings.Split(source, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "\"") {
+			continue
+		}
+		end := strings.LastIndex(line, "\"")
+		part, err := strconv.Unquote(line[:end+1])
+		if err != nil {
+			t.Fatal(err)
+		}
+		decoded.WriteString(part)
+	}
+	return decoded.String()
+}
+
 func shadowShaderFunctions(t *testing.T, path string, metal bool) string {
 	t.Helper()
 	data, err := os.ReadFile(path)
@@ -193,20 +235,7 @@ func shadowShaderFunctions(t *testing.T, path string, metal bool) string {
 	}
 	source := string(data)
 	if metal {
-		var decoded strings.Builder
-		for _, line := range strings.Split(source, "\n") {
-			line = strings.TrimSpace(line)
-			if !strings.HasPrefix(line, "\"") {
-				continue
-			}
-			end := strings.LastIndex(line, "\"")
-			part, err := strconv.Unquote(line[:end+1])
-			if err != nil {
-				t.Fatal(err)
-			}
-			decoded.WriteString(part)
-		}
-		source = decoded.String()
+		source = decodeMetalShader(t, source)
 	}
 	start := strings.Index(source, "float shadowCDF(")
 	end := strings.Index(source, "float4 fragment_main(")

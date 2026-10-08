@@ -5,6 +5,35 @@ installed application remain unchanged. Exact-source cross-platform CI,
 publication, independent application consumption and popup integration are
 still required. The candidate does not establish complete VS Code UI parity.
 
+Exact-source d330f56111038a86b9b1186594006bee7dde8147 / CI 37710675617
+attempt 1 passes Ubuntu and ARM Metal, including all native ARM density/recovery
+checks. Intel passes density 1 but rejects tiny-bottom-curve at density 1.5:
+actual RGB 108, independent RGB 138, alpha 0.4572441002361213 at float32 DIP
+query (43.933990478515625,256.0660400390625); tolerance 4 stays unchanged.
+Its real completed 720x480 GPU frame and failed.json are retained in the Intel
+artifact. Both Windows jobs pass all twelve recovery matrix cases, but reach
+their aggregate 15m limit during final native integration after the actual
+held 5000ms WARP drain passes. Cancelled jobs are not complete CI proof.
+Only the overall Windows job budget changes to 20m; original per-scenario
+bounds and repeated/pixel/coverage gates stay unchanged. Native Intel precision
+correction and fresh exact-source CI are still pending; no v0.17.0 tag exists.
+
+The new local candidate changes only positive-sigma Metal coordinate
+reconstruction: a nested block selects `math_mode(safe)`, `contract(off)` and
+`precise::divide` before subtracting the flat origin. Unknown Metal pragmas
+are compile errors. Library options remain nil; sharp/ordinary/glyph arithmetic,
+scalar shadow functions, HLSL/DXIL, oracles and native tolerance 4 stay unchanged.
+Apple's [MSL specification](https://developer.apple.com/metal/Metal-Shading-Language-Specification.pdf)
+section 1.6.3 documents these scoped controls for Xcode16/macOS15, while
+sections 6.6 and 8.4 distinguish function selection and arithmetic precision.
+Small float32 query perturbations can reproduce RGB108 in the independent
+oracle, but do not identify Intel's actual emitted instruction. Three focused
+strict-cgo/race/shuffle CPU repeats pass in 18.331s and strict vet in 8.507s;
+these headless checks do not execute the new Metal fragment division or prove
+runtime pragma recognition. New actual Intel/ARM compilation and all-density
+GPU pixels remain mandatory. Shader SHA256 is
+eca14410d57ba7c00d859db8ae32769d0d4277f1be85a2c583701e0b0f7ce025.
+
 ## API and geometry
 
 `Element.Shadow(ShadowStyle)` copies one straight-alpha color, DIP offsets,
@@ -70,8 +99,8 @@ SHA256 is 39499adf35c21d3230d495a0b5d9e4a95a5233d52f8a8745f9e180bcd502e739.
 Positive-blur fragments now reconstruct DIP queries from actual SV_Position /
 Metal fragment position divided by the exact float32 drawable density, then
 subtract a flat caster origin. Zero blur keeps its original interpolated local
-coordinate and pixel derivatives. HLSL precise and a Metal pragma scoped to
-the shadow fragment branch preserve division/subtraction ordering. The private
+coordinate and pixel derivatives. HLSL precise and the new local Metal safe/
+precise division branch preserve the intended coordinate calculation. The private
 frame uniform remains four
 float32 values / 16 bytes: DIP width, DIP height, density at byte offset 8, pad.
 Windows root parameter 1 exposes its four DWORD constants to both shader
