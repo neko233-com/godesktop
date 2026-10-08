@@ -1,5 +1,12 @@
 # Windows D3D12 removed-device lifetime investigation
 
+The committed-target software path is now published in v0.17.0 at immutable
+source 996b5ff16189d95ea72298ee48bd03366b27757e. Full repeated Windows validation,
+the hardware/software density matrix and all five exact-source CI 37713329201
+jobs pass. These results establish the verified workaround, not the OS/driver
+cause of the original v0.16.0 swapchain failure. The original independent review
+and failed/preparation receipts below remain historical records.
+
 2026-10-08 CPU-only independent review. The original forced non-debug WARP
 swapchain failure's cause remains unresolved. Unpublished software-path/final-close
 r3 critical checks and the later r4 Windows Shadow matrix now have real local

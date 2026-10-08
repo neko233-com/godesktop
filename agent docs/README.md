@@ -1,5 +1,11 @@
 # Engineering harness
 
+The 2026-10-08 user instruction requires local validation/packaging/uploads with
+immutable tags and consolidated stable releases. Automatic push/PR Actions are
+disabled; do not dispatch Actions without a new explicit budget decision.
+Current stable scope is a production Windows IDE with common IDE workflows and
+real Go/TypeScript LSP extensions. Full VS Code parity is a future backlog.
+
 The harness combines an explicit contract, reproducible checks, native visual
 evidence and a status ledger. gocode is the framework's acceptance application.
 
@@ -11,17 +17,17 @@ The current Windows-only menu input and deferred IME record is in
 [Windows menus](windows-menus.md).
 Native descendant clipping, GPU ABI/budgets and isolated replay acceptance are in
 [rounded clipping](rounded-clipping.md).
-The local native shadow/positioned Stack candidate and independent numerical
+Published v0.17.0 native shadows/positioned Stack and independent numerical
 evidence are in [shadows](shadows.md). Forced non-debug WARP swapchain removal
-also fails in immutable public core v0.16.0. The unpublished committed-target
-software-presentation candidate passes the critical recovery/client/shutdown
-groups; the full Windows matrix and Metal/exact-source CI remain required.
+fails in immutable public core v0.16.0. The v0.17.0 committed-target software
+presentation passes the full Windows matrix and all five exact-source CI jobs;
+the preserved failed candidates remain historical evidence.
 Native window activation and independent capture cancellation are in
 [window focus](window-focus.md).
 Background receipts while minimized/hidden, UI wake bounds and actual GPU-idle
 proof are in [UI dispatch](ui-dispatch.md).
-The independent non-debug WARP recovery controls and unpublished committed-target
-software presentation candidate are in
+The independent non-debug WARP recovery controls and published committed-target
+software presentation are in
 [Windows device removal](windows-device-removal.md).
 
 A milestone is verified only after its real implementation and applicable

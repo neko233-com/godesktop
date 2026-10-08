@@ -1,5 +1,12 @@
 # Native rounded shadows and positioned Stack children
 
+Published v0.17.0 / 996b5ff16189d95ea72298ee48bd03366b27757e passes all five
+exact-source jobs in CI 37713329201 and independent fresh-cache public-module
+validation. Intel's original density1.5 curve now reads139 against138, with
+all original tolerance/lifecycle guards preserved. Window/main popup integration
+in gocode remains separate and unpublished. The following candidate history,
+failed original source and preparation receipts are retained without rebinding.
+
 2026-10-08 local candidate; public core v0.16.0, gocode v0.23.0 and its
 installed application remain unchanged. Exact-source cross-platform CI,
 publication, independent application consumption and popup integration are

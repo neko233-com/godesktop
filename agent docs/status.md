@@ -1,5 +1,29 @@
 # Verified status
 
+2026-10-08 user steering supersedes the previous publication cadence: future
+GitHub Releases are built, tested and uploaded locally with immutable tags.
+Do not dispatch paid Actions or publish a version for each small milestone.
+Both repositories retain CI only as an explicit manual workflow. The stable
+acceptance target is a production Windows IDE covering common editing/search/
+terminal/Git workflows and actual Go/TypeScript LSP extension installation and
+activation; complete VS Code parity remains a longer-term backlog.
+
+Core v0.17.0 is public at immutable source
+996b5ff16189d95ea72298ee48bd03366b27757e, published before that steering.
+All five source jobs in CI 37713329201 pass: Windows 2022/2025, Intel/ARM Metal
+and Ubuntu. The preserved Intel density1.5 failure108/138 now passes139/138;
+density1/2 curve120/116 remain within the original tolerance4. Independent
+fresh-cache GOWORK=off/no-replace public-module validation succeeds, including
+all194 ZIP/extracted files byte-exact and downloaded-module CPU/API tests.
+Module Sum is h1:2NF49iSveCrnfJATCyc1KS46Yobp7L4jRtHFjSyg6Fk=;
+GoModSum is h1:e/894TjmXCjAzRb2EE82hxWt9+2irM0gbNVcYweiqbw=.
+The proof is .cache/public-core17-check/validation.json, SHA256
+ee67634547c6c60036bcadaa7bc94e30bb8c8c5dfaca736d07daa6b4f38ccfe3.
+Metal scoped FP controls are documented for Xcode16/macOS15 and actually tested
+on macOS15; earlier macOS13/14 compiler behavior is not established. gocode's
+public/installed v0.23.0 and this verified gitlink remain unchanged while its
+consolidated local candidate is completed.
+
 The child settings-writer acknowledgement source now passes new native and
 full independent public16/GOWORK=off Windows checks: actual 96 DPI/1024x728
 targeted strict-cgo/race/count3 in 85.305s and default-three/debug0 full script

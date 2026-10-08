@@ -7,7 +7,7 @@
 
 应用逻辑、状态和布局使用 Go；小型 C ABI 桥接系统窗口、文本引擎和图形 API。UI 不依赖 WebView、浏览器或 Rust。可选的 VSIX 扩展宿主使用独立 Node.js 进程，核心窗口不需要 Node.js。
 
-**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)。Windows 硬件窗口使用 D3D12/DXIL、DXGI flip swapchain 和 DirectWrite；软件适配器仍由 D3D12 GPU 管线绘制，完成的 committed target 经 fence 确认后显示为原生 DIB。两条显示路径及未发布候选的实际范围见 [设备生命周期记录](agent%20docs/windows-device-removal.md)。
+**当前是实验性原型，API 尚未稳定。已实现原生窗口、布局和交互闭环；尚未达到 GPUI 的功能或性能成熟度。** 没有经过与 GPUI 的同场景性能对比，不承诺已经能替换完整的编辑器或生产应用。功能边界见 [路线图](docs/roadmap.md)。现代 GPU 改造和实际验证证据见 [绘制验收](docs/rendering-modernization.md)。Windows 硬件窗口使用 D3D12/DXIL、DXGI flip swapchain 和 DirectWrite；软件适配器仍由 D3D12 GPU 管线绘制，完成的 committed target 经 fence 确认后显示为原生 DIB。v0.17.0 两条已发布显示路径的实际验证范围见 [设备生命周期记录](agent%20docs/windows-device-removal.md)。
 
 v0.4 增加版本化编辑缓冲区、原生选区/剪贴板接口、LSP 和 VSIX 编辑/语言提供者。gocode 接入官方 Copilot Language Server 与 Go SDK。API 见 [编辑与 LSP](docs/editor-and-lsp.md)，完整 VS Code 目标的当前覆盖见 [gocode 功能矩阵](https://github.com/neko233-com/gocode/blob/main/docs/vscode-parity.md)。
 
@@ -43,9 +43,9 @@ gocode v0.14.0 使用公开 godesktop v0.8.0 的后台预备事务，增加原�
 | 平台 | 窗口 | 图形 | 文本 | CI 架构 |
 | --- | --- | --- | --- | --- |
 | Windows x64（已验证 Windows 11、Server 2022/2025） | Win32 | Direct3D 12 / SM6，三帧 fence；硬件 DXGI、软件适配器 committed target + 原生 DIB | DirectWrite，普通 R8／彩色 RGBA 缓存 | amd64 / GOAMD64=v1 |
-| macOS 13+ | AppKit | Metal，实例化合批、三帧异步环；14+ CAMetalDisplayLink | CoreText，普通 R8／彩色 RGBA 缓存 | arm64 / amd64 |
+| macOS（已验收 15 Intel/ARM；13/14 新编译控制待验证） | AppKit | Metal，实例化合批、三帧异步环；14+ CAMetalDisplayLink | CoreText，普通 R8／彩色 RGBA 缓存 | arm64 / amd64 |
 
-Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/doc/go1.27)。macOS 必须具备 Metal 设备。Linux 仅能构建和测试可移植核心；调用 `Run` 会明确返回不支持错误。
+Go 1.27 的 macOS 最低版本是 13，见 [官方发布说明](https://go.dev/doc/go1.27)。macOS 必须具备 Metal 设备。v0.17.0 的局部浮点编译控制已在 Xcode16/macOS15 验收，尚未独立验证 macOS13/14 的旧编译器；Go 的最低系统版本不等于这项框架能力的完整支持证明。Linux 仅能构建和测试可移植核心；调用 `Run` 会明确返回不支持错误。
 
 Windows 启动需要实际可查询的 `ID3D12Device5`，它用于有界失败收尾。接口文档列出 Windows 10 1809，而 [RemoveDevice 方法文档](https://learn.microsoft.com/en-us/windows/win32/api/d3d12/nf-d3d12-id3d12device5-removedevice) 的最低版本是 build 20348；不能仅凭接口存在声称所有旧 Windows 10 都完整支持。旧系统仍需独立验证。软件显示的 `d3d12-fence` 表示真实 GPU 完成，未宣称具有 DXGI 的显示同步。
 
