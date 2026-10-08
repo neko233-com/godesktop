@@ -50,5 +50,9 @@ actions and bounded side-by-side diff; its
 [SCM contract](https://github.com/neko233-com/gocode/blob/main/agent%20docs/scm.md)
 records real process/native evidence and remaining merge/provider scope.
 
+Its Windows native Tasks parser/graph/process/UI acceptance and explicit
+provider/Testing limitations are recorded in child agent docs/tasks.md. A task
+depends on real terminal completion and owned Job retirement, not a launch receipt.
+
 Intrinsic Windows/Mac emoji rendering, mixed GPU batches and cache/recovery pixel checks
 are in [color glyphs](color-glyphs.md).

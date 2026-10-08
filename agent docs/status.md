@@ -1,5 +1,31 @@
 # Verified status
 
+2026-10-08 Windows native Tasks development is on local child branch
+codex/windows-native-tasks, using the unchanged published core v0.17.0 with
+GOWORK=off/no replacement. Native Tasks menu/picker/build keymaps, JSONC/default
+editing, inputs/dependencies and real process/Job retirement now have focused
+CPU/race and actual Windows acceptance. Child Tasks wrapper repeats two owned
+runs25.263s with real GPU completion/text/exit-footer evidence and cleanup;
+taskexec twice validates exact argv and held descendant shutdown in6.034s.
+Child agent docs/tasks.md records limitations and source-specific evidence.
+Frozen whole-source Windows Repeat1 passes446.494s, main250.375s/34.2%, all
+strict-cgo2/race package checks/vet/console+GUI Tasks and remaining native script
+gates. Its349 source files remain unchanged, root229052 exits0/reaps/treecloses,
+private scratch is empty; receipt SHA256
+80658d03540f2df09948c504742de3b8638d945ba4bf90e93dcea7f94489a094.
+Two layout-corrected Tasks repeats pass21.380s. Frozen no-cgo whole-source passes
+125.725s with unchanged349-file manifest, root239132 exit0/reap/treeclose and
+empty scratch. Workflow/PowerShell lint and diff-check also pass.
+Implementation is preserved in local child commit
+93281089584f79f983c31243bfb6fe356057dbcd; the349 precommit source hashes bind
+actual tested code/scripts. Document-only updates do not rebind dirty/development
+test binary metadata to a clean release. No-cgo receipt SHA256 is
+2d6c0f5b496894f03f7d589cc09d5686f5ca0db630c0fecc6a7f02ac647608f8.
+New Tasks packages/release are not yet validated or published. The future plan adds two Tasks gates
+(37 total); immutable source294/35 prepared artifacts retain their old checker.
+Parent gitlink/public source remains the previously consolidated f87 evidence
+snapshot; no Tasks push/tag/Release/Actions or installed promotion occurred.
+
 2026-10-08 consolidated local Windows milestone: child application source
 `2940765dea14483a4678cfe515a574bcc1168d1a` passes all five final local checks,
 actual final ZIP35 native gates and the actual same-batch MSI lifecycle. Windows
