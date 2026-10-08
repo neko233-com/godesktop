@@ -1,5 +1,26 @@
 # Verified status
 
+2026-10-08 latest user steering pauses gocode and requests a prompt consolidated
+stable godesktop push with .gitignore maintenance. The parent changes only
+repository hygiene and engineering records; native runtime/API bytes remain
+the verified public core v0.17.0/source996b5ff16189d95ea72298ee48bd03366b27757e.
+Current independent GOWORK=off/no-replace/offline consumer tests run three times,
+vet and go mod verify pass. Four consumer inputs and194 actual module files
+(1269726B) match the original public ZIP/Origin/sums; review receipt SHA256 is
+ae2adf069c281d1d400864e064ea2788bd3c304185aecf299fb7a0056c7c63ad.
+Original exact-source CI37713329201 remains historical; no new Actions runs.
+The three current workflows allow workflow_dispatch only.
+
+Ignore rules cover generated build/distribution/artifact directories, root MSI/
+MST outputs, optional Node/Python tooling and Windows metadata while preserving
+tracked GPU shader ABI headers, source/test fixtures and license evidence.
+The public gocode gitlink remainsf87e22ecbcfaaf5e11d09666910679d9198bb24b.
+Unpublished Tasks/Debug source and focused evidence remain local. Child whole-
+source Debug r2 is stopped at the user's request; five observed owned process
+handles exit and its private scratch is removed. Its interrupted record is
+complete=false; no full-source/release result is inferred from interruption.
+No child push/tag/Release/signature or user-installed promotion occurs.
+
 2026-10-08 Windows native Tasks development is on local child branch
 codex/windows-native-tasks, using the unchanged published core v0.17.0 with
 GOWORK=off/no replacement. Native Tasks menu/picker/build keymaps, JSONC/default

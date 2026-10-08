@@ -1,10 +1,26 @@
 /bin/
 /.cache/
+/build/
+/dist/
+/artifacts/
+/*.msi
+/*.mst
 *.exe
 *.test
 *.out
 *.prof
 *.dSYM/
 .DS_Store
+Thumbs.db
+Desktop.ini
+
+# Optional tool/runtime dependencies and local Python validation environments.
+node_modules/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+/.venv/
+
+# Published-module acceptance must opt into a local workspace explicitly.
 /go.work
 /go.work.sum

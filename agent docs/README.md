@@ -6,6 +6,10 @@ disabled; do not dispatch Actions without a new explicit budget decision.
 Current stable scope is a production Windows IDE with common IDE workflows and
 real Go/TypeScript LSP extensions. Full VS Code parity is a future backlog.
 
+Later2026-10-08 steering pauses gocode development and prioritizes a consolidated
+stable godesktop push with maintained .gitignore. Preserve child local work and
+its evidence; do not advance its public gitlink or publish unfinished app changes.
+
 The harness combines an explicit contract, reproducible checks, native visual
 evidence and a status ledger. gocode is the framework's acceptance application.
 
