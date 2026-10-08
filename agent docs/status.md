@@ -1,5 +1,86 @@
 # Verified status
 
+2026-10-08 consolidated local Windows milestone: child application source
+`2940765dea14483a4678cfe515a574bcc1168d1a` passes all five final local checks,
+actual final ZIP35 native gates and the actual same-batch MSI lifecycle. Windows
+strict-cgo/race Repeat3 takes1042.096s (main661.813s/34.5%); no-cgo Repeat3
+takes297.592s, with vet/lint/five distribution tests also exit0. The exact
+public17 Origin/module cache/sums and tracked InputDigest remain verified with
+GOWORK=off/no replacement. Private roots/incomplete marker are gone.
+
+Final MSI17240064B/SHA256
+340e7d29bf689044d0224ed4f3494505c9794fa237da7fbb145a1de701c4d8c8 and
+ZIP20550140B/SHA256
+657f8d3d8140c433ad67e5b6ca704eecca6f8b3d338a4827e5e0c56dcfe18624
+are produced by `.cache/local-release/0.24.0-2940765dea14-r1`. Its prepared
+marker SHA256 is6f81eec4344cc32dcf58ff5ca26be06bd57994d46778a8bdb26ad2cac7bc1c13.
+Actual final-ZIP35 acceptance passes111.793s with44 owned process records and
+unchanged original288-file language profile; receipt213363B/SHA256
+52c0397d87dbe86fb638eaada743bffb39fcdb71dc42d34b0207328af728240b.
+Actual MSI lifecycle passes12.757s with install/corrupt-upgrade rollback/upgrade/
+rejected downgrade/native/uninstall, original user registration/PATH/workspace/
+packages preserved and actual private-root cleanup. Its receipt9419B/SHA256
+96798c34ff61c7744fb56e2d106342416d2e447341723a15926282bcc59ec655.
+Root views actual final File/extension detail/TypeScript pixels. Independent CPU
+review matches all source commands/processes/logs/24 prepared files,35 complete
+native reports/executable bytes/real Go/TS providers,423 native references and
+57 MSI references. Its combined proof SHA256 is
+c341a47146c4884b241411f4b1ed3b9d3664711d6a5af8a4abc8b84035db3d39.
+
+The single consolidated child source push is verified at public main
+`f87e22ecbcfaaf5e11d09666910679d9198bb24b`. This final child commit adds only
+two evidence documents; tested/tag-target source remains294. The parent gitlink
+now advances to that source/evidence snapshot after the actual independent public
+module and local acceptance above. Detailed scope is child
+`agent docs/local-candidate-294.md`. It does not turn documentation into a new
+tested binary or reuse2ff/f4a evidence as294 proof.
+
+There is still no24 tag, Release, Actions run, new production signature, trusted
+new signed rollback or user-installed promotion. The existing matching update
+private-key path is required. Future Validate must use clean294 at the original
+path and its preserved prepared artifacts/checker; it will reuse the verified
+source checks/packages and execute trusted signing/native/MSI/rollback locally.
+The public/installed stable version and Mac channels remain23. Source publication
+is distinct from a signed stable Release. Full Debug/Testing/Remote/VSIX/Copilot
+VSIX parity remains unfinished; current scope is common Windows workflows and
+actual native Go/TypeScript standard LSP adapters. All older records below retain
+their original source-specific claims and failed-stage boundaries.
+
+The corrected ignored294 rollback preflight actually passes3.260s: the
+new packaged CLI rejects enabled native adapters in109ms, and the genuine
+signed prior23 is selected and actually renders/runs its native VSIX smoke
+in451ms after explicitly disabling only the two adapters in the owned root.
+All six private roots and owned processes are gone. Original VSIX/tool bytes
+and source InputDigest4a1445f770d6540cf5b20d6bdaa20382f46f1584559ec2c9d843f5036cd5fda5
+are unchanged. The original strict rollback verifier succeeds before and after
+cleanup, with the three retained compatibility-state files and original pins.
+The actual receipt is child `.cache/rollback-preflight-2940765-r2/execution/current.json`,
+SHA256e352347e5dacbb73f2d9c5de6bc23be3a32c597a1d6632316afb06aae8f986af.
+Independent CPU review rehashes raw reports/logs/states,270 original package
+files, both archives and the byte-exact production verifier prefix plus its
+one ignored forwarding wrapper. Its343 assertions pass. The new current-stage
+signature is deliberately TEST-only and rejected by production trust; this is
+not a complete signed release. Final clean-source294 Prepare has started.
+
+The subsequent unpublished child source
+`2940765dea14483a4678cfe515a574bcc1168d1a` adds the actual older-version
+native-language compatibility guard. Four affected packages pass three
+strict-cgo/race and three no-cgo repetitions, vets and workflow lint. Its genuine
+quick Windows package build/extraction/health passes40.154s; this is separate
+from final clean-source Prepare. An actual new packaged CLI refuses rollback to
+signed prior23 while Go/TypeScript adapters are enabled (PID232852,110ms,exit1),
+with unchanged selection pointers and extension state/package inventories.
+
+The first ignored rollback preflight then fails in1.267s because its diagnostic
+control stages prior23 before calling the production function which also stages
+prior23. The immutable already-existing-version protection rejects that duplicate;
+no prior native process is started. Formal publication stages prior23 only once.
+The original helper/source/process/stdout/stderr remain under child
+`.cache/rollback-preflight-2940765-r1`; the corrected ignored control must use
+separate stages and the actual physical-input isolation flag. Genuine protected
+native rollback, final294 source/package acceptance and trusted production
+signing remain pending. This is no new tag, release, Actions run or source push.
+
 2026-10-08 user steering supersedes the previous publication cadence: future
 GitHub Releases are built, tested and uploaded locally with immutable tags.
 Do not dispatch paid Actions or publish a version for each small milestone.
@@ -23,6 +104,291 @@ Metal scoped FP controls are documented for Xcode16/macOS15 and actually tested
 on macOS15; earlier macOS13/14 compiler behavior is not established. gocode's
 public/installed v0.23.0 and this verified gitlink remain unchanged while its
 consolidated local candidate is completed.
+
+The child now has actual public17 source-specific native popup and Go/TypeScript
+evidence: hardware/WARP strict-cgo/race/shuffle3 popup passes108.134s across18
+Window Runs/144 GPU captures; final real installed Go/TS LSP native passes
+5114/5576ms including server-tree shutdown/restart, unsaved replay and final
+pixels. Actual production-compile1GiB search passes21168ms/thirteen phases at
+1920x1230/Scale1.5, with unchanged source and empty scratch. Its separate
+race-instrumented literal-query30s failure is retained, not relabeled as a pass.
+An additional same-source production control passes28.267s with actual owned
+HWND/DPI96/client1024x720 and six corresponding GPU checkpoints, forced WARP
+environment, actual zero Job processes and absent private scratch. It preserves
+the original120s/90s/30s guards and does not retroactively establish an old CI
+failure's cause. The child ledger records exact209-input/binary/report hashes and old negative
+controls. Whole final clean-source checks, actual candidate package lifecycle,
+trusted signing and user-installed promotion remain pending. No new Actions,
+child24 tag or release has been created; this gitlink is still the installed23
+evidence until promotion is fully verified.
+
+The consolidated child candidate is locally committed at
+249b057d60f66d715fba49ec863285e1254147cd with a clean worktree and cached
+diff check. It also fixes actual CLI pending-uninstall/reinstall state and
+runtime explicit-provider precedence/automatic-fallback provenance. Focused
+real CLI and RPC controls pass repeated strict-cgo/race and no-cgo checks;
+the child records exact source/process/report bytes. Its final local Prepare
+has started, and actual complete-app GOWORK=off public17 Origin/module/ZIP/
+checksum verification passes. Whole-source regression, real final package
+lifecycle, production signing and promotion are still pending. The candidate
+commit is not pushed, tagged or represented as an installed release.
+
+Its actual local five source checks subsequently pass: strict-cgo/race native
+Windows Repeat3 in1033.008s (main656.055s/34.5%), no-cgo Repeat3 in295.640s
+(main173.881s), vet, actionlint/ShellCheck/PowerShell parsing and five actual
+distribution tests. Each source-check process/tree is reaped. The source-bound
+Windows/no-cgo receipts have SHA25684910fad02362b869c5b5e39f6ae97bda1d863083d8b926484e0a9d547527760
+and061e4c797187a521bd1e5824f8b7a395280f9a33d4ecd272deb355b18cc7a4f9.
+Actual packaging then fails before compilation in389ms: the builder's new
+WorkDirectory helper enables strict mode, and the legacy clean git-status
+pipeline has no Count property. Root/tree close and private-root cleanup pass;
+all original logs and incomplete marker remain under child .cache/local-release/
+0.24.0-249b057d60f6-r1. No package/release completion is claimed. This producer
+boundary is fixed in local source f4a795d4a4cc09ce67f72a93364f15363c077d48,
+changing only the packager and its engineering record. Real WindowsPowerShell5.1
+clean-status controls prove the old failure and array-wrapped zero-output fix.
+Actual targeted MSI/ZIP production/extraction/native-health passes37.055s,
+root/tree reaped, private roots removed, with MSI16584704B and ZIP19739522B.
+The earlier Root-only PowerShell7/C# environment contamination failure at the
+final hash presentation is separately preserved; the formal publisher uses5.1.
+No249 receipt is rebound to f4a. The fresh clean-source f4a Prepare completes
+as recorded below; final installed/signed/released promotion remains pending.
+
+The exact local source f4a795d4a4cc09ce67f72a93364f15363c077d48 now completes
+all five Prepare checks and actual Windows package production. Strict-cgo/race
+Windows Repeat3 passes in1036.470s (main660.025s/34.5%); independent no-cgo
+Repeat3 passes in295.196s. Vet, workflow actionlint/ShellCheck/PowerShell parsing
+and five distribution tests exit zero. All five owned check processes report
+rootReaped/treeClosed=true and bind the same exact source and InputDigest
+15c1f2fc4cf75001a4b5e2d12ebc593bb935a37dd339f566a3cf49f6142a77bb.
+The actual public17 framework Origin/source, module sums and ZIP remain bound
+in the completed Prepare record. The three private TMP/config/stage directories
+and incomplete marker are actually absent afterward.
+
+The immutable unsigned-preparation marker is child
+`.cache/local-release/0.24.0-f4a795d4a4cc-r1/prepared-candidate.json`,6784B,
+SHA25632a0371364fca41581cc767b830ef6ff5421d758329a7a82fe6a6081b518eef0.
+A separate read-only verification matches all24 bound check/log/channel/
+checker/package files against their recorded lengths and SHA256 values.
+Actual ZIP is19739522B,
+SHA25658f79e0073aad0a093cf175f6a5b5f08894fc64d1ba73d0c4978092b38cd3a8f;
+actual MSI is16584704B,
+SHA2567d24190dc78a15804bdf43182d11709072e851af447a0091b07aa9d6b7ff6f1e.
+The original prepared checker is11292672B,
+SHA2561a95d1a146faf1861315ce7dc0368df9302b1fa8cb6344fbbda534700175376d.
+The Windows/no-cgo check receipts have SHA256
+e88dd4fff66e86e0aacb0c604921fc021b781bc3736bf588f467bc990f094600 and
+c71632797523d5198a08aa72d362fd1d3ad4baa7cdd5d3c6885e65d23fe6ce6f.
+
+This marker deliberately remains prepared=true,complete=false and requires
+the existing production signing key. Its path is still missing; no production
+signature, complete release, push,24 tag or Actions run is claimed. Root is
+separately exercising the actual candidate MSI lifecycle; its outcome and the
+35 packaged native gates are not established by Prepare. The ignored test-only
+package-gate runner is prepared for later Root execution and cannot replace
+production-key Stage/Validate. Installed/public23 and the parent gitlink remain
+unchanged until package lifecycle, trusted signing, rollback and promotion pass.
+
+The subsequent Root-owned unsigned f4a package run completes all35 ordered
+native gates in111.793s including setup/checker/cleanup work; the native report
+elapsed values themselves sum to87.801s. Every actual gate exits zero within its
+original60/120s guard, reports root/tree closed, and binds the exact original
+ZIP entry before/after launch. Actual Go/TypeScript native, process-service,
+File/extension detail, Auto Save/minimized, console/GUI,1GiB browse/search/split
+and popup guards pass. The final service gate file is written at2026-10-08
+13:57:31.449 local/05:57:31.449 UTC; the cleaned final receipt is written at
+13:57:34.995 local/05:57:34.995 UTC. The actual receipt is child
+`.cache/native-combined24/unsigned-native-f4a-r2/execution/current.json`,
+212503B,SHA256b7d38bfe3b63fff7af56f35afe23bd617fd56660ece75a621fbf83ef5963576b.
+The failed default-sandbox r1 stays unchanged: its actual Git before-head
+Permission denied stops before native execution, with0 gates. The authorized
+r2 uses the identical runner/helper bytes rather than changing fixture guards.
+
+Independent CPU-only review reads all35 full gate JSONs and their stdout/stderr,
+the structured installed-service payloads, source-query/InputDigest receipts,
+prepared marker/checker/package metadata and original profile inventories.
+It matches423 referenced-file length/hash checks, verifies all288 original
+profile files remain unchanged, and streams both original ZIP entries without
+extracting or executing them. Console/GUI are each17025536B, respectively
+SHA25643903251495d00a1b86853a46b8dc15f9c614499869e4468863ec37af902ff9d and
+11222e9d5003684af4c0b30d53edd603207871dbca504cf8d5ae6fc37708a6ce.
+All44 outer owned-process records prove assignment-before-resume and root/tree
+retirement. All three private directories are actually absent. The independent
+summary is `.cache/native-combined24/unsigned-native-f4a-r2/cpu-verification-r1.json`,
+41876B,SHA25685c7c3f71a360b7366abba38665f8a6ff2d6863d29765e5e61e52857755ecc8f.
+It starts no native, installer, language-server or process test. Source state
+is bound by the original actual before/after owned Git/digest reports, and old
+reused PIDs are not relabeled as new current-process observations.
+
+Actual service reports verify original Go0.50.0/gopls v0.23.0 and TypeScript
+extension1.95.3/TLS6.0.1/bundled TypeScript5.6.3. Both report the ordered seven
+inventory/UTF-16 initialize/completion/definition/format/type-diagnostic/did-close
+gates, genuine greeting completion/type errors and14/18 applied format edits.
+Go observedPID220984 and TypeScript observed215524,179660,231432 are reaped;
+the TypeScript root179660 is included without assuming it is first. These
+are native adapters for the actual installed VSIX, not arbitrary JS activation.
+
+Root also actually inspects four1920x1230 PNGs from this run using view_image:
+`windows-workbench/file-menu.png` has the rounded native menu/disabled items;
+`extension-detail/details.png` has the fixed header, Unicode/emoji and independent
+scroll viewport; `go-lsp/gocode_lsp_screenshot.png` and the corresponding
+`typescript-lsp/gocode_lsp_screenshot.png` show the recovered greeting token,
+deliberate missingRestart Problems and correct language/extension-ready status.
+Only these four images are claimed manually inspected. Their exact hashes and
+headers are bound in the CPU summary; other screenshots are not claimed reviewed.
+
+The original prepared package MSI lifecycle separately fails at its first prior
+install step: ownerPID209760 reaches120.037s with error "owned process deadline
+expired" and termination code2. That is the Job timeout code, not an MSI return.
+The enclosing fixturePID208396 exits1 at121.485s; outer receipt elapsed is121.971s.
+Root/tree cleanup and original MSI/ZIP byte preservation pass, but complete
+install/upgrade/downgrade/rollback/uninstall is not established. The original
+failure remains under child `.cache/native-combined24/msi-candidatef4a-r1/execution`.
+Independent missing-package quote controls then observe all-quoted PID228240
+timing out at5.026s with no MSI log, while the same owned/SW_HIDE raw MSI syntax
+PID198464 returns actual1619 in83ms with a5806B log,
+SHA25697c80b276132e69c15effaa2f63cfb28daad647315beb603cd2dfb76eeaf3bb0.
+Both controls prove missing-package absence and root/tree closure and install
+no product. They preserve the original failure rather than themselves proving
+the full lifecycle cause. CPU records are
+`.cache/native-combined24/unsigned-native-f4a-r2/msi-diagnostic-cpu-r1.json`,
+SHA256e1984b2064506a73b62ca07b8093ff65649d3dbb4b1b215ba458550b910cf4a9.
+
+Root is preparing an MSI-only serializer/hidden-window correction with generic
+Run/Quote behavior and every original deadline preserved. The new exact source
+needs fresh Prepare and actual lifecycle verification; f4a's passed source and
+35 package gates remain source-specific evidence. The package stage used an
+ephemeral TEST-only identity, explicitly rejected by production publisher trust;
+productionPublisherSignatureVerified=false and completeRelease=false remain.
+The existing production-key path and complete installation/signing/rollback/
+promotion are still pending. No new stable release is inferred from these passes.
+
+The corrected MSI-specific command serializer then passes a real isolated
+preflight in10.984s using the unchanged actual f4a producer MSI/ZIP and retained
+original23 artifacts. Its separate receipt is child
+`.cache/native-combined24/msi-parser-fixed-preflight-r2/execution/current.json`,
+6411B,SHA256906c8eaff6ee96da1ebdc1c6c433d57547095613820835909bce0a716df66e77.
+It deliberately records producerSource=f4a795d4a4cc09ce67f72a93364f15363c077d48
+and harnessSourcePendingCommit=true. All three corrected harness source files
+and all four original MSI/ZIP inputs match their before/after lengths and hashes
+and actual current files; package evidence is not rebound to an uncommitted source.
+
+Five genuine MSI transactions now complete under the original bounds: prior
+installation2421ms/exit0, corrupted upgrade236ms/expected1603 with rollback,
+valid candidate upgrade2625ms/exit0, blocked downgrade115ms/expected1603 and
+uninstall2145ms/exit0. Every transaction reports root/tree closed; enclosing
+fixturePID183364 exits0 and also closes its tree. The real validation directory
+is `validation space 世界`, exercising spaces and Unicode in MST/package/log
+arguments. Applied isolated transforms retain original package metadata and
+separate Product/Upgrade/Component identities. The actual installed native
+VSIX smoke succeeds; ZIP payload matching, original product registration,
+user PATH and workspace preservation guards all pass. Private TMP/config/stage
+directories are actually absent after cleanup.
+
+The earlier parser-preflight r1 remains independent: Read-ReleaseJSON precedes
+Add-Type and cannot find GocodeReleaseJson; its pre-execution record proves
+executedMSI=false and no execution directory. It is a helper initialization
+failure, not a product or MSI-transaction failure. The successful r2 establishes
+the actual f4a package lifecycle under the separately bound corrected harness;
+that harness still needs freezing/commit and a new exact-source Prepare. The
+existing f4a five source checks and35 native package gates retain their original
+scope. Production signature and completeRelease remain false; the production
+key path, signed staging/rollback, final-source validation and promotion remain
+pending. No stable release is published by this preflight.
+
+The corrected harness is now committed locally with the child at clean immutable
+source2ff837bb2253c483e9fba6e2a990aa75a23fe1fb. Root has started a fresh complete
+Prepare under `.cache/local-release/0.24.0-2ff837bb2253-r1`; its source/native lane
+is Root-owned and completion remains pending. Earlier f4a source/package and
+corrected-harness preflight receipts retain their exact historical identities.
+They are not relabeled as completed validation of2ff837bb.
+
+An ignored Root-only package35 runner is prepared at
+`.cache/native-combined24/unsigned-native-2ff837b-r1/run.ps1`,SHA256
+6c4065c57702b481326ac4539cd10193d9085d145afb9701bb12d6f7fa89d5ab.
+Its fixture staging helper changes only the exact source literal from f4a;
+the prepared-checker API,35-gate order/args/deadlines, ZIP payload/source binding,
+original-profile checks and private cleanup guards remain unchanged. The new
+diagnostic marks an attempted gate without an actual native PID/receipt as
+packageNativeExecuted=null/unknown, rather than inferring no execution from zero
+successful gates. All35 success still requires all35 complete actual proofs.
+Actual Windows PowerShell5.1 parsing reports0 errors; static helper-body/API
+comparison passes. No Go helper is compiled, no key/signature is generated and
+no package/native/MSI gate is executed by this preparation. The new execution
+directory is absent, and production signature/complete release remain false.
+
+The saved exact2ff837bb validation subsequently completes all five source checks,
+all35 native ZIP gates and the actual same-package MSI lifecycle. Windows
+strict-cgo/race Repeat3 passes in1038.844s (main660.185s/34.5%), independent
+no-cgo Repeat3 in298.540s, vet478ms, workflow lint635ms and five distribution
+tests133ms. Every source-check process exits0 and closes its root/tree. The
+6784B Prepare marker has SHA256
+2a768bd581b492432cf3fb397f2618dd6e8b8c9f16de0473e9bdbe514c0d45a1,
+with InputDigest7aac993644b7fa6d0224b816cce6463eb25199c3e643119910ef73a8b842fb22.
+Its24 referenced check/log/channel/checker/package files match their actual
+lengths and hashes. Original public17 Origin/module/ZIP/sums stay bound.
+Actual MSI is16576512B,
+SHA2560bbbee8e469acfcf4b9b86509a9bab29e01de244f6cf8d828e8725b6271e7a28;
+ZIP is19739522B,
+SHA256baf445448016524275c6809952c05a39aedfe6380ffbebeeadf7462dc3070b84.
+
+Root's same ZIP35-gate run completes in112.846s; the35 native report durations
+sum to89.286s. Every actual gate exits0 with original arguments/deadlines,
+correct launched ZIP entry/source bytes and root/tree retirement. The actual
+receipt at child
+`.cache/native-combined24/unsigned-native-2ff837b-r1/execution/current.json`
+is213362B,SHA2562cb57421f3ae8ed3fe07e30aa02f389eedb6fad6ad5276a5a39972ae034ca1d8.
+The console and GUI entries each contain17025536B, respectively SHA256
+4c61347eafd20a78a57ff9f06b379762aed6c9c4412a93e448f903c4babbdde2 and
+7ebaa093f097d1592ea69f9e9677d71d6b8b8f305151055a82a8fd7c34146eb7.
+The actual prepared checker is11292672B,
+SHA256beb886939e63c512ae0a26e1d59610d2eca4c26115117d2e6b6b8b6129f36b21.
+CPU-only independent review matches423 referenced-file checks, streams both
+original ZIP entries, verifies all288 original profile files and all44 outer
+owned-process records, and reads the two genuine installed-service reports.
+Go rootPID196040 and TypeScript rootPID198532/observed236028,198532,215088
+are reaped; their14/18 applied formatting edits and original seven protocol
+gates pass. The summary is
+`.cache/native-combined24/unsigned-native-2ff837b-r1/cpu-verification-r1.json`,
+39356B,SHA2569b580616c6d97e631d2238bc2110a6be2bf95f66076bd8eb75960dc7c7444125.
+No additional images are claimed manually inspected by this CPU review.
+
+The actual same2ff package MSI lifecycle completes in12.425s, outerPID176480
+exit0/Job-before-resume/root/tree closed. Its9419B receipt is
+`.cache/native-combined24/msi-candidate2ff837b-r1/execution/current.json`,
+SHA2563fc4594ffdb9c2c4979c9c7d5671a8fcdfc372b5c5cb846bd4e4fac52a892730.
+Real prior install2384ms/exit0, corrupted-upgrade rollback237ms/expected1603,
+candidate upgrade2498ms/exit0, blocked downgrade119ms/expected1603 and uninstall
+2236ms/exit0 all close their trees. The installed native VSIX smoke, exact ZIP
+payload, isolated transforms, original registration, user PATH and workspace
+preservation guards pass in the actual `validation space 世界` directory.
+All three private directories are actually absent for Prepare, native35 and MSI.
+Saved actual source/digest pre/post receipts bind2ff; later source edits are
+not queried or mislabeled as a currently clean2ff worktree.
+
+A separate real prior23 native-compatibility A/B reveals a release blocker:
+with genuine Go/TS VSIX enabled, original signed23 consolePID208148 exits1 in
+535ms; disabling only golang.go and vscode.typescript-language-features in the
+owned test context letsPID219036 exit0 in497ms. Case wrapper durations are
+601/560ms; both process trees close, private contexts are absent and original
+VSIX/profile/package/production-prior-signature bytes remain unchanged. The
+prior source is47623823dd88fbb45422d096b545631be7e6b77b. Its actual compatibility
+receipt is child `.cache/prior23-native-compat-2ff-r1/execution/current.json`,
+231207B,SHA2560ac2f7b0cb4c533f1ca399937776c055906988e7b64830c0f96ae13791215012.
+This establishes incompatibility of those enabled native-adapter packages with
+the older workbench. It does not execute Activate/Rollback or use a new current
+production signature. No real new signed rollback is claimed complete.
+Independent MSI/A-B CPU review verifies560 referenced-file checks and preserves
+these source-specific boundaries at
+`.cache/native-combined24/unsigned-native-2ff837b-r1/msi-compat-cpu-verification-r1.json`,
+7493B,SHA256e793b20d04dc54cebed560fe8b38393235a3da6ce810874ba16463fd3814f0b6.
+
+Production signature and completeRelease remain false despite the2ff five+
+35+MSI passes. Product protection before selecting an incompatible older
+payload is now being implemented; its later source still needs its own exact
+validation. The2ff and earlier receipts remain immutable historical evidence,
+not proof of that future fix. Trusted current signing, real signed prior rollback
+and installed promotion remain pending; no24 stable release is inferred here.
 
 The child settings-writer acknowledgement source now passes new native and
 full independent public16/GOWORK=off Windows checks: actual 96 DPI/1024x728
